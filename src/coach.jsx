@@ -2677,6 +2677,9 @@ function useCoach(data) {
     const balanceM = analysis.find((m) => m.id === "balance");
     const squatM = analysis.find((m) => m.id === "squat");
 
+    const liveIdx = Math.max(0, programPhases.findIndex((ph) => programWeek >= ph.from && programWeek <= ph.to));
+    const livePhase = programPhases[liveIdx] || programPhases[0] || null;
+
     /* ---- MORE PATTERNS -------------------------------------------------
        All computed from what is already stored. Each one answers a question
        she can act on; none of them need anything new logged. */
@@ -3334,8 +3337,6 @@ function useCoach(data) {
        At the end of each block the coach reads what actually happened and
        designs the next one from it. Nothing beyond the live block is
        pre-written, because four weeks out is a guess. */
-    const liveIdx = Math.max(0, programPhases.findIndex((ph) => programWeek >= ph.from && programWeek <= ph.to));
-    const livePhase = programPhases[liveIdx] || programPhases[0] || null;
     const weeksIntoBlock = livePhase ? (programWeek - livePhase.from) + 1 : 0;
     const blockWeeksLeft = livePhase ? (livePhase.to - programWeek) : 0;
     const blockDays = livePhase ? Math.max(1, (Number(livePhase.weeks) || 4) * 7) : 28;
