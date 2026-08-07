@@ -41,72 +41,17 @@ const SEED_LIBRARY = [
 ];
 
 
-/* ---- XP + LEVELS ----------------------------------------------------------
-   Weighted toward the daily action, so a single class is worth something on
-   its own and a half-finished week still earns real progress.
+/* ---- TUNABLE NUMBERS ------------------------------------------------------
+   The knobs behind the calculations, editable in the app so a threshold can
+   change without touching code.
 --------------------------------------------------------------------------- */
 const FORMULA_DEFAULTS = {
-  xpSession: 30, xpWeekTarget: 40, xpWeeklyCheck: 30, xpMonthly: 60, xpBest: 25, xpBet: 15,
-  levelBase: 100, levelRise: 20,
   bandGreen: 3, bandSteady: -10, bandEasy: -20,
   wCompletion: 40, wRecovery: 20, wSleep: 15, wStrength: 10, wMobility: 10, wBalance: 5,
   consistencyWindow: 28,
 };
 const formulas = (settings) => ({ ...FORMULA_DEFAULTS, ...(settings?.formulas || {}) });
 
-/* Levels start cheap and rise gently: level 2 costs 120, and every level
-   after costs 20 more than the one before. Early levels come in about a
-   week; later ones take two to three. Never a month-long wait.            */
-const levelCost = (lvl, F = FORMULA_DEFAULTS) => F.levelBase + F.levelRise * lvl;
-
-function levelFromXp(xp, F = FORMULA_DEFAULTS) {
-  let level = 1, spent = 0;
-  while (level < 500) {
-    const cost = levelCost(level, F);
-    if (xp - spent < cost) return { level, xpIntoLevel: xp - spent, xpNeed: cost };
-    spent += cost; level++;
-  }
-  return { level, xpIntoLevel: 0, xpNeed: levelCost(level, F) };
-}
-
-/* Achievements are data, not code — each is a metric plus a target, so the
-   targets can be edited in Settings without touching anything else. */
-const ACHIEVEMENT_DEFS = [
-  /* Everything here counts sessions, weeks or work — never consecutive days.
-     A two-on-one-off cycle builds rest in, so a day-streak would punish you
-     for following your own plan. */
-  { id: "first",    name: "First Session",     metric: "totalSessions", target: 1,   hint: "Log your first session" },
-  { id: "ten",      name: "Ten Down",          metric: "totalSessions", target: 10,  hint: "10 sessions logged" },
-  { id: "fifty",    name: "Fifty Sessions",    metric: "totalSessions", target: 50,  hint: "50 sessions logged" },
-  { id: "hundred",  name: "Hundred Club",      metric: "totalSessions", target: 100, hint: "100 sessions logged" },
-
-  { id: "week1",    name: "Target Week",       metric: "weeksHit",      target: 1,   hint: "Hit your weekly target once" },
-  { id: "week4",    name: "Four Good Weeks",   metric: "weeksHit",      target: 4,   hint: "Hit your target in 4 weeks" },
-  { id: "week12",   name: "A Season of Weeks", metric: "weeksHit",      target: 12,  hint: "Hit your target in 12 weeks" },
-  { id: "run3",     name: "Three Straight",    metric: "weekRun",       target: 3,   hint: "3 weeks running, target hit each time" },
-  { id: "run8",     name: "Eight Straight",    metric: "weekRun",       target: 8,   hint: "8 weeks running, target hit each time" },
-
-  { id: "con70",    name: "Reliable",          metric: "consistency",   target: 70,  hint: "70% of your training days, over 4 weeks" },
-  { id: "con85",    name: "Unshakeable",       metric: "consistency",   target: 85,  hint: "85% of your training days, over 4 weeks" },
-
-  { id: "hours10",  name: "Ten Hours",         metric: "totalHours",    target: 10,  hint: "10 hours of training logged" },
-  { id: "hours50",  name: "Fifty Hours",       metric: "totalHours",    target: 50,  hint: "50 hours of training logged" },
-
-  { id: "check4",   name: "Month of Checks",   metric: "weeklyCount",   target: 4,   hint: "4 weekly batteries filled in" },
-  { id: "check12",  name: "A Season Measured", metric: "weeklyCount",   target: 12,  hint: "12 weekly batteries filled in" },
-  { id: "bench3",   name: "Three Benchmarks",  metric: "monthlyCount",  target: 3,   hint: "3 monthly benchmarks" },
-  { id: "bet10",    name: "Ten Bets Made",     metric: "betsWon",       target: 10,  hint: "Make 10 daily bets" },
-  { id: "bet50",    name: "Fifty Bets Made",   metric: "betsWon",       target: 50,  hint: "Make 50 daily bets" },
-  { id: "pb1",      name: "First Best",        metric: "pbCount",       target: 1,   hint: "Set a personal best" },
-  { id: "pb10",     name: "Ten Bests",         metric: "pbCount",       target: 10,  hint: "10 personal bests" },
-];
-
-const achievementsFor = (settings) => {
-  const custom = settings?.achievements || {};
-  return ACHIEVEMENT_DEFS.map((a) => ({ ...a, target: custom[a.id] ?? a.target }))
-    .map((a) => ({ ...a, test: (st) => (st[a.metric] ?? 0) >= a.target,
-                   hint: a.hint.replace(/\d+/, String(a.target)) }));
-};
 
 
 /* ---- STARTING ASSESSMENT FIELDS ------------------------------------------
@@ -127,6 +72,17 @@ const REGIONS = [
   { id: "heart",     label: "Heart",     note: "Aerobic work. The system your resting heart rate has already been reporting on." },
 ];
 const CAPS = ["lower", "push", "pull", "core", "cardio", "mobility", "balance"];
+
+/* Default share of work per region, by what a class is for. Used only when a
+   class carries no body map of its own — which is every class she adds until
+   she edits it. 0-3 per region, same scale the seed library uses. */
+const BODY_BY_GOAL = {
+  strength: { legs: 2, back: 2, chest: 2, shoulders: 2, arms: 2, core: 2, heart: 1 },
+  core:     { legs: 1, back: 2, chest: 0, shoulders: 1, arms: 0, core: 3, heart: 1 },
+  mobility: { legs: 2, back: 2, chest: 1, shoulders: 2, arms: 1, core: 2, heart: 0 },
+  cardio:   { legs: 2, back: 1, chest: 0, shoulders: 0, arms: 0, core: 1, heart: 3 },
+  recovery: { legs: 1, back: 1, chest: 0, shoulders: 0, arms: 0, core: 1, heart: 1 },
+};
 
 
 /* ============================================================================
@@ -283,7 +239,7 @@ const quarterTheme = (t) => {
 const autoThemes = (t, pos, phaseKey, seasonKey) => {
   const pool = WEEK_THEMES[phaseKey] || WEEK_THEMES.building;
   const week = seasonKey === "maintain"
-    ? ["Keep the streak alive. That's the whole job this week.",
+    ? ["Turning up is the whole job this week.",
        "Same sessions, same weights. Repetition is the point.",
        "Move on the days you least feel like it.",
        "Nothing needs to get harder. Turning up is the win."][(pos.week - 1) % 4]
@@ -530,18 +486,22 @@ const buildSample = (fields, library) => {
    one. Swimming and walking are add-ons and never appear as the day's work.
 --------------------------------------------------------------------------- */
 
+/* Kinds of day. `ids` names the seed classes that suit each kind; `goals` is
+   what actually makes it extensible — any class carrying one of these goals
+   qualifies, including one she adds herself years from now. Without `goals` a
+   new class could never be prescribed, because its id would be in no list. */
 const BLOCKS = {
-  pilates:  { label: "Pilates",            color: "#127E82", ids: ["pilates", "lmpilates"],
+  pilates:  { label: "Pilates",            color: "#127E82", ids: ["pilates", "lmpilates"], goals: ["core"],
               why: "Control and position before load. This is the base everything later sits on." },
-  core:     { label: "Core",               color: "#127E82", ids: ["lmcore", "lmpilates"],
+  core:     { label: "Core",               color: "#127E82", ids: ["lmcore", "lmpilates"], goals: ["core"],
               why: "The trunk is what lets your arms and legs actually transmit force." },
-  strength: { label: "Strength",           color: "#9B2D52", ids: ["bodypump", "strength", "multigym", "calisthen", "functional", "wod", "bodyweight"],
+  strength: { label: "Strength",           color: "#9B2D52", ids: ["bodypump", "strength", "multigym", "calisthen", "functional", "wod", "bodyweight"], goals: ["strength"],
               why: "Load against the clock. At 51 this is the one that decides how the next decade goes." },
-  move:     { label: "Mobility & balance", color: "#D4638A", ids: ["bodybalance", "yoga"],
+  move:     { label: "Mobility & balance", color: "#D4638A", ids: ["bodybalance", "yoga"], goals: ["mobility"],
               why: "Range, balance and flexibility together — the qualities that quietly disappear if nobody schedules them." },
-  cardio:   { label: "Cardio",             color: "#D4638A", ids: ["bodycombat", "treadmill", "elliptical", "functional"],
-              why: "The heart is a muscle too, and yours has already dropped its resting rate by sixteen beats." },
-  rest:     { label: "Rest",               color: "#8A7885", ids: [],
+  cardio:   { label: "Cardio",             color: "#D4638A", ids: ["bodycombat", "treadmill", "elliptical", "functional"], goals: ["cardio"],
+              why: "The heart is a muscle too, and it answers to training the same way the rest of you does." },
+  rest:     { label: "Rest",               color: "#8A7885", ids: [], goals: [],
               why: "Adaptation happens now, not during the session. This day is doing work." },
 };
 
@@ -828,7 +788,16 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
 
   /* The programme decides WHAT KIND of session today is. The coach only
      decides which class delivers it — freshness, recovery and shoulder. */
-  const inBlock = (w) => !block || !block.ids.length || block.ids.includes(w.id);
+  /* A class qualifies by id (the seed classes) OR by goal (anything she adds
+     later). Id-only matching meant a class she created could never be picked,
+     which quietly made the library read-only in practice. */
+  const inBlock = (w) => {
+    if (!block) return true;
+    const ids = block.ids || [];
+    const goals = block.goals || [];
+    if (!ids.length && !goals.length) return true;
+    return ids.includes(w.id) || (!!w.goal && goals.includes(w.goal));
+  };
 
   /* Body work she had in the last day or two changes what today can be. */
   const reactive = bodywork?.reactive || null;   /* { label, why } if tissue is reactive */
@@ -1284,7 +1253,7 @@ const C = {
   ink:    "#2B1B2E",  // deep plum, softer than black
   signal: "#9B2D52",  // burgundy — actions
   moss:   "#127E82",  // teal — measured, on target
-  ochre:  "#D4638A",  // pink — milestones, XP, bests
+  ochre:  "#D4638A",  // pink — milestones, bests
   pist:   "#FBE2E8",  // pink tint fill
   mint:   "#DCF0F0",  // teal tint fill
   muted:  "#8A7885",
@@ -1461,7 +1430,173 @@ async function loadData() {
   /* first run: come up already full, so nothing is an empty screen */
   return { ...BLANK, ...buildSample(BLANK.fields, BLANK.library) };
 }
-const saveData = async (d) => { try { await store.set(KEY, JSON.stringify(d)); } catch (e) {} };
+
+/* ============================================================================
+   BACKUP
+   ---------------------------------------------------------------------------
+   Her data lives in one browser on one device, which is a single point of
+   failure for years of history. Three layers, in order of how little they ask
+   of her:
+
+   1. SNAPSHOTS — kept automatically, in a separate storage key, so a corrupted
+      or half-restored `coach:data` can never take the history with it. Rolling
+      window: one per day, most recent kept.
+   2. A FILE — a real dated download. On a phone the share sheet puts it
+      straight into OneDrive or Drive.
+   3. A FOLDER — on a desktop browser she can grant the app one folder, once
+      (her OneDrive folder, say). After that the app writes a dated backup into
+      it every time it opens, and OneDrive syncs it off the device. This is the
+      closest thing to unattended cloud backup that a page can do without
+      registering an app with Google or Microsoft.
+
+   What this deliberately does NOT do: claim to sync to a cloud account. That
+   needs OAuth credentials she has to create herself, and pretending otherwise
+   would be a promise the app cannot keep.
+   ==========================================================================*/
+const SNAP_KEY = "coach:snapshots";
+const SNAP_KEEP = 10;
+
+const snapRead = () => {
+  try { return JSON.parse(window.localStorage.getItem(SNAP_KEY) || "[]") || []; }
+  catch (e) { return []; }
+};
+
+/* One snapshot per day. Taking one every save would burn storage for nothing;
+   a day is the granularity anything here is measured in anyway. */
+const snapshotIfDue = (d) => {
+  try {
+    const day = today();
+    const snaps = snapRead();
+    if (snaps.length && snaps[0].day === day) return snaps;
+    const entry = {
+      day,
+      at: new Date().toISOString(),
+      days: Object.keys(d.logs || {}).length,
+      json: JSON.stringify(d),
+    };
+    const next = [entry, ...snaps].slice(0, SNAP_KEEP);
+    window.localStorage.setItem(SNAP_KEY, JSON.stringify(next));
+    return next;
+  } catch (e) { return snapRead(); }
+};
+
+const backupName = () => `coach-backup-${today()}.json`;
+
+/* --- the folder she grants once, remembered across sessions ---------------
+   A directory handle cannot go in localStorage — it is a live object, so it
+   goes in IndexedDB. Chrome and Edge on a desktop support this; Safari and
+   phones do not, and the UI says so rather than offering a dead button. */
+const DIR_DB = "coach-backup", DIR_STORE = "handles", DIR_ID = "folder";
+const idb = () => new Promise((res, rej) => {
+  try {
+    const r = window.indexedDB.open(DIR_DB, 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore(DIR_STORE); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  } catch (e) { rej(e); }
+});
+const dirSave = async (handle) => {
+  const db = await idb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(DIR_STORE, "readwrite");
+    tx.objectStore(DIR_STORE).put(handle, DIR_ID);
+    tx.oncomplete = () => res(true); tx.onerror = () => rej(tx.error);
+  });
+};
+const dirLoad = async () => {
+  try {
+    const db = await idb();
+    return await new Promise((res) => {
+      const tx = db.transaction(DIR_STORE, "readonly");
+      const q = tx.objectStore(DIR_STORE).get(DIR_ID);
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => res(null);
+    });
+  } catch (e) { return null; }
+};
+const dirForget = async () => {
+  try {
+    const db = await idb();
+    return await new Promise((res) => {
+      const tx = db.transaction(DIR_STORE, "readwrite");
+      tx.objectStore(DIR_STORE).delete(DIR_ID);
+      tx.oncomplete = () => res(true); tx.onerror = () => res(false);
+    });
+  } catch (e) { return false; }
+};
+
+const canPickFolder = () => typeof window !== "undefined" && !!window.showDirectoryPicker;
+const canShareFiles = () => typeof navigator !== "undefined" && !!navigator.canShare &&
+  (() => { try { return navigator.canShare({ files: [new File(["x"], "x.json")] }); } catch (e) { return false; } })();
+
+/* Writes the backup into the granted folder. Returns a short status string so
+   the UI can be honest about what happened rather than claiming success. */
+const writeToFolder = async (d) => {
+  try {
+    const dir = await dirLoad();
+    if (!dir) return "no-folder";
+    if (dir.queryPermission) {
+      let p = await dir.queryPermission({ mode: "readwrite" });
+      if (p !== "granted" && dir.requestPermission) p = await dir.requestPermission({ mode: "readwrite" });
+      if (p !== "granted") return "denied";
+    }
+    const fh = await dir.getFileHandle(backupName(), { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(d, null, 2));
+    await w.close();
+    try { window.localStorage.setItem("coach:lastFolderBackup", today()); } catch (e) {}
+    return "ok";
+  } catch (e) { return "failed"; }
+};
+
+const lastFolderBackup = () => {
+  try { return window.localStorage.getItem("coach:lastFolderBackup") || null; } catch (e) { return null; }
+};
+const lastFileBackup = () => {
+  try { return window.localStorage.getItem("coach:lastFileBackup") || null; } catch (e) { return null; }
+};
+const markFileBackup = () => {
+  try { window.localStorage.setItem("coach:lastFileBackup", today()); } catch (e) {}
+};
+
+/* How long since anything left this device. Null means never. */
+const backupAgeDays = () => {
+  const a = lastFolderBackup(), b = lastFileBackup();
+  const best = [a, b].filter(Boolean).sort().pop();
+  if (!best) return null;
+  return Math.max(0, Math.round((parse(today()) - parse(best)) / 86400000));
+};
+
+const downloadBackup = (d) => {
+  try {
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = backupName();
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    markFileBackup();
+    return true;
+  } catch (e) { return false; }
+};
+
+const shareBackup = async (d) => {
+  try {
+    const file = new File([JSON.stringify(d, null, 2)], backupName(), { type: "application/json" });
+    await navigator.share({ files: [file], title: "Coach backup" });
+    markFileBackup();
+    return "ok";
+  } catch (e) {
+    return (e && e.name === "AbortError") ? "cancelled" : "failed";
+  }
+};
+
+const saveData = async (d) => {
+  try { await store.set(KEY, JSON.stringify(d)); } catch (e) {}
+  /* A snapshot a day, kept separately, so a bad restore or a corrupted write
+     can never take the history with it. */
+  try { snapshotIfDue(d); } catch (e) {}
+};
 
 /* ============================================================================
    5. THE COACH
@@ -1498,24 +1633,10 @@ function useCoach(data) {
       return rested >= off;                  /* rest is served, back to work */
     };
 
-    let streak = 0;
-    for (let i = 0; i < 730; i++) {
-      const d = addDays(t, -i);
-      if (done(d)) { streak++; continue; }
-      if (i === 0) continue;
-      if (!isScheduled(d)) continue;
-      break;
-    }
-
-    let bestStreak = 0, run = 0;
-    const allDates = Object.keys(logs).sort();
-    if (allDates.length) {
-      for (let d = allDates[0]; d <= t; d = addDays(d, 1)) {
-        if (done(d)) { run++; bestStreak = Math.max(bestStreak, run); }
-        else if (isScheduled(d)) run = 0;
-      }
-    }
-
+    /* No streak here, by design. A streak punishes one bad day, and the
+       evidence says one missed opportunity does not measurably damage habit
+       formation. The 28-day consistency window below does the same job
+       without the punishment. */
     let sched = 0, hit = 0;
     for (let i = 0; i < (FX.consistencyWindow || 28); i++) {
       const d = addDays(t, -i);
@@ -1594,24 +1715,8 @@ function useCoach(data) {
 
     const weekMap = {};
     Object.keys(logs).forEach((d) => { if (logs[d].completed) weekMap[weekStart(d)] = (weekMap[weekStart(d)] || 0) + 1; });
-    /* weekly target pays pro-rata: 2 of 4 classes earns half the bonus */
-    const weekBonus = Object.values(weekMap).reduce(
-      (sum, n) => sum + Math.round(Math.min(1, n / target) * FX.xpWeekTarget), 0);
-
     const betsWon = Object.values(logs).filter((l) => l?.bet?.met === true).length;
     const betsTaken = Object.values(logs).filter((l) => l?.bet?.met !== undefined && l?.bet?.met !== null).length;
-
-    const xp = totalSessions * FX.xpSession + weekBonus +
-      wKeys.length * FX.xpWeeklyCheck + Object.keys(monthly).length * FX.xpMonthly +
-      pbCount * FX.xpBest +
-      betsWon * FX.xpBet;
-    const { level, xpIntoLevel, xpNeed } = levelFromXp(xp, FX);
-
-    const stats = { totalSessions, streak, bestStreak, consistency, weeksHit, weekRun, totalHours, betsWon,
-      weeklyCount: wKeys.length, monthlyCount: Object.keys(monthly).length, pbCount };
-    const allAch = achievementsFor(settings);
-    const unlocked = allAch.filter((a) => a.test(stats));
-    const nextAch = allAch.find((a) => !a.test(stats));
 
     const dn = dayName(t);
 
@@ -1626,12 +1731,24 @@ function useCoach(data) {
     const phaseKey = phaseFor(t, settings.gymDate);
     const phase = { key: phaseKey, ...PHASES[phaseKey] };
 
-    const library = (data.library || []).filter((w) => {
+    /* TWO LISTS, AND THE DIFFERENCE MATTERS.
+
+       `allClasses` is everything she owns. `library` is only what today's phase
+       allows — away from the home gym, equipment classes drop out.
+
+       That filter belongs to PRESCRIBING ("what can she do today"). It must
+       never touch ACCOUNTING ("what did she do"), or a session she genuinely
+       completed becomes invisible the moment the phase changes: no body
+       regions, no weekly sets, no coverage — as though she had trained
+       nothing. Historical lookups below use `allClasses` for exactly this
+       reason. */
+    const allClasses = data.library || [];
+    const library = allClasses.filter((w) => {
       if (w.home && !phase.allowHome) return false;
       if (w.shoulderLoad === "high" && !phase.allowHighShoulder && settings.shoulderInjury) return false;
       return true;
     });
-    const session = library.find((w) => w.name === logs[t]?.type) || null;
+    const session = allClasses.find((w) => w.name === logs[t]?.type) || null;
     const hasPlan = library.length > 0;
 
     const planned = session;
@@ -2315,8 +2432,6 @@ function useCoach(data) {
     else if (weeklyLate >= 2) nudges.push({ admin: true, tone: "firm", text: `Your measurements are ${weeklyLate} days late. Take them today — every target I set comes out of those numbers.` });
     if (!loggedToday && !restDay && recovery?.key === "green")
       nudges.push({ tone: "push", text: "Recovery is above your normal today. This is the day to go at it properly — don't waste a green light." });
-    if (!loggedToday && !restDay && streak >= 3)
-      nudges.push({ tone: "push", text: `${streak} days in a row. Keep it — the streak is doing more for you than any single session.` });
     const missedRecently = weekDays.filter((d) => d < t && isScheduled(d) && !done(d)).length;
     if (missedRecently >= 2 && weekDone < seasonTarget - 1)
       nudges.push({ tone: "firm", text: `${missedRecently} training days missed this week. Not a disaster, but today needs to happen — the week is still savable.` });
@@ -2355,7 +2470,7 @@ function useCoach(data) {
     const hrvDrift = hrv7 && hrv28 ? ((hrv7 - hrv28) / hrv28) * 100 : null;
 
     /* --- which capabilities have gone quiet --- */
-    const capOf = (name) => library.find((w) => w.name === name)?.goal || null;
+    const capOf = (name) => allClasses.find((w) => w.name === name)?.goal || null;
     const goalsSeen = (days) => {
       const seen = {};
       for (let i = 0; i < days; i++) {
@@ -2374,7 +2489,16 @@ function useCoach(data) {
     const variety28 = new Set(
       Array.from({ length: 28 }, (_, i) => logs[addDays(t, -i)])
         .filter((l) => l?.completed && l.type).map((l) => l.type)).size;
-    const bodyOf = (name) => library.find((w) => w.name === name)?.body || null;
+    /* A class she adds herself starts without a body map, and a class with no
+       body map is invisible to Coverage, to weekly sets and to the `sets`
+       design rule — it would look like she trained nothing. So fall back to a
+       sensible spread for the goal it carries. A rough map beats a blank one;
+       she can tune it per class in Workouts. */
+    const bodyOf = (name) => {
+      const w = allClasses.find((x) => x.name === name);
+      if (!w) return null;
+      return w.body || BODY_BY_GOAL[w.goal] || null;
+    };
     const rpeOf = (l) => Number(l?.rpe) || 0;
 
     /* Session load = minutes x effort. The standard internal-load measure. */
@@ -3823,7 +3947,6 @@ function useCoach(data) {
     let message;
     if (loggedToday?.completed) message = `Logged. That's ${weekDone} of ${target} this week.`;
     else if (restDay) message = "Rest day. Recovery is part of the plan, not a gap in it.";
-    else if (streak >= 3) message = `${streak} days in a row. Don't overthink today — just start.`;
     else if (consistency >= 70) message = "You've been reliable this month. Keep the line moving.";
     else if (totalSessions === 0) message = "First session is the only hard one. Everything after is maintenance.";
     else message = "One session today puts the week back on track.";
@@ -3834,12 +3957,12 @@ function useCoach(data) {
 
 
     return {
-      t, ws, mk, weekDays, done, isScheduled, streak, bestStreak, consistency,
+      t, ws, mk, weekDays, done, isScheduled, consistency,
       weekDone, target, monthDone, monthTarget, totalSessions,
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
-      xp, level, xpIntoLevel, xpNeed, unlocked, nextAch, allAch, pbs, stats,
+      pbs,
       planned, session, hasPlan, pos, themes, prescribed, themeGoal, bet, betsWon, betsTaken, phase, season, seasonTarget, themesAuto, auto,
-      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS, DRILLS, lapseState, daysSinceSession, missedThisWeek, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses: data.library || [], programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS, DRILLS, lapseState, daysSinceSession, missedThisWeek, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
   }, [data]);
 }
@@ -4858,19 +4981,15 @@ function Today({ data, setData, coach, setSheet }) {
         </div>
         <div style={{ flex: 1, background: C.card, borderRadius: 16, padding: "14px 16px",
           boxShadow: "0 1px 2px rgba(43,27,46,0.05)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-            <span className="disp" style={{ fontSize: 30, fontWeight: 400, lineHeight: 1, color: C.moss }}>{coach.level}</span>
-            <span style={{ fontSize: 12, color: C.muted }}>·  {coach.consistency}%</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+            <span className="disp" style={{ fontSize: 30, fontWeight: 400, lineHeight: 1, color: C.moss }}>{coach.consistency}</span>
+            <span className="disp" style={{ fontSize: 15, fontWeight: 300, color: C.muted }}>%</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em", textTransform: "uppercase", color: C.muted, marginTop: 7 }}>
-            level · consistency
-          </div>
-          <div style={{ height: 3, background: C.line, borderRadius: 3, marginTop: 8, overflow: "hidden" }}>
-            <div style={{ height: "100%", borderRadius: 3, background: C.ochre,
-              width: `${Math.min(100, (coach.xpIntoLevel / coach.xpNeed) * 100)}%` }} />
+            consistency
           </div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5, lineHeight: 1.3 }}>
-            {Math.max(0, coach.xpNeed - coach.xpIntoLevel)} points to level {coach.level + 1}
+            of the last 28 days you planned to train
           </div>
         </div>
       </div>
@@ -5870,27 +5989,6 @@ function Today({ data, setData, coach, setSheet }) {
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <div style={{ flexShrink: 0, textAlign: "center" }}>
-              <div className="disp" style={{ fontSize: 30, fontWeight: 400, color: C.ochre, lineHeight: 1 }}>{coach.level}</div>
-              <div className="mono" style={{ fontSize: 9, letterSpacing: "0.1em", color: C.muted, textTransform: "uppercase" }}>level</div>
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ height: 5, background: C.line, borderRadius: 5, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${(coach.xpIntoLevel / coach.xpNeed) * 100}%`, background: C.ochre, borderRadius: 5, transition: "width 300ms ease" }} />
-              </div>
-              <div className="mono" style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
-                {coach.xpNeed - coach.xpIntoLevel} xp to level {coach.level + 1}
-              </div>
-            </div>
-          </div>
-          {coach.nextAch && (
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
-              <Eyebrow>Next milestone</Eyebrow>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{coach.nextAch.name}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{coach.nextAch.hint}</div>
-            </div>
-          )}
         </Card>
         </div>
       </Fold>
@@ -5909,13 +6007,55 @@ function Workouts({ data, setData, coach }) {
   const lib = data.library;
   const [openId, setOpenId] = useState(null);
   const [filter, setFilter] = useState("all");
+  const [renameMsg, setRenameMsg] = useState("");
 
   const save = (next) => setData({ ...data, library: next });
-  const patch = (id, p) => save(lib.map((w) => (w.id === id ? { ...w, ...p } : w)));
-  const remove = (id) => save(lib.filter((w) => w.id !== id));
+
+  /* Sessions are logged against a class NAME, so renaming a class would orphan
+     every session she ever did under the old one — the work would still be in
+     the record but would stop counting towards coverage, sets, class cost and
+     freshness. Nothing tells her that happened. So a rename carries the
+     history with it: the same sessions, relabelled, never re-dated or deleted. */
+  const patch = (id, p) => {
+    const before = lib.find((w) => w.id === id);
+    const nextLib = lib.map((w) => (w.id === id ? { ...w, ...p } : w));
+    const renamed = before && p.name !== undefined && p.name !== before.name && before.name;
+    if (!renamed) { save(nextLib); return; }
+    const from = before.name, to = p.name;
+    const logs = { ...data.logs };
+    let moved = 0;
+    Object.keys(logs).forEach((d) => {
+      const l = logs[d];
+      if (!l) return;
+      let touched = false;
+      let nl = l;
+      if (l.type === from) { nl = { ...nl, type: to }; touched = true; }
+      if (l.prescribed === from) { nl = { ...nl, prescribed: to }; touched = true; }
+      if (Array.isArray(l.extraSessions) && l.extraSessions.some((x) => x.type === from)) {
+        nl = { ...nl, extraSessions: l.extraSessions.map((x) => (x.type === from ? { ...x, type: to } : x)) };
+        touched = true;
+      }
+      if (touched) { logs[d] = nl; moved++; }
+    });
+    setData({ ...data, library: nextLib, logs });
+    if (moved) setRenameMsg(`Renamed. ${moved} logged session${moved === 1 ? "" : "s"} came with it.`);
+  };
+
+  /* Removing a class must not remove what she did with it. The library entry
+     goes; the sessions stay exactly as logged. They keep their name, so the
+     record still reads true — they simply stop being offered. */
+  const remove = (id) => {
+    const w = lib.find((x) => x.id === id);
+    const used = w ? Object.values(data.logs || {}).filter((l) => l?.type === w.name).length : 0;
+    save(lib.filter((x) => x.id !== id));
+    if (used) setRenameMsg(`Removed from the library. The ${used} session${used === 1 ? "" : "s"} you did stay in your record.`);
+  };
   const add = () => {
     const w = { id: newId(), name: "New class", goal: "strength", intensity: 3, recoveryCost: 3, home: false,
-      shoulderLoad: "medium", durations: [30, 45], equipment: "", cue: "", resistance: "", structure: "", felt: "" };
+      shoulderLoad: "medium", durations: [30, 45], equipment: "", cue: "", resistance: "", structure: "", felt: "",
+      /* Without this the class counts towards nothing — not Coverage, not
+         weekly sets. A rough default by goal, tunable later. */
+      body: { ...BODY_BY_GOAL.strength } };
     save([...lib, w]); setOpenId(w.id);
   };
   const move = (i, dir) => {
@@ -6083,6 +6223,12 @@ function Workouts({ data, setData, coach }) {
         );
       })}
 
+      {renameMsg && (
+        <div style={{ fontSize: 12.5, color: C.moss, lineHeight: 1.5, marginBottom: 10,
+                      background: C.mint, borderRadius: 12, padding: "10px 12px" }}>
+          {renameMsg}
+        </div>
+      )}
       <Btn kind="ghost" onClick={add}>+ Add a class</Btn>
       <Btn kind="quiet" onClick={() => save(SEED_LIBRARY)}>Reset library to the original list</Btn>
     </div>
@@ -6549,37 +6695,6 @@ function Progress({ data, setData, coach, setSheet }) {
         )}
             </Fold>
 
-      {/* ---------- achievements ---------- */}
-      <Card>
-        <Eyebrow>Achievements · {coach.unlocked.length} of {coach.allAch.length}</Eyebrow>
-        <Explain>Milestones unlock on their own. The number on the right is the target — change it if one is too easy or too far off.</Explain>
-        {coach.allAch.map((a) => {
-          const got = coach.unlocked.some((u) => u.id === a.id);
-          return (
-            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: `1px solid ${C.chalk}` }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 7, flexShrink: 0, border: `1.5px solid ${got ? C.ochre : C.line}`,
-                background: got ? C.ochre : "transparent", display: "flex", alignItems: "center", justifyContent: "center", color: C.card, fontSize: 13,
-              }}>{got ? "✓" : ""}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: got ? C.ink : C.muted }}>{a.name}</div>
-                <div style={{ fontSize: 11, color: C.muted }}>{a.hint}</div>
-                {!got && (
-                  <div style={{ height: 3, background: C.line, borderRadius: 3, marginTop: 6, overflow: "hidden" }}>
-                    <div style={{ height: "100%", borderRadius: 3, background: C.ochre,
-                      width: `${Math.min(100, ((coach.stats?.[a.metric] ?? 0) / a.target) * 100)}%` }} />
-                  </div>
-                )}
-              </div>
-              <input type="text" inputMode="numeric" value={data.settings.achievements?.[a.id] ?? a.target}
-                onChange={(e) => setData({ ...data, settings: { ...data.settings,
-                  achievements: { ...(data.settings.achievements || {}), [a.id]: Number(e.target.value) || 0 } } })}
-                style={{ ...inputStyle, width: 52, padding: "6px 6px", marginBottom: 0, textAlign: "center",
-                  fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
-            </div>
-          );
-        })}
-      </Card>
     </div>
   );
 }
@@ -6595,6 +6710,68 @@ function Settings({ data, setData, setSheet }) {
      the export is shown on screen instead — copy it and paste it anywhere. */
   const [exportText, setExportText] = useState("");
   const [copied, setCopied] = useState(false);
+
+  /* backup: folder grant, status line, snapshot list */
+  const [folderName, setFolderName] = useState(null);
+  const [backupMsg, setBackupMsg] = useState("");
+  const [snaps, setSnaps] = useState([]);
+  const ageDays = backupAgeDays();
+
+  useEffect(() => {
+    let alive = true;
+    dirLoad().then((h) => { if (alive && h) setFolderName(h.name || "your folder"); });
+    try { setSnaps(snapRead()); } catch (e) {}
+    return () => { alive = false; };
+  }, []);
+
+  const pickFolder = async () => {
+    try {
+      const h = await window.showDirectoryPicker({ mode: "readwrite", startIn: "documents" });
+      await dirSave(h);
+      setFolderName(h.name || "your folder");
+      const r = await writeToFolder(data);
+      setBackupMsg(r === "ok"
+        ? `Saved into ${h.name}. From now on a fresh copy lands there every time you open the app.`
+        : "Folder remembered, but the first write didn't go through. Try Back up now.");
+    } catch (e) {
+      if (e && e.name !== "AbortError") setBackupMsg("Couldn't open the folder picker on this browser.");
+    }
+  };
+
+  const backupNow = async () => {
+    setBackupMsg("");
+    if (folderName) {
+      const r = await writeToFolder(data);
+      if (r === "ok") { setBackupMsg(`Copy written into ${folderName}.`); return; }
+      if (r === "denied") { setBackupMsg("The browser needs permission again — pick the folder once more."); return; }
+    }
+    if (canShareFiles()) {
+      const r = await shareBackup(data);
+      if (r === "ok") { setBackupMsg("Sent. Choose OneDrive or Drive to keep it off this device."); return; }
+      if (r === "cancelled") { setBackupMsg(""); return; }
+    }
+    setBackupMsg(downloadBackup(data)
+      ? "Downloaded. Move it into OneDrive or Drive so it isn't only on this device."
+      : "That didn't work — use Show my data below and copy it by hand.");
+  };
+
+  const restoreSnapshot = (snap) => {
+    try {
+      const incoming = JSON.parse(snap.json);
+      setData((prev) => ({
+        ...prev, ...incoming,
+        logs: { ...prev.logs, ...incoming.logs },
+        morning: { ...prev.morning, ...incoming.morning },
+        weekly: { ...prev.weekly, ...incoming.weekly },
+        monthly: { ...prev.monthly, ...incoming.monthly },
+        mobility: { ...prev.mobility, ...(incoming.mobility || {}) },
+        issues: [...(prev.issues || []), ...((incoming.issues || []).filter(
+          (i) => !(prev.issues || []).some((p) => p.id === i.id)))],
+        sample: false,
+      }));
+      setBackupMsg(`Put back the copy from ${prettyShort(snap.day)}. Nothing already here was removed.`);
+    } catch (e) { setBackupMsg("That snapshot couldn't be read."); }
+  };
   const exportData = () => {
     setExportText(JSON.stringify(data, null, 2));
     setCopied(false);
@@ -6714,9 +6891,6 @@ function Settings({ data, setData, setSheet }) {
             </div>
           </>
         )}
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>
-          Missing a training day breaks your streak. Non-training days never do.
-        </div>
         <Field label="This month's theme" unit="" type="text" value={s.monthTheme} onChange={(v) => set("monthTheme", v)} />
             </Fold>
 
@@ -6755,11 +6929,83 @@ function Settings({ data, setData, setSheet }) {
         ))}
             </Fold>
 
-      <Fold title="Your data" note="export and reset">
+      <Fold title="Your data" note="backups, export and reset">
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
-          Everything is stored on this device. Export a copy now and then — it's the only backup.
+          Everything lives in this browser, on this device. A copy kept somewhere else is
+          what makes that safe rather than fragile.
         </div>
-        <Btn kind="ghost" onClick={exportData}>Back up my data</Btn>
+
+        {/* where it stands, said plainly */}
+        <div style={{ background: C.chalk, borderRadius: 12, padding: "11px 13px", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            {ageDays === null
+              ? "No copy has left this device yet."
+              : ageDays === 0 ? "A copy left this device today."
+              : `Last copy off this device: ${ageDays} day${ageDays === 1 ? "" : "s"} ago.`}
+          </div>
+          {folderName && (
+            <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+              Writing automatically into <strong>{folderName}</strong> each time the app opens.
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+            {snaps.length
+              ? `${snaps.length} daily snapshot${snaps.length === 1 ? "" : "s"} kept on the device as well.`
+              : "Daily snapshots start once you log something."}
+          </div>
+        </div>
+
+        <Btn kind="signal" onClick={backupNow}>Back up now</Btn>
+
+        {canPickFolder() && (
+          <div style={{ marginTop: 10 }}>
+            <Btn kind="ghost" onClick={pickFolder}>
+              {folderName ? `Change the folder (now: ${folderName})` : "Choose a folder to back up into"}
+            </Btn>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+              Pick your OneDrive or Google Drive folder and the app writes a dated copy into it
+              every time it opens — OneDrive syncs it up from there. You grant this once.
+            </div>
+          </div>
+        )}
+        {!canPickFolder() && (
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+            {canShareFiles()
+              ? "On a phone, Back up now opens the share sheet — send it to OneDrive or Drive. Automatic folder backup needs a desktop browser."
+              : "This browser can't write to a folder on its own. Back up now saves a file you can move into OneDrive."}
+          </div>
+        )}
+        {backupMsg && (
+          <div style={{ fontSize: 12.5, color: C.moss, marginTop: 10, lineHeight: 1.5 }}>{backupMsg}</div>
+        )}
+
+        {snaps.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+            <Eyebrow>Snapshots on this device</Eyebrow>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
+              Taken automatically, one a day. Putting one back merges it in — nothing already
+              here is removed.
+            </div>
+            {snaps.map((sn) => (
+              <div key={sn.day} style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "8px 0", borderBottom: `1px solid ${C.chalk}` }}>
+                <div>
+                  <div style={{ fontSize: 13 }}>{prettyShort(sn.day)}</div>
+                  <div style={{ fontSize: 11, color: C.muted }}>{sn.days} day{sn.days === 1 ? "" : "s"} of training</div>
+                </div>
+                <button onClick={() => restoreSnapshot(sn)}
+                  style={{ border: `1px solid ${C.line}`, background: C.card, color: C.ink, borderRadius: 10,
+                           padding: "6px 11px", fontSize: 12, fontFamily: "inherit", cursor: "pointer" }}>
+                  Put this back
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 12 }}>
+          <Btn kind="quiet" onClick={exportData}>Show my data as text</Btn>
+        </div>
         {!insideClaude() && (
           <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
             <Field label="Anthropic API key" unit="" type="text" value={s.apiKey || ""}
@@ -6935,7 +7181,7 @@ function FieldEditor({ which, data, setData, close }) {
                       ))}
                     </div>
                     <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.4 }}>
-                      "Higher is better" makes this measure eligible for personal bests and XP.
+                      "Higher is better" makes this measure eligible for personal bests.
                     </div>
                   </>
                 )}
@@ -7020,13 +7266,6 @@ function Formulas({ data, setData, close }) {
   const reset = () => setData((d) => ({ ...d, settings: { ...d.settings, formulas: {} } }));
 
   const groups = [
-    { title: "Points", note: "What each action is worth. A normal week is roughly one level early on.",
-      rows: [["xpSession", "Each session"], ["xpWeekTarget", "Hitting the weekly target"],
-             ["xpWeeklyCheck", "Weekly battery filled in"], ["xpMonthly", "Monthly benchmark"],
-             ["xpBest", "Each personal best"],
-             ["xpBet", "Each daily bet you make"]] },
-    { title: "Levels", note: `Level 2 costs ${F.levelBase + F.levelRise}, and each level after costs ${F.levelRise} more than the one before.`,
-      rows: [["levelBase", "Base cost"], ["levelRise", "Added per level"]] },
     { title: "Recovery bands", note: "Set relative to your own baseline, not WHOOP's scale. Positive means above your normal.",
       rows: [["bandGreen", "Progress at baseline +"], ["bandSteady", "Train as planned at baseline +"],
              ["bandEasy", "Ease off at baseline +"]] },
@@ -8499,7 +8738,7 @@ her own data. If a number is not there, say you don't have it rather than estima
 Where she is right now:
 - Phase: ${coach.phase.name} — ${coach.phase.line}
 - Week ${coach.pos.week}, month ${coach.pos.month}. Theme: ${coach.themes.week}
-- This week: ${coach.weekDone} of ${coach.seasonTarget} sessions. Streak ${coach.streak}. Consistency ${coach.consistency}%.
+- This week: ${coach.weekDone} of ${coach.seasonTarget} sessions. Consistency ${coach.consistency}% of the last 28 days.
 - This week's call: ${coach.verdict.label} — ${coach.verdict.line}
 - Class the app prescribed for today: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min — because ${coach.prescribed.reason}` : "none"}
 - Today's finisher: ${coach.bet ? coach.bet.text : "none"} (she has made ${coach.betsWon} of ${coach.betsTaken} answered)
@@ -8850,13 +9089,25 @@ const SheetShell = ({ children, onBack, onClose, canGoBack }) => (
 /* ============================================================================
    8. SHELL
    ==========================================================================*/
-export default function App() {
+function CoachApp() {
   const [data, setDataRaw] = useState(BLANK);
   const [ready, setReady] = useState(false);
   const [stack, setStack] = useState(["today"]);   // screen history
   const [sheets, setSheets] = useState([]);        // sheet history
 
-  useEffect(() => { loadData().then((d) => { setDataRaw(d); setReady(true); }); }, []);
+  useEffect(() => {
+    loadData().then((d) => {
+      setDataRaw(d); setReady(true);
+      /* If she has granted a folder — her OneDrive folder, say — put a dated
+         copy in it now. Silent on purpose: it either works or the Settings
+         card tells her how long it has been. Never blocks opening the app. */
+      try {
+        if (d && !d.sample && Object.keys(d.logs || {}).length) {
+          if (lastFolderBackup() !== today()) writeToFolder(d);
+        }
+      } catch (e) {}
+    });
+  }, []);
   const setData = useCallback((next) => { setDataRaw(next); saveData(next); }, []);
   const coach = useCoach(data);
 
@@ -8962,5 +9213,126 @@ export default function App() {
         </SheetShell>
       )}
     </div>
+  );
+}
+
+/* ============================================================================
+   9. THE SAFETY NET
+   ---------------------------------------------------------------------------
+   The app is meant to be edited — by her, on github.com, for years. That makes
+   one failure mode unacceptable: a bad edit throws, React unmounts everything,
+   the screen goes white, and the only backup button in existence is inside the
+   app she can no longer open. Her data is still sitting in storage, intact and
+   unreachable, which is the worst possible place for it.
+
+   So: catch the error, and put the rescue in the hands of the person looking at
+   the white screen. This component touches nothing the app computes — no
+   useCoach, no metrics, no store adapter — because whatever just broke might be
+   any of them. It reads the raw string out of localStorage and shows it.
+   ==========================================================================*/
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null, raw: null, copied: false };
+  }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err) {
+    let raw = null;
+    try { raw = window.localStorage.getItem("coach:data"); } catch (e) { raw = null; }
+    this.setState({ raw });
+  }
+  render() {
+    if (!this.state.err) return this.props.children;
+    const { err, raw, copied } = this.state;
+    const msg = String((err && err.message) || err || "unknown");
+    const days = (() => {
+      try { const d = JSON.parse(raw || "{}"); return Object.keys(d.logs || {}).length; }
+      catch (e) { return null; }
+    })();
+    const box = {
+      background: C.card, borderRadius: 18, padding: 20, marginBottom: 14,
+      boxShadow: "0 1px 3px rgba(43,27,46,0.06)",
+    };
+    return (
+      <div style={{ minHeight: "100vh", background: C.chalk, color: C.ink,
+                    padding: "28px 18px 40px", fontFamily: "'Hanken Grotesk',system-ui,sans-serif" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto" }}>
+          <div className="disp" style={{ fontSize: 26, marginBottom: 6 }}>
+            The app hit an error opening.
+          </div>
+          <div style={{ fontSize: 15, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>
+            Nothing is lost. Your data is still on this device exactly as it was —
+            this screen just stands between you and a blank page while it gets fixed.
+          </div>
+
+          <div style={box}>
+            <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
+              FIRST — TAKE A COPY
+            </div>
+            <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
+              {raw
+                ? <>Everything you have logged is in the box below{days !== null ? <> — {days} day{days === 1 ? "" : "s"} of training</> : null}.
+                    Copy it somewhere safe. It restores through Settings → Your data → Restore
+                    once the app opens again.</>
+                : <>This device has no saved data yet, so there is nothing to rescue.</>}
+            </div>
+            {raw && (
+              <>
+                <textarea readOnly value={raw}
+                  onFocus={(e) => e.target.select()}
+                  style={{ width: "100%", height: 120, fontSize: 11, fontFamily: "'IBM Plex Mono',ui-monospace,monospace",
+                           border: `1px solid ${C.line}`, borderRadius: 12, padding: 10, color: C.ink,
+                           background: C.chalk, resize: "vertical" }} />
+                <button
+                  onClick={() => {
+                    try {
+                      const ta = document.querySelector("textarea");
+                      if (ta) { ta.select(); document.execCommand("copy"); }
+                      if (navigator.clipboard) navigator.clipboard.writeText(raw);
+                      this.setState({ copied: true });
+                    } catch (e) { this.setState({ copied: true }); }
+                  }}
+                  style={{ marginTop: 10, width: "100%", padding: "13px 16px", borderRadius: 14, border: "none",
+                           background: copied ? C.moss : C.signal, color: "#fff", fontSize: 15, fontWeight: 600,
+                           fontFamily: "inherit", cursor: "pointer" }}>
+                  {copied ? "Copied — paste it somewhere safe" : "Copy my data"}
+                </button>
+              </>
+            )}
+          </div>
+
+          <div style={box}>
+            <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
+              THEN — WHAT WENT WRONG
+            </div>
+            <div style={{ fontSize: 13, fontFamily: "'IBM Plex Mono',ui-monospace,monospace",
+                          background: C.chalk, border: `1px solid ${C.line}`, borderRadius: 12,
+                          padding: 12, color: C.clay, wordBreak: "break-word", lineHeight: 1.5 }}>
+              {msg}
+            </div>
+            <div style={{ fontSize: 14, color: C.muted, marginTop: 12, lineHeight: 1.5 }}>
+              That line is what a fix starts from — send it over. If this began right
+              after an edit on github.com, undoing that edit puts the app back.
+            </div>
+          </div>
+
+          <button
+            onClick={() => { try { window.location.reload(); } catch (e) {} }}
+            style={{ width: "100%", padding: "13px 16px", borderRadius: 14,
+                     border: `1px solid ${C.line}`, background: C.card, color: C.ink,
+                     fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+            Try opening it again
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <CoachApp />
+    </ErrorBoundary>
   );
 }
