@@ -46,9 +46,41 @@ const SEED_LIBRARY = [
    change without touching code.
 --------------------------------------------------------------------------- */
 const FORMULA_DEFAULTS = {
+  /* recovery bands, read against her own baseline rather than WHOOP's scale */
   bandGreen: 3, bandSteady: -10, bandEasy: -20,
+
+  /* weekly health score weights — renormalised, so they needn't total 100 */
   wCompletion: 40, wRecovery: 20, wSleep: 15, wStrength: 10, wMobility: 10, wBalance: 5,
+
+  /* how far back consistency looks. A window, never a streak. */
   consistencyWindow: 28,
+
+  /* ---- the numbers that actually decide what the coach says ----------------
+     These governed the coaching from inside the engine, where she could never
+     reach them. They live here now so a threshold can be argued with and
+     changed from Settings, without touching code. */
+
+  /* Load balance. Acute:chronic ratio — the corridor the evidence supports. */
+  acwrLow: 0.8,        /* below this: doing less than she is built for      */
+  acwrHigh: 1.3,       /* above this: pushing                               */
+  acwrSpike: 1.5,      /* above this: a spike, which is where injury lives  */
+
+  /* Sets per region per week. 6-10 is what governs holding muscle at 51. */
+  setTarget: 6,
+
+  /* Share of the week's work a region needs before it counts as covered. */
+  coverMin: 0.07,      /* 7% of total load          */
+  coverStrong: 0.14,   /* 14% reads as a real share */
+
+  /* Measurement error floors. Change is only called real above these; below
+     them the word is "holding", never "declining". Percentages. */
+  mdcLoad: 5,          /* weight x reps    */
+  mdcTime: 10,         /* timed holds      */
+  mdcReps: 15,         /* rep counts       */
+  mdcBalance: 20,      /* balance tests    */
+
+  /* Left-right gap worth naming, as a percentage. */
+  asymmetryPct: 15,
 };
 const formulas = (settings) => ({ ...FORMULA_DEFAULTS, ...(settings?.formulas || {}) });
 
@@ -1427,8 +1459,17 @@ async function loadData() {
       };
     }
   } catch (e) { /* first run */ }
-  /* first run: come up already full, so nothing is an empty screen */
-  return { ...BLANK, ...buildSample(BLANK.fields, BLANK.library) };
+  /* FIRST RUN STARTS EMPTY, ON PURPOSE.
+
+     It used to come up pre-filled with demo history so no screen looked bare.
+     But the first block is a calibration month whose whole job is to gather a
+     month of her real numbers, and rule 7 is explicit that sample data must
+     never be allowed to pass as her own logging. Pre-filled history is exactly
+     how that happens — on a new phone, months later, silently.
+
+     The empty state is not a bare screen anyway: the calibration checklist on
+     Today walks her through what to log and why each input matters. */
+  return { ...BLANK };
 }
 
 /* ============================================================================
@@ -1465,6 +1506,10 @@ const snapRead = () => {
    a day is the granularity anything here is measured in anyway. */
 const snapshotIfDue = (d) => {
   try {
+    /* Never snapshot the demo data. Rule 7: sample data must not be allowed to
+       pass as her own logging — and a snapshot is exactly how it would sneak
+       back in months later, wearing a date. */
+    if (!d || d.sample) return snapRead();
     const day = today();
     const snaps = snapRead();
     if (snaps.length && snaps[0].day === day) return snaps;
@@ -1533,6 +1578,7 @@ const canShareFiles = () => typeof navigator !== "undefined" && !!navigator.canS
    the UI can be honest about what happened rather than claiming success. */
 const writeToFolder = async (d) => {
   try {
+    if (!d || d.sample) return "sample";
     const dir = await dirLoad();
     if (!dir) return "no-folder";
     if (dir.queryPermission) {
@@ -1994,7 +2040,7 @@ function useCoach(data) {
 
     const mobScored = mobRows.filter((r) => r.now !== null);
     const mobWeakest = [...mobScored].sort((a, b) => (b.shortfall || 0) - (a.shortfall || 0)).slice(0, 3);
-    const mobAsym = mobScored.filter((r) => r.gapPct !== null && r.gapPct >= 15)
+    const mobAsym = mobScored.filter((r) => r.gapPct !== null && r.gapPct >= FX.asymmetryPct)
       .sort((a, b) => b.gapPct - a.gapPct);
     const mobScore = mobScored.length
       ? Math.round((1 - mean(mobScored.map((r) => r.shortfall))) * 100) : null;
@@ -2527,9 +2573,9 @@ function useCoach(data) {
     /* Acute:chronic. 0.8-1.3 is the range the evidence supports. */
     const acwr = chronic > 0 ? Math.round((acute / chronic) * 100) / 100 : null;
     const acwrBand = acwr === null ? null
-      : acwr < 0.8 ? { key: "under", label: "Under", color: C.ochre }
-      : acwr <= 1.3 ? { key: "good", label: "In range", color: C.moss }
-      : acwr <= 1.5 ? { key: "high", label: "Pushing", color: C.ochre }
+      : acwr < FX.acwrLow ? { key: "under", label: "Under", color: C.ochre }
+      : acwr <= FX.acwrHigh ? { key: "good", label: "In range", color: C.moss }
+      : acwr <= FX.acwrSpike ? { key: "high", label: "Pushing", color: C.ochre }
       : { key: "spike", label: "Spiking", color: C.clay };
 
     /* Load per body region, so the app stops watching one shoulder only. */
@@ -2580,20 +2626,20 @@ function useCoach(data) {
     };
     const sets7 = regionSets(7);
     const setsTotal = REGIONS.reduce((a, r) => a + sets7[r.id], 0);
-    const SET_TARGET = 6;
+    const SET_TARGET = FX.setTarget;
     const setsMet = REGIONS.filter((r) => sets7[r.id] >= SET_TARGET).length;
     const setsShort = REGIONS.filter((r) => sets7[r.id] < SET_TARGET)
       .sort((a, b) => sets7[a.id] - sets7[b.id]);
 
     /* A region counts as covered if it took a real share of the week's work. */
-    const COVER_MIN = 0.07;
+    const COVER_MIN = FX.coverMin;
     const bodyRows = REGIONS.map((r) => {
       const share = bodyTotal7 ? body7[r.id] / bodyTotal7 : 0;
       return {
         ...r, load: body7[r.id], load28: body28[r.id], share: Math.round(share * 100),
         sets: sets7[r.id], setsMet: sets7[r.id] >= SET_TARGET,
         covered: bodyTotal7 > 0 && share >= COVER_MIN,
-        state: !bodyTotal7 ? "none" : share >= 0.14 ? "strong" : share >= COVER_MIN ? "ok" : "thin",
+        state: !bodyTotal7 ? "none" : share >= FX.coverStrong ? "strong" : share >= COVER_MIN ? "ok" : "thin",
       };
     });
     const covered = bodyRows.filter((r) => r.covered).length;
@@ -2693,7 +2739,7 @@ function useCoach(data) {
     const cardiacDrift = avgHrNow && avgHrPrev ? Math.round(avgHrNow - avgHrPrev) : null;
 
 
-    const MDC = { load: 5, time: 10, reps: 15, balance: 20 };
+    const MDC = { load: FX.mdcLoad, time: FX.mdcTime, reps: FX.mdcReps, balance: FX.mdcBalance };
     const noiseFor = (m) => m.type === "time" ? MDC.time
       : m.cap === "balance" ? MDC.balance
       : m.type === "weightreps" ? MDC.load : MDC.reps;
@@ -6787,17 +6833,54 @@ function Settings({ data, setData, setSheet }) {
         setRestoreMsg("That doesn't look like a backup — it should start with a curly brace.");
         return;
       }
-      /* merge rather than replace: nothing already on this device is lost */
-      setData((prev) => ({
-        ...prev, ...incoming,
-        logs: { ...prev.logs, ...incoming.logs },
-        morning: { ...prev.morning, ...incoming.morning },
-        weekly: { ...prev.weekly, ...incoming.weekly },
-        monthly: { ...prev.monthly, ...incoming.monthly },
-        sample: false,
-      }));
+      /* MERGE, NEVER REPLACE.
+
+         `...incoming` overwrites whole branches, which quietly destroyed the
+         lists it didn't name — the record above all, which is the one thing
+         that must never be deleted. Every store is merged explicitly now, and
+         the lists are merged BY ID so restoring the same backup twice cannot
+         duplicate anything. What is on this device always survives. */
+      const byId = (mine, theirs, key = "id") => {
+        const out = [...(mine || [])];
+        (theirs || []).forEach((x) => {
+          const at = out.findIndex((y) => y && x && y[key] === x[key]);
+          if (at === -1) out.push(x);
+        });
+        return out;
+      };
+      let added = { issues: 0, goals: 0, chats: 0 };
+      setData((prev) => {
+        const issues = byId(prev.issues, incoming.issues);
+        const goals = byId(prev.goals, incoming.goals);
+        const chats = byId(prev.chats, incoming.chats);
+        added = {
+          issues: issues.length - (prev.issues || []).length,
+          goals: goals.length - (prev.goals || []).length,
+          chats: chats.length - (prev.chats || []).length,
+        };
+        return {
+          ...prev, ...incoming,
+          settings: { ...prev.settings, ...(incoming.settings || {}) },
+          logs: { ...prev.logs, ...incoming.logs },
+          morning: { ...prev.morning, ...incoming.morning },
+          weekly: { ...prev.weekly, ...incoming.weekly },
+          monthly: { ...prev.monthly, ...incoming.monthly },
+          mobility: { ...prev.mobility, ...(incoming.mobility || {}) },
+          notes: { ...prev.notes, ...(incoming.notes || {}) },
+          journal: [...(prev.journal || []), ...((incoming.journal || []).filter(
+            (j) => !(prev.journal || []).some((p) => p.date === j.date && p.text === j.text)))],
+          issues, goals, chats,
+          /* the library is hers; a backup should not silently swap it out */
+          library: (incoming.library && incoming.library.length) ? incoming.library : prev.library,
+          sample: false,
+        };
+      });
       const days = Object.keys(incoming.morning || {}).length;
-      setRestoreMsg(`Restored. ${Object.keys(incoming.logs || {}).length} days of training and ${days} days of WHOOP data.`);
+      const extra = [added.issues && `${added.issues} to the record`,
+                     added.goals && `${added.goals} goal${added.goals === 1 ? "" : "s"}`,
+                     added.chats && `${added.chats} conversation${added.chats === 1 ? "" : "s"}`]
+                    .filter(Boolean).join(", ");
+      setRestoreMsg(`Restored. ${Object.keys(incoming.logs || {}).length} days of training and ${days} days of WHOOP data${extra ? `, plus ${extra}` : ""}. Nothing already here was removed.`);
       setRestoreText("");
     } catch {
       setRestoreMsg("Couldn't read that. Make sure you copied the whole thing.");
@@ -7274,6 +7357,18 @@ function Formulas({ data, setData, close }) {
              ["wStrength", "Strength"], ["wMobility", "Mobility"], ["wBalance", "Balance"]] },
     { title: "Consistency", note: "How far back the consistency percentage looks.",
       rows: [["consistencyWindow", "Days counted"]] },
+    { title: "Load balance", note: "Acute against chronic workload. Inside the corridor is where training is productive; above the spike line is where injuries come from — not from hard training, but from sudden training.",
+      rows: [["acwrLow", "Below this: doing less than you're built for"],
+             ["acwrHigh", "Above this: pushing"],
+             ["acwrSpike", "Above this: a spike"]] },
+    { title: "Weekly sets", note: "Sets per body region per week. Six to ten is what governs holding muscle at your age — this is the floor the coach measures against.",
+      rows: [["setTarget", "Sets a region needs each week"]] },
+    { title: "Body coverage", note: "How big a share of the week's work a region needs before it counts as covered rather than thin. Shares, so 0.07 means 7%.",
+      rows: [["coverMin", "Counts as covered above"], ["coverStrong", "Counts as a real share above"]] },
+    { title: "Real change, not noise", note: "Every measurement carries error. A change is only called real above these thresholds — below them the word is holding, never declining. Percentages.",
+      rows: [["mdcLoad", "Weight × reps"], ["mdcTime", "Timed holds"],
+             ["mdcReps", "Rep counts"], ["mdcBalance", "Balance"],
+             ["asymmetryPct", "Left-right gap worth naming"]] },
   ];
 
   return (
