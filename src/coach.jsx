@@ -2677,6 +2677,196 @@ function useCoach(data) {
     const balanceM = analysis.find((m) => m.id === "balance");
     const squatM = analysis.find((m) => m.id === "squat");
 
+    /* ---- MORE PATTERNS -------------------------------------------------
+       All computed from what is already stored. Each one answers a question
+       she can act on; none of them need anything new logged. */
+
+    /* 1. Does she do what the coach picks? The swaps are revealed preference —
+          what she avoids without ever saying so. */
+    const swaps = (() => {
+      const rows = [];
+      for (let i = 0; i < 84; i++) {
+        const d = addDays(t, -i);
+        const l = logs[d];
+        if (!l?.completed || !l.prescribed || !l.type) continue;
+        rows.push({ date: d, asked: l.prescribed, did: l.type, kept: l.prescribed === l.type });
+      }
+      if (rows.length < 5) return null;
+      const kept = rows.filter((r) => r.kept).length;
+      const avoided = {}; const chosen = {};
+      rows.filter((r) => !r.kept).forEach((r) => {
+        avoided[r.asked] = (avoided[r.asked] || 0) + 1;
+        chosen[r.did] = (chosen[r.did] || 0) + 1;
+      });
+      const top = (o) => Object.entries(o).sort((a, b) => b[1] - a[1])[0] || null;
+      return { n: rows.length, pct: Math.round((kept / rows.length) * 100),
+        avoided: top(avoided), chosen: top(chosen) };
+    })();
+
+    /* 2. How much she writes. Disengagement shows in the writing before it
+          shows in the training — this is the earliest warning available. */
+    const writing = (() => {
+      const count = (from, days) => {
+        let n = 0;
+        for (let i = from; i < from + days; i++) {
+          const d = addDays(t, -i);
+          const l = logs[d] || {};
+          if ((l.sessionNote || "").trim() || (l.did || "").trim()) n++;
+          if ((data.notes?.[d]?.text || "").trim()) n++;
+        }
+        (data.journal || []).forEach((j) => {
+          if (j.date <= addDays(t, -from) && j.date > addDays(t, -(from + days))) n++;
+        });
+        (data.chats || []).forEach((c) => {
+          if (c.date <= addDays(t, -from) && c.date > addDays(t, -(from + days))) n++;
+        });
+        return n;
+      };
+      const now = count(0, 14), before = count(14, 14);
+      if (before < 3) return null;
+      return { now, before, drop: Math.round(((now - before) / before) * 100) };
+    })();
+
+    /* 3. Do her restarts last longer than they used to? The best single
+          measure of whether any of this is working. */
+    const restarts = (() => {
+      const runs = [];
+      let run = 0, started = null;
+      for (let i = 200; i >= 0; i--) {
+        const d = addDays(t, -i);
+        if (blockFor(d, program)?.id === "rest") continue;
+        if (logs[d]?.completed) { if (!started) started = d; run++; }
+        else if (run > 0) { runs.push({ len: run, from: started }); run = 0; started = null; }
+      }
+      if (run > 0) runs.push({ len: run, from: started, current: true });
+      if (runs.length < 3) return null;
+      const half = Math.floor(runs.length / 2);
+      const early = runs.slice(0, half), late = runs.slice(half);
+      const avg = (a) => a.reduce((x, y) => x + y.len, 0) / a.length;
+      return { runs: runs.length, longest: Math.max(...runs.map((r) => r.len)),
+        current: runs[runs.length - 1]?.current ? runs[runs.length - 1].len : 0,
+        earlyAvg: Math.round(avg(early) * 10) / 10, lateAvg: Math.round(avg(late) * 10) / 10,
+        improving: avg(late) > avg(early) };
+    })();
+
+    /* 4. Which session lengths she actually completes. */
+    const byDuration = (() => {
+      const buckets = { short: { n: 0, mins: 0 }, mid: { n: 0, mins: 0 }, long: { n: 0, mins: 0 } };
+      for (let i = 0; i < 84; i++) {
+        const l = logs[addDays(t, -i)];
+        if (!l?.completed) continue;
+        const m = Number(l.minutes) || 0;
+        const k = m <= 30 ? "short" : m <= 45 ? "mid" : "long";
+        buckets[k].n++; buckets[k].mins += m;
+      }
+      const total = buckets.short.n + buckets.mid.n + buckets.long.n;
+      if (total < 8) return null;
+      const rows = Object.entries(buckets).map(([k, v]) => ({ k, n: v.n, share: Math.round((v.n / total) * 100) }));
+      return { rows, favourite: [...rows].sort((a, b) => b.n - a.n)[0], total };
+    })();
+
+    /* 5. Where in a block she dips. If it is always week three, the coach can
+          build the easier week in rather than discovering it. */
+    const blockCurve = (() => {
+      if (!livePhase || programWeek === null) return null;
+      const byWeek = [0, 0, 0, 0, 0].map(() => ({ done: 0, sched: 0 }));
+      for (let i = 0; i < 140; i++) {
+        const d = addDays(t, -i);
+        const wk = programWeekOf(d, program);
+        if (wk === null) continue;
+        const ph = programPhases.find((x) => wk >= x.from && wk <= x.to);
+        if (!ph) continue;
+        const inBlock = Math.min(4, wk - ph.from);
+        if (blockFor(d, program)?.id === "rest") continue;
+        byWeek[inBlock].sched++;
+        if (logs[d]?.completed) byWeek[inBlock].done++;
+      }
+      const rows = byWeek.map((b, i) => ({ week: i + 1, ...b,
+        pct: b.sched >= 3 ? Math.round((b.done / b.sched) * 100) : null })).filter((r) => r.pct !== null);
+      if (rows.length < 3) return null;
+      const worst = [...rows].sort((a, b) => a.pct - b.pct)[0];
+      const best = [...rows].sort((a, b) => b.pct - a.pct)[0];
+      return { rows, worst, best, spread: best.pct - worst.pct };
+    })();
+
+    /* 6. Her own delayed-fatigue window: does a hard day cost her tomorrow,
+          or the day after? */
+    const domsLag = (() => {
+      const hard = [];
+      for (let i = 3; i < 84; i++) {
+        const d = addDays(t, -i);
+        const l = logs[d];
+        if (!l?.completed) continue;
+        const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
+        if (ld < 300) continue;
+        const rec = (n) => Number(morning?.[addDays(d, n)]?.recovery) || null;
+        const base = Number(morning?.[d]?.recovery) || null;
+        if (!base) continue;
+        const r1 = rec(1), r2 = rec(2);
+        if (r1) hard.push({ lag: 1, delta: r1 - base });
+        if (r2) hard.push({ lag: 2, delta: r2 - base });
+      }
+      if (hard.length < 8) return null;
+      const at = (n) => {
+        const sub = hard.filter((h) => h.lag === n);
+        return sub.length >= 4 ? Math.round(mean(sub.map((h) => h.delta))) : null;
+      };
+      const d1 = at(1), d2 = at(2);
+      if (d1 === null || d2 === null) return null;
+      return { d1, d2, worst: d2 < d1 ? 2 : 1 };
+    })();
+
+    /* 7. What each class actually costs her, from the morning after. */
+    const costByClass = (() => {
+      const map = {};
+      for (let i = 1; i < 84; i++) {
+        const d = addDays(t, -i);
+        const l = logs[d];
+        if (!l?.completed || !l.type) continue;
+        const before = Number(morning?.[d]?.recovery);
+        const after = Number(morning?.[addDays(d, 1)]?.recovery);
+        if (!(before > 0 && after > 0)) continue;
+        (map[l.type] = map[l.type] || []).push(after - before);
+      }
+      const rows = Object.entries(map).filter(([, v]) => v.length >= 3)
+        .map(([name, v]) => ({ name, delta: Math.round(mean(v)), n: v.length }))
+        .sort((a, b) => a.delta - b.delta);
+      return rows.length >= 2 ? rows : null;
+    })();
+
+    /* 8. The days she does more than she was asked. */
+    const extraDays = (() => {
+      const rows = [];
+      for (let i = 0; i < 56; i++) {
+        const d = addDays(t, -i);
+        const l = logs[d];
+        if (!l?.completed) continue;
+        if ((l.extraSessions || []).length || (l.extras || []).length)
+          rows.push({ date: d, dow: parse(d).getDay() });
+      }
+      if (rows.length < 4) return null;
+      const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const counts = {};
+      rows.forEach((r) => { counts[r.dow] = (counts[r.dow] || 0) + 1; });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      return { n: rows.length, day: DOW[Number(top[0])], dayN: top[1] };
+    })();
+
+    /* 9. Time of day — one tap, and it answers when she actually trains. */
+    const byTimeOfDay = (() => {
+      const slots = { morning: { done: 0 }, midday: { done: 0 }, evening: { done: 0 } };
+      let total = 0;
+      for (let i = 0; i < 84; i++) {
+        const l = logs[addDays(t, -i)];
+        if (!l?.completed || !l.when || !slots[l.when]) continue;
+        slots[l.when].done++; total++;
+      }
+      if (total < 6) return null;
+      const rows = Object.entries(slots).map(([k, v]) => ({ slot: k, n: v.done,
+        share: Math.round((v.done / total) * 100) })).sort((a, b) => b.n - a.n);
+      return { rows, best: rows[0], total };
+    })();
+
     const M = (o) => ({ key: false, group: "week", ...o });
 
     const more = [
@@ -3309,195 +3499,6 @@ function useCoach(data) {
     };
     const proposal = reviewDue ? proposeNext() : null;
 
-    /* ---- MORE PATTERNS -------------------------------------------------
-       All computed from what is already stored. Each one answers a question
-       she can act on; none of them need anything new logged. */
-
-    /* 1. Does she do what the coach picks? The swaps are revealed preference —
-          what she avoids without ever saying so. */
-    const swaps = (() => {
-      const rows = [];
-      for (let i = 0; i < 84; i++) {
-        const d = addDays(t, -i);
-        const l = logs[d];
-        if (!l?.completed || !l.prescribed || !l.type) continue;
-        rows.push({ date: d, asked: l.prescribed, did: l.type, kept: l.prescribed === l.type });
-      }
-      if (rows.length < 5) return null;
-      const kept = rows.filter((r) => r.kept).length;
-      const avoided = {}; const chosen = {};
-      rows.filter((r) => !r.kept).forEach((r) => {
-        avoided[r.asked] = (avoided[r.asked] || 0) + 1;
-        chosen[r.did] = (chosen[r.did] || 0) + 1;
-      });
-      const top = (o) => Object.entries(o).sort((a, b) => b[1] - a[1])[0] || null;
-      return { n: rows.length, pct: Math.round((kept / rows.length) * 100),
-        avoided: top(avoided), chosen: top(chosen) };
-    })();
-
-    /* 2. How much she writes. Disengagement shows in the writing before it
-          shows in the training — this is the earliest warning available. */
-    const writing = (() => {
-      const count = (from, days) => {
-        let n = 0;
-        for (let i = from; i < from + days; i++) {
-          const d = addDays(t, -i);
-          const l = logs[d] || {};
-          if ((l.sessionNote || "").trim() || (l.did || "").trim()) n++;
-          if ((data.notes?.[d]?.text || "").trim()) n++;
-        }
-        (data.journal || []).forEach((j) => {
-          if (j.date <= addDays(t, -from) && j.date > addDays(t, -(from + days))) n++;
-        });
-        (data.chats || []).forEach((c) => {
-          if (c.date <= addDays(t, -from) && c.date > addDays(t, -(from + days))) n++;
-        });
-        return n;
-      };
-      const now = count(0, 14), before = count(14, 14);
-      if (before < 3) return null;
-      return { now, before, drop: Math.round(((now - before) / before) * 100) };
-    })();
-
-    /* 3. Do her restarts last longer than they used to? The best single
-          measure of whether any of this is working. */
-    const restarts = (() => {
-      const runs = [];
-      let run = 0, started = null;
-      for (let i = 200; i >= 0; i--) {
-        const d = addDays(t, -i);
-        if (blockFor(d, program)?.id === "rest") continue;
-        if (logs[d]?.completed) { if (!started) started = d; run++; }
-        else if (run > 0) { runs.push({ len: run, from: started }); run = 0; started = null; }
-      }
-      if (run > 0) runs.push({ len: run, from: started, current: true });
-      if (runs.length < 3) return null;
-      const half = Math.floor(runs.length / 2);
-      const early = runs.slice(0, half), late = runs.slice(half);
-      const avg = (a) => a.reduce((x, y) => x + y.len, 0) / a.length;
-      return { runs: runs.length, longest: Math.max(...runs.map((r) => r.len)),
-        current: runs[runs.length - 1]?.current ? runs[runs.length - 1].len : 0,
-        earlyAvg: Math.round(avg(early) * 10) / 10, lateAvg: Math.round(avg(late) * 10) / 10,
-        improving: avg(late) > avg(early) };
-    })();
-
-    /* 4. Which session lengths she actually completes. */
-    const byDuration = (() => {
-      const buckets = { short: { n: 0, mins: 0 }, mid: { n: 0, mins: 0 }, long: { n: 0, mins: 0 } };
-      for (let i = 0; i < 84; i++) {
-        const l = logs[addDays(t, -i)];
-        if (!l?.completed) continue;
-        const m = Number(l.minutes) || 0;
-        const k = m <= 30 ? "short" : m <= 45 ? "mid" : "long";
-        buckets[k].n++; buckets[k].mins += m;
-      }
-      const total = buckets.short.n + buckets.mid.n + buckets.long.n;
-      if (total < 8) return null;
-      const rows = Object.entries(buckets).map(([k, v]) => ({ k, n: v.n, share: Math.round((v.n / total) * 100) }));
-      return { rows, favourite: [...rows].sort((a, b) => b.n - a.n)[0], total };
-    })();
-
-    /* 5. Where in a block she dips. If it is always week three, the coach can
-          build the easier week in rather than discovering it. */
-    const blockCurve = (() => {
-      if (!livePhase || programWeek === null) return null;
-      const byWeek = [0, 0, 0, 0, 0].map(() => ({ done: 0, sched: 0 }));
-      for (let i = 0; i < 140; i++) {
-        const d = addDays(t, -i);
-        const wk = programWeekOf(d, program);
-        if (wk === null) continue;
-        const ph = programPhases.find((x) => wk >= x.from && wk <= x.to);
-        if (!ph) continue;
-        const inBlock = Math.min(4, wk - ph.from);
-        if (blockFor(d, program)?.id === "rest") continue;
-        byWeek[inBlock].sched++;
-        if (logs[d]?.completed) byWeek[inBlock].done++;
-      }
-      const rows = byWeek.map((b, i) => ({ week: i + 1, ...b,
-        pct: b.sched >= 3 ? Math.round((b.done / b.sched) * 100) : null })).filter((r) => r.pct !== null);
-      if (rows.length < 3) return null;
-      const worst = [...rows].sort((a, b) => a.pct - b.pct)[0];
-      const best = [...rows].sort((a, b) => b.pct - a.pct)[0];
-      return { rows, worst, best, spread: best.pct - worst.pct };
-    })();
-
-    /* 6. Her own delayed-fatigue window: does a hard day cost her tomorrow,
-          or the day after? */
-    const domsLag = (() => {
-      const hard = [];
-      for (let i = 3; i < 84; i++) {
-        const d = addDays(t, -i);
-        const l = logs[d];
-        if (!l?.completed) continue;
-        const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
-        if (ld < 300) continue;
-        const rec = (n) => Number(morning?.[addDays(d, n)]?.recovery) || null;
-        const base = Number(morning?.[d]?.recovery) || null;
-        if (!base) continue;
-        const r1 = rec(1), r2 = rec(2);
-        if (r1) hard.push({ lag: 1, delta: r1 - base });
-        if (r2) hard.push({ lag: 2, delta: r2 - base });
-      }
-      if (hard.length < 8) return null;
-      const at = (n) => {
-        const sub = hard.filter((h) => h.lag === n);
-        return sub.length >= 4 ? Math.round(mean(sub.map((h) => h.delta))) : null;
-      };
-      const d1 = at(1), d2 = at(2);
-      if (d1 === null || d2 === null) return null;
-      return { d1, d2, worst: d2 < d1 ? 2 : 1 };
-    })();
-
-    /* 7. What each class actually costs her, from the morning after. */
-    const costByClass = (() => {
-      const map = {};
-      for (let i = 1; i < 84; i++) {
-        const d = addDays(t, -i);
-        const l = logs[d];
-        if (!l?.completed || !l.type) continue;
-        const before = Number(morning?.[d]?.recovery);
-        const after = Number(morning?.[addDays(d, 1)]?.recovery);
-        if (!(before > 0 && after > 0)) continue;
-        (map[l.type] = map[l.type] || []).push(after - before);
-      }
-      const rows = Object.entries(map).filter(([, v]) => v.length >= 3)
-        .map(([name, v]) => ({ name, delta: Math.round(mean(v)), n: v.length }))
-        .sort((a, b) => a.delta - b.delta);
-      return rows.length >= 2 ? rows : null;
-    })();
-
-    /* 8. The days she does more than she was asked. */
-    const extraDays = (() => {
-      const rows = [];
-      for (let i = 0; i < 56; i++) {
-        const d = addDays(t, -i);
-        const l = logs[d];
-        if (!l?.completed) continue;
-        if ((l.extraSessions || []).length || (l.extras || []).length)
-          rows.push({ date: d, dow: parse(d).getDay() });
-      }
-      if (rows.length < 4) return null;
-      const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-      const counts = {};
-      rows.forEach((r) => { counts[r.dow] = (counts[r.dow] || 0) + 1; });
-      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-      return { n: rows.length, day: DOW[Number(top[0])], dayN: top[1] };
-    })();
-
-    /* 9. Time of day — one tap, and it answers when she actually trains. */
-    const byTimeOfDay = (() => {
-      const slots = { morning: { done: 0 }, midday: { done: 0 }, evening: { done: 0 } };
-      let total = 0;
-      for (let i = 0; i < 84; i++) {
-        const l = logs[addDays(t, -i)];
-        if (!l?.completed || !l.when || !slots[l.when]) continue;
-        slots[l.when].done++; total++;
-      }
-      if (total < 6) return null;
-      const rows = Object.entries(slots).map(([k, v]) => ({ slot: k, n: v.done,
-        share: Math.round((v.done / total) * 100) })).sort((a, b) => b.n - a.n);
-      return { rows, best: rows[0], total };
-    })();
 
 
     /* ---- CALIBRATION MONTH --------------------------------------------
