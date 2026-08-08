@@ -9976,25 +9976,76 @@ function CoachApp() {
    useCoach, no metrics, no store adapter — because whatever just broke might be
    any of them. It reads the raw string out of localStorage and shows it.
    ==========================================================================*/
+/* WHAT IS ACTUALLY IN THE STORE.
+
+   The rescue screen used to have exactly one way out: reload. That is the right
+   answer when the fault is in the code, because the next deploy fixes it. It is
+   a locked door when the fault is in the STORED VALUE - reloading re-reads the
+   same unreadable string forever, and the only backup button in existence is
+   inside the app she can no longer open.
+
+   This tells the two apart. A value that parses is her data and is never
+   offered for deletion, whatever else went wrong. A value that cannot parse is
+   examined for anything worth keeping; only when there is provably nothing -
+   the literal strings a broken write leaves behind - is starting fresh offered,
+   and even then she is the one who presses it, twice. (Rule 20.) */
+const readStore = (raw) => {
+  if (raw === null || raw === undefined) return { state: "empty" };
+  const text = String(raw);
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch (e) { parsed = undefined; }
+  if (parsed !== undefined && parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return {
+      state: "readable",
+      days: Object.keys(parsed.logs || {}).length,
+      entries: (parsed.issues || []).length + (parsed.goals || []).length + (parsed.chats || []).length,
+    };
+  }
+  /* Not an object. "undefined" and "null" are what a write of a function or a
+     missing value leaves behind, and they hold nothing at all. */
+  const junk = text.trim();
+  if (junk === "" || junk === "undefined" || junk === "null" || junk === "NaN")
+    return { state: "junk", bytes: text.length, text: junk };
+  /* Anything else unparseable might be a truncated but partly readable file -
+     never offer to throw that away. */
+  return { state: "damaged", bytes: text.length };
+};
+
+/* A snapshot worth putting back: one that parses and actually holds days. */
+const usableSnapshot = () => {
+  try {
+    const list = JSON.parse(window.localStorage.getItem("coach:snapshots") || "[]") || [];
+    for (const s of list) {
+      if (!s || !s.json) continue;
+      try {
+        const d = JSON.parse(s.json);
+        const days = Object.keys(d.logs || {}).length;
+        if (days > 0) return { day: s.day, days, json: s.json };
+      } catch (e) { /* skip a snapshot that will not parse */ }
+    }
+  } catch (e) { /* no snapshots */ }
+  return null;
+};
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { err: null, raw: null, copied: false };
+    this.state = { err: null, raw: null, copied: false, armed: false, snap: null };
   }
   static getDerivedStateFromError(err) { return { err }; }
   componentDidCatch(err) {
     let raw = null;
     try { raw = window.localStorage.getItem("coach:data"); } catch (e) { raw = null; }
-    this.setState({ raw });
+    let snap = null;
+    try { snap = usableSnapshot(); } catch (e) { snap = null; }
+    this.setState({ raw, snap });
   }
   render() {
     if (!this.state.err) return this.props.children;
-    const { err, raw, copied } = this.state;
+    const { err, raw, copied, armed, snap } = this.state;
     const msg = String((err && err.message) || err || "unknown");
-    const days = (() => {
-      try { const d = JSON.parse(raw || "{}"); return Object.keys(d.logs || {}).length; }
-      catch (e) { return null; }
-    })();
+    const found = readStore(raw);
+    const days = found.state === "readable" ? found.days : null;
     const box = {
       background: C.card, borderRadius: 18, padding: 20, marginBottom: 14,
       boxShadow: "0 1px 3px rgba(43,27,46,0.06)",
@@ -10013,16 +10064,25 @@ class ErrorBoundary extends React.Component {
 
           <div style={box}>
             <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
-              FIRST — TAKE A COPY
+              {found.state === "readable" ? "FIRST — TAKE A COPY" : "WHAT IS IN THE STORE"}
             </div>
             <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
-              {raw
-                ? <>Everything you have logged is in the box below{days !== null ? <> — {days} day{days === 1 ? "" : "s"} of training</> : null}.
+              {found.state === "readable"
+                ? <>Everything you have logged is in the box below — {days} day{days === 1 ? "" : "s"} of
+                    training{found.entries ? <> and {found.entries} other thing{found.entries === 1 ? "" : "s"} you have written</> : null}.
                     Copy it somewhere safe. It restores through Settings → Your data → Restore
                     once the app opens again.</>
+                : found.state === "damaged"
+                ? <>The saved data is there but the app cannot read it. It is in the box below —
+                    copy it out before anything else, because parts of it may still be recoverable
+                    by hand. Nothing has been changed or removed.</>
+                : found.state === "junk"
+                ? <>There is no data in the store — only the word “{found.text}”, which is what an
+                    interrupted write leaves behind. Nothing of yours has been overwritten by this;
+                    if you had logged anything, it would be here.</>
                 : <>This device has no saved data yet, so there is nothing to rescue.</>}
             </div>
-            {raw && (
+            {raw && found.state !== "junk" && (
               <>
                 <textarea readOnly value={raw}
                   onFocus={(e) => e.target.select()}
@@ -10061,6 +10121,80 @@ class ErrorBoundary extends React.Component {
               after an edit on github.com, undoing that edit puts the app back.
             </div>
           </div>
+
+          {/* A SNAPSHOT IS THE FIRST THING TO TRY. It is a separate storage key,
+              so whatever happened to the main one usually left it alone. */}
+          {snap && (
+            <div style={box}>
+              <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
+                THERE IS A SAVED COPY ON THIS DEVICE
+              </div>
+              <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
+                The app keeps its own copy, once a day, in a separate place. The most recent
+                one holding anything is from {snap.day} and has {snap.days} day{snap.days === 1 ? "" : "s"} of
+                training in it. Putting it back replaces what is in the main store now.
+              </div>
+              <button
+                onClick={() => {
+                  try {
+                    window.localStorage.setItem("coach:data", snap.json);
+                    window.location.reload();
+                  } catch (e) { /* the store is refusing writes too */ }
+                }}
+                style={{ width: "100%", padding: "13px 16px", borderRadius: 14, border: "none",
+                         background: C.moss, color: "#fff", fontSize: 15, fontWeight: 600,
+                         fontFamily: "inherit", cursor: "pointer" }}>
+                Put back the copy from {snap.day}
+              </button>
+            </div>
+          )}
+
+          {/* ONLY when the stored value provably holds nothing. Never when it
+              parses, and never when it is merely damaged — something damaged may
+              still be readable by hand, and rule 20 says her data is permanent. */}
+          {found.state === "junk" && (
+            <div style={box}>
+              <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
+                OR — START THIS DEVICE FRESH
+              </div>
+              <div style={{ fontSize: 14.5, lineHeight: 1.5, marginBottom: 12 }}>
+                What is in the store is the {found.bytes}-character word
+                “{found.text}” — not your data, and not damaged data either. It is what an
+                interrupted write leaves behind, and there is nothing in it to recover.
+                Clearing it lets the app open again. Your saved copies are kept and are not
+                touched by this.
+              </div>
+              {armed ? (
+                <>
+                  <button
+                    onClick={() => {
+                      try { window.localStorage.removeItem("coach:data"); } catch (e) {}
+                      try { window.location.reload(); } catch (e) {}
+                    }}
+                    style={{ width: "100%", padding: "13px 16px", borderRadius: 14, border: "none",
+                             background: C.signal, color: "#fff", fontSize: 15, fontWeight: 600,
+                             fontFamily: "inherit", cursor: "pointer" }}>
+                    Yes — clear it and open the app
+                  </button>
+                  <button
+                    onClick={() => this.setState({ armed: false })}
+                    style={{ marginTop: 8, width: "100%", padding: "13px 16px", borderRadius: 14,
+                             border: `1px solid ${C.line}`, background: C.card, color: C.muted,
+                             fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+                    Never mind
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => this.setState({ armed: true })}
+                  style={{ width: "100%", padding: "13px 16px", borderRadius: 14,
+                           border: `1px solid ${C.line}`, background: C.card, color: C.ink,
+                           fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+                  Clear it and start fresh
+                </button>
+              )}
+            </div>
+          )}
 
           <button
             onClick={() => { try { window.location.reload(); } catch (e) {} }}
