@@ -1910,7 +1910,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 32";
+const BUILD = "8 August 2026 · 33";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7115,38 +7115,10 @@ function Today({ data, setData, coach, setSheet }) {
       {!isToday && <BodyWorkCard log={log} write={write} isToday={isToday} />}
 
       {/* ---- everything else, folded away until asked for ---- */}
-      {/* ---- THE DAY ITSELF, AND NOTHING THAT BELONGS TO A SESSION -------
-           This card used to hold "how you felt afterwards", "what you actually
-           did", "notes" and a row of add-on chips — every one of them a
-           session question, asked here a second time, with no way to say which
-           session it meant. Those live under each session now. What is left is
-           the short list of things that genuinely have no session attached:
-           how the shoulder is, how she slept, what the strain was.
-           Nothing has been deleted from her data — the fields still exist and
-           anything already written to them is untouched and still read. */}
-      <Fold title="The day itself" note={isToday ? "shoulder, strain" : "shoulder, sleep, strain"}>
-        <Btn kind="quiet" onClick={() => setOpen((o) => !o)}>
-              {open ? "Hide it" : (isToday ? "Shoulder, strain" : "Shoulder, sleep, strain")}
-            </Btn>
-            {open && (
-              <div style={{ marginTop: 16 }}>
-                <>
-                {data.settings.shoulderInjury && (
-                  <Scale label="Shoulder comfort" value={log?.shoulder}
-                    onChange={(v) => write({ shoulder: v })} max={5} lo="painful" hi="no issue" />
-                )}
-                {/* Today's sleep is asked for at the top of the page now, so it is
-                    not asked twice. An earlier day still needs it here. */}
-                {!isToday && (
-                  <Field label="Sleep last night" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
-                )}
-                {data.settings.whoopConnected && (
-                  <Field label="WHOOP strain" unit="" value={log?.whoopStrain} onChange={(v) => write({ whoopStrain: v })} />
-                )}
-              </>
-              </div>
-            )}
-      </Fold>
+      {/* "What is the day itself, shoulder strain? It doesn't have any meaning.
+          Can you remove it from the landing page." - 8 August. Removed. The
+          fields themselves are untouched and everything already written to
+          them is still stored and still read; only this card is gone. */}
 
       <Fold title="Where you stand this week"
         note={coach.verdict.label} accent={coach.verdict.key === "reduce" ? C.clay : C.signal}>
