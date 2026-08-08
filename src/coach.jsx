@@ -10055,12 +10055,24 @@ class ErrorBoundary extends React.Component {
                     padding: "28px 18px 40px", fontFamily: "'Hanken Grotesk',system-ui,sans-serif" }}>
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <div className="disp" style={{ fontSize: 26, marginBottom: 6 }}>
-            The app hit an error opening.
+            {found.state === "junk"
+              ? "One thing is in the way."
+              : "The app hit an error opening."}
           </div>
           <div style={{ fontSize: 15, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>
-            Nothing is lost. Your data is still on this device exactly as it was —
-            this screen just stands between you and a blank page while it gets fixed.
+            {found.state === "junk"
+              ? <>There is nothing of yours on this device to lose — the store is holding a leftover
+                  from an interrupted write rather than any data. Clear it{snap ? " or put back a saved copy" : ""} and
+                  the app opens. It is one tap below.</>
+              : <>Nothing is lost. Your data is still on this device exactly as it was —
+                  this screen just stands between you and a blank page while it gets fixed.</>}
           </div>
+
+          {/* THE WAY OUT COMES FIRST WHEN THERE IS NOTHING TO COPY.
+              Buried under two explanatory cards, the fix is invisible on a phone —
+              and a rescue screen whose exit is below the fold reads, correctly,
+              as an app that will not load. */}
+          {found.state === "junk" && this.renderRoutes()}
 
           <div style={box}>
             <div style={{ fontSize: 12, letterSpacing: 0.6, color: C.muted, marginBottom: 8 }}>
@@ -10122,6 +10134,31 @@ class ErrorBoundary extends React.Component {
             </div>
           </div>
 
+          {found.state !== "junk" && this.renderRoutes()}
+
+          <button
+            onClick={() => { try { window.location.reload(); } catch (e) {} }}
+            style={{ width: "100%", padding: "13px 16px", borderRadius: 14,
+                     border: `1px solid ${C.line}`, background: C.card, color: C.ink,
+                     fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
+            Try opening it again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* The two things she can actually DO, kept together so they can be placed
+     above or below the explanation depending on which she needs first. */
+  renderRoutes() {
+    const { raw, armed, snap } = this.state;
+    const found = readStore(raw);
+    const box = {
+      background: C.card, borderRadius: 18, padding: 20, marginBottom: 14,
+      boxShadow: "0 1px 3px rgba(43,27,46,0.06)",
+    };
+    return (
+      <>
           {/* A SNAPSHOT IS THE FIRST THING TO TRY. It is a separate storage key,
               so whatever happened to the main one usually left it alone. */}
           {snap && (
@@ -10195,16 +10232,7 @@ class ErrorBoundary extends React.Component {
               )}
             </div>
           )}
-
-          <button
-            onClick={() => { try { window.location.reload(); } catch (e) {} }}
-            style={{ width: "100%", padding: "13px 16px", borderRadius: 14,
-                     border: `1px solid ${C.line}`, background: C.card, color: C.ink,
-                     fontSize: 15, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }}>
-            Try opening it again
-          </button>
-        </div>
-      </div>
+      </>
     );
   }
 }
