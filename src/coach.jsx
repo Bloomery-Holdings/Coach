@@ -1910,7 +1910,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 31";
+const BUILD = "8 August 2026 · 32";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2286,13 +2286,19 @@ const saveData = async (d) => {
 /* ============================================================================
    5. THE COACH
    ==========================================================================*/
-function useCoach(data) {
+function useCoach(data, day) {
   return useMemo(() => {
     const { settings, logs, weekly, monthly, fields } = data;
     const morning = data.morning || {};
     const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
     const FX = formulas(settings);
-    const t = today();
+    /* The day the app thinks it is. Passed in rather than read here, because
+       an installed app is RESUMED rather than restarted: the tree can stay
+       mounted for a week, and a `today()` read inside a memo keyed on data
+       alone would still be showing Tuesday on Friday. `useToday` below
+       watches the clock and hands the new date down. Falls back to reading it
+       directly so nothing that calls useCoach(data) breaks. */
+    const t = day || today();
     const done = (d) => !!logs[d]?.completed;
     /* two on, one off beats fixed weekdays when the rhythm matters more than
        which day it lands on — the cycle just keeps turning */
@@ -5209,8 +5215,42 @@ function useCoach(data) {
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
-  }, [data]);
+  }, [data, day]);
 }
+
+/* ---------------------------------------------------------------------------
+   WHAT DAY IS IT
+   She installed this to her home screen, which means Android resumes it rather
+   than starting it fresh. Nothing in the app noticed midnight: the date at the
+   top, the line to read, the week strip and the session card all stayed on
+   whichever day the app was last opened, until something happened to the data.
+   This checks the clock every minute and whenever the app comes back to the
+   front, and only changes anything on a date that has actually rolled over.
+--------------------------------------------------------------------------- */
+const useToday = () => {
+  const [day, setDay] = useState(today());
+  useEffect(() => {
+    const check = () => setDay((d) => { const n = today(); return n === d ? d : n; });
+    let id = null;
+    try {
+      id = setInterval(check, 60000);
+      /* under a test runner this must not hold the process open */
+      if (id && typeof id.unref === "function") id.unref();
+    } catch (e) {}
+    const onBack = () => {
+      if (typeof document === "undefined" || document.visibilityState === undefined
+        || document.visibilityState === "visible") check();
+    };
+    try { document.addEventListener("visibilitychange", onBack); } catch (e) {}
+    try { window.addEventListener("focus", onBack); } catch (e) {}
+    return () => {
+      try { if (id !== null) clearInterval(id); } catch (e) {}
+      try { document.removeEventListener("visibilitychange", onBack); } catch (e) {}
+      try { window.removeEventListener("focus", onBack); } catch (e) {}
+    };
+  }, []);
+  return day;
+};
 
 /* ============================================================================
    6. UI PIECES
@@ -6152,6 +6192,17 @@ function Today({ data, setData, coach, setSheet }) {
   const [quietOpen, setQuietOpen] = useState(null);
 
   const [logDate, setLogDate] = useState(coach.t);
+  /* If midnight passes while the app is open, the page moves to the new day -
+     but only if she was sitting on today. If she had deliberately opened an
+     earlier day to log it, she stays there rather than having the page move
+     under her hand. */
+  const wasDay = useRef(coach.t);
+  useEffect(() => {
+    if (wasDay.current === coach.t) return;
+    const prev = wasDay.current;
+    wasDay.current = coach.t;
+    setLogDate((cur) => (cur === prev ? coach.t : cur));
+  }, [coach.t]);
   const t = logDate;
   const isToday = logDate === coach.t;
   const log = data.logs[logDate] || null;
@@ -11528,7 +11579,8 @@ function CoachApp() {
     throw new Error("Couldn't read your saved data. Nothing has been overwritten — your data should still be below.");
   }
 
-  const coach = useCoach(data);
+  const today_ = useToday();
+  const coach = useCoach(data, today_);
 
   const tab = stack[stack.length - 1];
   const go = (t) => { if (t !== tab) setStack((s) => [...s.slice(-9), t]); };
