@@ -162,6 +162,25 @@ const recoveryBaseline = (morning, t) => {
   return Math.round(vals[Math.floor(vals.length / 2)]);
 };
 
+/* Her own sleep normal, read the same way as recovery: the median of the last
+   thirty nights rather than a number out of a textbook. Five nights minimum,
+   otherwise it says nothing rather than inventing a baseline. */
+const sleepBaseline = (logs, t) => {
+  const vals = [];
+  for (let i = 1; i <= 30; i++) {
+    const v = Number(logs?.[addDays(t, -i)]?.sleep);
+    if (!isNaN(v) && v > 0) vals.push(v);
+  }
+  if (vals.length < 5) return null;
+  vals.sort((a, b) => a - b);
+  return Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
+};
+
+/* One step gentler. Used when the night was clearly short for her - never to
+   make a day harder, only to take the edge off one. */
+const BAND_DOWN = { green: "steady", steady: "easy", easy: "rest", rest: "rest" };
+const bandByKey = (k) => BAND_OFFSETS.find((b) => b.key === k) || null;
+
 const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
   if (v === null || v === "" || isNaN(Number(v))) return null;
   const base = baseline || 55;
@@ -1316,10 +1335,21 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
   if (reactive) why.push(`you had ${reactive.label.toLowerCase()} recently and the tissue is still settling`);
   if (block && !outsideBlock) why.push(`week ${(block.week || 0) + 1} of your programme has this down as ${block.label.toLowerCase()}`);
   if (block && outsideBlock) why.push(`your programme says ${block.label.toLowerCase()} today, but nothing in that block suits how you've recovered — this is the nearest sensible thing`);
+  /* The band that CHOSE the class may have been stepped down for a short
+     night. Say which of the two did it rather than blaming recovery for
+     something sleep did - rule 23, and she can tell the difference. */
+  const rk = recovery?.trueKey !== undefined ? recovery.trueKey : recovery?.key;
   if (!recovery) why.push("I don't have a recovery reading for today, so this is based on your cycle and theme alone");
-  if (recovery?.key === "rest") why.push("recovery is well below your normal");
-  else if (recovery?.key === "easy") why.push("recovery is under your normal, so this is the lighter option");
-  else if (recovery?.key === "green") why.push("recovery is above your normal, so you get the longer version");
+  else if (recovery.noReading) why.push("I don't have a recovery score for today, so this is going on your sleep and your programme");
+  /* When sleep has stepped the pick down, the recovery line must not also
+     promise the longer version - it would be describing a class she is not
+     being given. State what recovery read; let the sleep line say what it
+     cost. */
+  const stepped = !!recovery?.sleepWhy;
+  if (rk === "rest") why.push("recovery is well below your normal");
+  else if (rk === "easy") why.push(stepped ? "recovery is under your normal" : "recovery is under your normal, so this is the lighter option");
+  else if (rk === "green") why.push(stepped ? "recovery is above your normal" : "recovery is above your normal, so you get the longer version");
+  if (recovery?.sleepWhy) why.push(recovery.sleepWhy);
   if (shoulderFrozen && shoulderInjury) why.push("anything heavy overhead is paused while your shoulder settles");
   else if (shoulderInjury && shoulderSore && chosen.shoulderLoad !== "high")
     why.push("your shoulder has been uncomfortable this week, so this leans away from overhead load");
@@ -1880,7 +1910,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 30";
+const BUILD = "8 August 2026 · 31";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2461,6 +2491,30 @@ function useCoach(data) {
     const recBaseline = recoveryBaseline(data.morning, t) || Number(settings.recoveryBaseline) || 55;
     const F = formulas(settings);
     const recovery = recoveryBand(recValue, recBaseline, F);
+
+    /* ---- SLEEP TUNES THE DAY TOO ------------------------------------
+       Her instruction, 8 August: WHOOP only lands once a week, so the two
+       things she types on waking - recovery and sleep - have to be able to
+       move today's class on their own. A night that is clearly short for HER
+       (her own median, not a textbook figure) steps the pick down one band.
+       It can only ever make a day gentler, never harder, and the reason is
+       said out loud rather than folded into the recovery line. */
+    const sleepValue = Number(loggedToday?.sleep);
+    const sleepBase = sleepBaseline(logs, t);
+    const sleptHours = !isNaN(sleepValue) && sleepValue > 0 ? Math.round(sleepValue * 10) / 10 : null;
+    const sleepShort = sleptHours !== null && (sleepBase ? sleptHours <= sleepBase - 1.5 : sleptHours < 6);
+    const sleepWhy = !sleepShort ? null
+      : sleepBase
+        ? `you slept ${sleptHours} hours against your usual ${sleepBase}, so this is a step below what I would otherwise have picked`
+        : `you slept ${sleptHours} hours, which is short, so this is a step below what I would otherwise have picked`;
+    /* the reading she sees stays the true one; only the PICK is stepped down */
+    const recoveryForPick = !sleepShort ? recovery
+      : recovery
+        ? { ...bandByKey(BAND_DOWN[recovery.key]), base: recovery.base, threshold: recovery.threshold,
+            trueKey: recovery.key, sleepWhy }
+        : { ...bandByKey("easy"), base: recBaseline, threshold: recBaseline,
+            trueKey: null, noReading: true, sleepWhy };
+
 
     /* winter holds the line instead of pushing it */
     const season = seasonOf(t);
@@ -3122,7 +3176,7 @@ function useCoach(data) {
 
 
     const wouldHavePicked = prescribe({
-      library, logs, date: t, recovery, restDay, phase, themeGoal, block, bodywork,
+      library, logs, date: t, recovery: recoveryForPick, restDay, phase, themeGoal, block, bodywork,
       shoulderFrozen, shoulderInjury: settings.shoulderInjury,
       /* one uncomfortable day is enough to tilt the choice; two is what makes
          it a freeze. Nothing is ruled out at one - it is a lean, not a bar. */
@@ -5153,7 +5207,7 @@ function useCoach(data) {
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
-      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
   }, [data]);
 }
@@ -6271,6 +6325,46 @@ function Today({ data, setData, coach, setSheet }) {
                a feeling it has not been told about yet. */}
       {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
+      {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
+               Her instruction of 8 August: the WHOOP export lands weekly, so
+               recovery and sleep have to be typeable first thing, every day,
+               and they have to reach the decision rather than a report. Both
+               are read by the class picker the moment they are entered - a
+               low recovery or a short night steps today's class down. The
+               weekly import overwrites both with the exact values.
+
+               This card existed at the top of Today and was lost when the
+               page was reordered on 8 August. It is back. */}
+      {isToday && (
+        <Card style={{ background: coach.recValue ? C.card : C.pist, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <Eyebrow color={coach.recValue ? C.muted : C.signal}>This morning</Eyebrow>
+            {coach.recovery && (
+              <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em",
+                textTransform: "uppercase", color: coach.recovery.key === "green" ? C.moss
+                  : coach.recovery.key === "rest" ? C.clay : C.muted }}>
+                {coach.recovery.label}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Recovery" unit="%" value={coach.recValue}
+                onChange={(v) => setData((d) => ({ ...d,
+                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } }))} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Field label="Sleep" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
+            </div>
+          </div>
+
+          <InfoNote why="These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost.">
+            What these two change
+          </InfoNote>
+        </Card>
+      )}
+
       {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
                Rule 3 says the coach leads and never waits. It used to be the
                tenth thing on this page, below ten cards of admin. */}
@@ -6979,9 +7073,9 @@ function Today({ data, setData, coach, setSheet }) {
            how the shoulder is, how she slept, what the strain was.
            Nothing has been deleted from her data — the fields still exist and
            anything already written to them is untouched and still read. */}
-      <Fold title="The day itself" note="shoulder, sleep, strain">
+      <Fold title="The day itself" note={isToday ? "shoulder, strain" : "shoulder, sleep, strain"}>
         <Btn kind="quiet" onClick={() => setOpen((o) => !o)}>
-              {open ? "Hide it" : "Shoulder, sleep, strain"}
+              {open ? "Hide it" : (isToday ? "Shoulder, strain" : "Shoulder, sleep, strain")}
             </Btn>
             {open && (
               <div style={{ marginTop: 16 }}>
@@ -6990,7 +7084,11 @@ function Today({ data, setData, coach, setSheet }) {
                   <Scale label="Shoulder comfort" value={log?.shoulder}
                     onChange={(v) => write({ shoulder: v })} max={5} lo="painful" hi="no issue" />
                 )}
-                <Field label="Sleep last night" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
+                {/* Today's sleep is asked for at the top of the page now, so it is
+                    not asked twice. An earlier day still needs it here. */}
+                {!isToday && (
+                  <Field label="Sleep last night" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
+                )}
                 {data.settings.whoopConnected && (
                   <Field label="WHOOP strain" unit="" value={log?.whoopStrain} onChange={(v) => write({ whoopStrain: v })} />
                 )}
