@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 27";
+const BUILD = "8 August 2026 · 29";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6346,6 +6346,11 @@ function Today({ data, setData, coach, setSheet }) {
       )}
 
 
+      {/* "I need the tab log this as a rest day just before the sessions card." */}
+      {!log?.completed && !log?.rest && (
+        <Btn kind="quiet" onClick={() => write({ rest: true, completed: false })}>Log this as a rest day</Btn>
+      )}
+
       {/* ---- ZONE 2: TODAY'S SESSION ------------------------------------
                Everything else on this page is derived from this one card, so
                it sits directly under the coach rather than at the bottom. In
@@ -6389,6 +6394,41 @@ function Today({ data, setData, coach, setSheet }) {
                 : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
             </div>
 
+            {/* ---- LOGGED THE WRONG THING -------------------------------
+                 It used to sit below every effort tap, half a page down —
+                 findable only by someone who already knew it was there. It
+                 belongs beside the thing it removes. Two taps, because it
+                 deletes something (rule 20), and it clears only the session:
+                 the mood, the sleep and anything else that day stay put. */}
+            {log?.type && (
+              <div style={{ marginTop: 9 }}>
+                {clearing ? (
+                  <div style={{ padding: "11px 13px", background: C.chalk, borderRadius: 11 }}>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 9 }}>
+                      Remove <strong style={{ color: C.ink, fontWeight: 600 }}>{log.type}</strong>? Everything else you logged that day stays.
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => { clearSession(); setClearing(false); setChoosing(false); }}
+                        className="tap" style={{ flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
+                          border: "none", background: C.clay, color: "#fff", fontSize: 13, fontWeight: 600,
+                          fontFamily: "inherit" }}>Yes, remove it</button>
+                      <button onClick={() => setClearing(false)} className="tap" style={{
+                        flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
+                        border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                        fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>Keep it</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setClearing(true)} className="tap" style={{
+                    border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                    cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.clay,
+                    fontWeight: 600, fontFamily: "inherit" }}>
+                    Remove this session
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* The explanation used to sit here in full. It is behind the i now
                 — "If anything I want described or explained, I will click the
                 info button." */}
@@ -6402,26 +6442,16 @@ function Today({ data, setData, coach, setSheet }) {
               </div>
             )}
 
-            {/* the coach's reasoning, only while it's still a suggestion */}
+            {/* The reason and the optional extra used to print in full. Behind
+                the i now — her words about the benchmark: "just need a tab
+                saying benchmark day start. That's it." */}
             {!log?.type && isToday && rx && (
               <>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginTop: 14,
-                  padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
-                  <strong style={{ color: C.ink, fontWeight: 600 }}>Why this one:</strong> {rx.reason}.
+                <div style={{ marginTop: 12 }}>
+                  <InfoNote small why={`${rx.reason ? rx.reason.charAt(0).toUpperCase() + rx.reason.slice(1) + "." : ""}${rx.addon ? ` Afterwards, if you want more: ${rx.addon.name}, ${rx.addon.minutes} min — or a full class, or nothing. Your call.` : ""}`}>
+                    why this one
+                  </InfoNote>
                 </div>
-                {rx.addon && (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 12,
-                    padding: "11px 14px", background: C.mint, borderRadius: 12 }}>
-                    <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
-                      textTransform: "uppercase", color: C.moss }}>{rx.benchmark ? "if you're up for more" : "then"}</span>
-                    <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>
-                      {rx.addon.name} · {rx.addon.minutes} min
-                      {rx.benchmark && (
-                        <span style={{ color: C.muted }}> — or a full class, or nothing. Your call afterwards.</span>
-                      )}
-                    </span>
-                  </div>
-                )}
 
                 <div style={{ marginTop: 14 }}>
                   <Btn kind="signal" onClick={() => {
@@ -6556,40 +6586,6 @@ function Today({ data, setData, coach, setSheet }) {
                   </div>
                 )}
 
-                {/* ---- LOGGED THE WRONG THING ----------------------------
-                     There was no way to undo this at all: the wrong class
-                     could be swapped but never removed, and a session logged
-                     by accident stayed on the record and in the count. Two
-                     taps, because it deletes something (rule 20) — and it
-                     only clears the session. The mood, the sleep, the
-                     shoulder reading and anything else you added that day
-                     are left exactly as they are. */}
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-                  {clearing ? (
-                    <div>
-                      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 9 }}>
-                        Remove <strong style={{ color: C.ink, fontWeight: 600 }}>{log.type}</strong> from
-                        {isToday ? " today" : " that day"}? Everything else you logged stays.
-                      </div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => { clearSession(); setClearing(false); setChoosing(false); }}
-                          className="tap" style={{ flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
-                            border: "none", background: C.clay, color: "#fff", fontSize: 13, fontWeight: 600,
-                            fontFamily: "inherit" }}>Yes, remove it</button>
-                        <button onClick={() => setClearing(false)} className="tap" style={{
-                          flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
-                          border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
-                          fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>Keep it</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button onClick={() => setClearing(true)} className="tap" style={{
-                      border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                      fontSize: 12, color: C.muted, fontFamily: "inherit" }}>
-                      Remove this session
-                    </button>
-                  )}
-                </div>
               </>
             )}
 
@@ -6983,11 +6979,6 @@ function Today({ data, setData, coach, setSheet }) {
                   <Field label="WHOOP strain" unit="" value={log?.whoopStrain} onChange={(v) => write({ whoopStrain: v })} />
                 )}
               </>
-              </div>
-            )}
-            {!log?.completed && !log?.rest && (
-              <div style={{ marginTop: 8 }}>
-                <Btn kind="quiet" onClick={() => write({ rest: true, completed: false })}>Log this as a rest day</Btn>
               </div>
             )}
       </Fold>
