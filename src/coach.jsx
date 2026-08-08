@@ -1875,6 +1875,13 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
   return (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
 };
 
+/* ---- WHICH VERSION IS THIS PHONE ACTUALLY RUNNING? -------------------
+   The app updates itself in the background, which is right, but it meant
+   there was no way to tell a fix that had not arrived from a fix that did
+   not work. Bumped by hand on every deploy, shown in Settings, and printed
+   on the rescue screen where it matters most. */
+const BUILD = "8 August 2026 · 18";
+
 const KEY = "coach:data";
 /* Set when the store existed but could not be read. While true the app refuses
    to save, so a transient failure cannot destroy what is still on the device. */
@@ -8005,6 +8012,7 @@ function Settings({ data, setData, setSheet }) {
             </Fold>
 
       <Fold title="Your data" note="backups, export and reset">
+        <VersionRow />
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
           Everything lives in this browser, on this device. A copy kept somewhere else is
           what makes that safe rather than fragile.
@@ -8130,6 +8138,63 @@ function Settings({ data, setData, setSheet }) {
           </div>
         )}
             </Fold>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ VERSION ----
+   Closing the app and opening it again is supposed to be enough. When it is
+   not, this asks the browser directly, and either finds something or says
+   plainly that there is nothing to find — which is the part that was missing.
+   It never touches stored data. */
+function VersionRow() {
+  const [state, setState] = useState("idle");   /* idle | checking | fresh | found | cannot */
+
+  const check = async () => {
+    setState("checking");
+    try {
+      if (!("serviceWorker" in navigator)) { setState("cannot"); return; }
+      const regs = await navigator.serviceWorker.getRegistrations();
+      if (!regs.length) { setState("cannot"); return; }
+      let found = false;
+      for (const r of regs) {
+        await r.update();
+        if (r.installing || r.waiting) found = true;
+      }
+      if (found) {
+        setState("found");
+        setTimeout(() => { try { window.location.reload(); } catch (e) {} }, 900);
+      } else {
+        setState("fresh");
+      }
+    } catch (e) { setState("cannot"); }
+  };
+
+  const line = {
+    idle: null,
+    checking: "Asking…",
+    fresh: "This is the newest version. Nothing to fetch.",
+    found: "A newer version is here — reloading into it now.",
+    cannot: "Could not ask from here. Open the app in Chrome and add ?v=2 to the address; that forces a fresh copy without touching your data.",
+  }[state];
+
+  return (
+    <div style={{ background: C.chalk, borderRadius: 12, padding: "11px 13px", marginBottom: 12 }}>
+      <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+        This phone is running <strong style={{ fontWeight: 600 }}>{BUILD}</strong>.
+      </div>
+      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+        The app updates itself in the background and usually needs two opens to change over.
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <Btn kind="ghost" onClick={check}>
+          {state === "checking" ? "Checking…" : "Check for a newer version"}
+        </Btn>
+      </div>
+      {line && (
+        <div style={{ fontSize: 12, color: state === "cannot" ? C.clay : C.moss,
+          marginTop: 9, lineHeight: 1.5 }}>{line}</div>
+      )}
     </div>
   );
 }
@@ -10974,11 +11039,23 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           ? (isWeekly ? "How did the week go?" : "Where are you now?")
           : (isWeekly ? weekLabel(key) : monthLabel(key))}
       </h2>
-      <p style={{ fontSize: 12, color: C.muted, margin: "0 0 18px", lineHeight: 1.45 }}>
+      <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px", lineHeight: 1.45 }}>
         {isWeekly
           ? "About ten minutes. Anchors plus this week's rotators. Skip anything you didn't test — partial entries are fine."
           : "The full battery, about thirty minutes, plus body composition. Four times more coverage than the weekly."}
       </p>
+
+      {/* THE BATTERY IS HERS (rule 12), AND HAS TO LOOK IT (rule 11).
+          The editor already existed — three folds down in Settings, behind a
+          button that said "Monthly · 8". From in here, where she is actually
+          looking at the exercises, there was no sign the list could change at
+          all, which is indistinguishable from it being hard-coded. */}
+      <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}
+        className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "0 0 18px",
+          fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+        Change what's measured — add, remove, rename, reorder →
+      </button>
 
       {[...CAPS, ""].map((cap) => {
         const group = fields.filter((f) => (f.cap || "") === cap);
@@ -11296,6 +11373,9 @@ class ErrorBoundary extends React.Component {
               : found.state === "junk"
               ? "One thing is in the way."
               : "The app hit an error opening."}
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: C.muted, marginBottom: 12 }}>
+            BUILD {BUILD}
           </div>
           <div style={{ fontSize: 15, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>
             {onDisk
