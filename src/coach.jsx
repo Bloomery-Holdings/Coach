@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 29";
+const BUILD = "8 August 2026 · 30";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6365,6 +6365,7 @@ function Today({ data, setData, coach, setSheet }) {
               <Eyebrow color={C.signal}>
                 {benchmarkIsSession ? "Benchmark day"
                   : log?.type ? (log?.completed ? "Done" : "Your class")
+                  : log?.rest ? "Rest day"
                   : !isToday ? "That day"
                   : coach.calibrating ? "Today"
                   : restDay ? "Rest day" : "Your class"}
@@ -6382,7 +6383,8 @@ function Today({ data, setData, coach, setSheet }) {
 
             <h1 className="disp" style={{ fontSize: 26, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 0" }}>
               {log?.type
-                || (isToday && rx ? rx.name
+                || (log?.rest ? "You logged this as a rest day"
+                  : isToday && rx ? rx.name
                   : isToday && coach.calibrating ? "What did you do today?"
                   : !isToday ? "What did you do that day?"
                   : restDay ? "Recovery day" : "Nothing logged")}
@@ -6393,6 +6395,20 @@ function Today({ data, setData, coach, setSheet }) {
                 ? `${log.minutes || "—"} min${s?.equipment ? " · " + s.equipment : ""}`
                 : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
             </div>
+
+            {/* A day marked as a rest day said nothing at all, hid the
+                rest-day button with no explanation, and gave no way back.
+                It reads as an empty day with a missing control. */}
+            {log?.rest && !log?.type && (
+              <div style={{ marginTop: 10 }}>
+                <button onClick={() => write({ rest: false })} className="tap" style={{
+                  border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                  cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.signal,
+                  fontWeight: 600, fontFamily: "inherit" }}>
+                  It wasn't a rest day
+                </button>
+              </div>
+            )}
 
             {/* ---- LOGGED THE WRONG THING -------------------------------
                  It used to sit below every effort tap, half a page down —
