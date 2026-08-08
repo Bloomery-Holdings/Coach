@@ -1880,7 +1880,52 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 18";
+const BUILD = "8 August 2026 · 19";
+
+/* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
+   The generated registration was:
+
+     navigator.serviceWorker.register('./sw.js', { scope: './' })
+
+   with no `updateViaCache`. The default is 'imports', which means the
+   browser fetches the updater script THROUGH ITS OWN HTTP CACHE. GitHub
+   Pages serves it with max-age=600, so the phone kept checking for a new
+   version against a saved copy of the old one and concluding, by its own
+   logic correctly, that nothing had changed. Six deploys went nowhere.
+
+   Registering the same script again with different options replaces the
+   options on the existing registration, so this repairs a phone that is
+   already stuck as well as preventing it. Then: check on every open, check
+   again whenever she comes back to the app, and reload exactly once when a
+   new worker actually takes over. Guarded so it can never loop. */
+let swReloaded = false;
+const keepCurrent = () => {
+  try {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    const sw = navigator.serviceWorker;
+
+    sw.addEventListener("controllerchange", () => {
+      if (swReloaded) return;
+      swReloaded = true;
+      try { window.location.reload(); } catch (e) {}
+    });
+
+    const refresh = () => {
+      sw.getRegistrations().then((regs) => {
+        regs.forEach((r) => { try { r.update(); } catch (e) {} });
+      }).catch(() => {});
+    };
+
+    sw.register("./sw.js", { scope: "./", updateViaCache: "none" })
+      .then((r) => { try { r.update(); } catch (e) {} })
+      .catch(() => refresh());
+
+    refresh();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refresh();
+    });
+  } catch (e) { /* an app that cannot update itself must still run */ }
+};
 
 const KEY = "coach:data";
 /* Set when the store existed but could not be read. While true the app refuses
@@ -11562,6 +11607,7 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function App() {
+  useEffect(() => { keepCurrent(); }, []);
   return (
     <ErrorBoundary>
       <CoachApp />
