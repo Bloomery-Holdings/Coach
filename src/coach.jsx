@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 19";
+const BUILD = "8 August 2026 · 21";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4684,7 +4684,14 @@ function useCoach(data) {
          alone can't tell BODYPUMP from stretching." — an instruction manual
          read aloud. Rule 31: write like the coach. So every row now carries a
          line written to be spoken, and nothing else is ever put in its mouth. */
-      const add = (id, scope, label, done, why, say) => rows.push({ id, scope, label, done, why, say });
+      /* atSession: this question is about a SESSION, not about the day. It
+         still counts toward the ledger and the coach can still mention it,
+         but it is never a row in "Needs you" — on a day with two classes a
+         row saying "how hard was it" cannot say which one it means. Those
+         are asked under each session instead. */
+      const AT_SESSION = ["rpe", "sets", "during", "felt", "note"];
+      const add = (id, scope, label, done, why, say) =>
+        rows.push({ id, scope, label, done, why, say, atSession: AT_SESSION.includes(id) });
 
       /* Before anything else: how often does she actually want to train? Every
          count in the app is a share of this, so guessing it makes every other
@@ -4786,8 +4793,9 @@ function useCoach(data) {
             : "A couple of your goals are due a score. Try them and tell me where they are.");
 
       const due = rows.filter((r) => !r.done);
+      const dueHere = due.filter((r) => !r.atSession);   /* what "Needs you" may show */
       const pct = rows.length ? Math.round(((rows.length - due.length) / rows.length) * 100) : 100;
-      return { rows, due, pct, complete: due.length === 0 };
+      return { rows, due, dueHere, pct, complete: due.length === 0 };
     })();
 
 
@@ -6229,7 +6237,15 @@ function Today({ data, setData, coach, setSheet }) {
       </div>
 
       {/* ---- what you need in the moment, nothing else ---- */}
-      {/* ---- ZONE 1: THE COACH SPEAKS FIRST ------------------------------
+      {/* ---- ZONE 1: HOW SHE IS, BEFORE ANYTHING ELSE --------------------
+               Her instruction, and rule 4 in its plainest form: if she is
+               flat, frustrated or wiped, the coach should know that BEFORE
+               it tells her what to train, so it can offer something else
+               rather than push the session it had in mind. It cannot answer
+               a feeling it has not been told about yet. */}
+      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
+
+      {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
                Rule 3 says the coach leads and never waits. It used to be the
                tenth thing on this page, below ten cards of admin. */}
       {/* ---- THE COACH SPEAKS FIRST -------------------------------------
@@ -6278,6 +6294,19 @@ function Today({ data, setData, coach, setSheet }) {
         </Card>
       )}
 
+
+      {/* ---- THE SMALLER DOOR, WHERE SHE SAID SHE IS ---------------------
+          Rule 4 as amended, and her instruction of 8 August: if she has just
+          said she is flat, frustrated or wiped, the coach must not go on to
+          announce a class. It offers something smaller instead, immediately,
+          in the space between the mood and the session. Only while the day is
+          still open, and never once she has logged something. */}
+          does not accept that and stop — it walks down to something smaller.
+          Only on a day still open, and never after she has already logged. */}
+      {isToday && !log?.completed && log?.state !== "moved" && !restDay
+        && coach.moodToday && coach.moodToday !== "good" && (
+        <LadderCard data={data} setData={setData} coach={coach} />
+      )}
 
       {/* ---- ZONE 2: TODAY'S SESSION ------------------------------------
                Everything else on this page is derived from this one card, so
@@ -6432,11 +6461,24 @@ function Today({ data, setData, coach, setSheet }) {
                   ) : (
                     <Btn kind="signal" onClick={() => { write({ completed: true }); }}>Mark it done</Btn>
                   )}
+                  {/* everything the app wants to know about THIS session, under
+                      THIS session, in the order it makes sense to answer */}
                   {log?.completed && (
                     <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
                   )}
                   {log?.completed && log?.rpe && (
                     <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />
+                  )}
+                  {log?.completed && log?.rpe && (
+                    <DuringTap value={log?.during} onChange={(v) => write({ during: v })} />
+                  )}
+                  {log?.completed && log?.during && (
+                    <Scale label="How you felt afterwards" value={log?.energyAfter}
+                      onChange={(v) => write({ energyAfter: v })} max={5} lo="wiped" hi="great" />
+                  )}
+                  {log?.completed && log?.during && (
+                    <Note label="A line about how it went" value={log?.sessionNote}
+                      onChange={(v) => write({ sessionNote: v })} />
                   )}
                 </div>
 
@@ -6490,6 +6532,180 @@ function Today({ data, setData, coach, setSheet }) {
           </Card>
 
 
+      {/* ---- 2. EVERYTHING ELSE YOU DID -------------------------------
+               Sits with the session rather than half a page below it. Her
+               words: "if there is something decided by the coach and I add
+               something else after it, this all should be at the beginning
+               of the page." Whatever she did today is one block. */}
+               Always here, always countable, always addable — whether or not
+               the main class is finished. */}
+          <Card>
+            <Eyebrow>Everything you did {isToday ? "today" : "that day"}</Eyebrow>
+
+            {!log?.type && extraSessions.length === 0 ? (
+              <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
+                Nothing logged yet.
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                {log?.type && (
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 0",
+                    borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.type}</span>
+                    <input type="text" inputMode="numeric" value={log.minutes ?? ""}
+                      onChange={(e) => write({ minutes: e.target.value })}
+                      style={{ ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
+                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
+                    <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
+                  </div>
+                )}
+                {extraSessions.map((x) => {
+                  const cls = classByName(x.type);
+                  return (
+                    <div key={x.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.line}` }}>
+                      <SessionBlock
+                        custom={x.custom || !cls}
+                        name={x.type} onName={(v) => patchSession(x.id, { type: v })}
+                        cls={cls} note={x.note} minutes={x.minutes}
+                        onNote={(v) => patchSession(x.id, { note: v })}
+                        onMinutes={(v) => patchSession(x.id, { minutes: v })}
+                        onClass={(props) => cls && patchClass(cls.id, props)}
+                        onRemove={() => dropSession(x.id)} />
+                      {/* Her point exactly: on a day with more than one class,
+                          "how hard was it" has to say which one. So each
+                          session carries its own, right underneath itself. */}
+                      <RpeTap value={x.rpe} onChange={(v) => patchSession(x.id, { rpe: v })} />
+                      {x.rpe && (
+                        <SetsTap value={x.sets} onChange={(v) => patchSession(x.id, { sets: v })} />
+                      )}
+                      {x.rpe && (
+                        <DuringTap value={x.during} onChange={(v) => patchSession(x.id, { during: v })} />
+                      )}
+                      {x.during && (
+                        <Scale label="How you felt afterwards" value={x.energyAfter}
+                          onChange={(v) => patchSession(x.id, { energyAfter: v })}
+                          max={5} lo="wiped" hi="great" />
+                      )}
+                    </div>
+                  );
+                })}
+                {(log?.type || extraSessions.length > 0) && (
+                  <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>
+                    {totalMinutes} min across {extraSessions.length + (log?.type ? 1 : 0)} session
+                    {extraSessions.length + (log?.type ? 1 : 0) === 1 ? "" : "s"}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isToday && log?.type === "Monthly benchmark" && !adding && extraSessions.length === 0 && (
+              <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
+                That was the session. Whatever comes after is yours — a stretch, a full class, or nothing at all.
+              </div>
+            )}
+            <Btn kind={adding ? "quiet" : "ghost"} onClick={() => setAdding((a) => !a)}>
+              {adding ? "Never mind" : "+ Add another session"}
+            </Btn>
+
+            {adding && (
+              <div style={{ marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+                <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em",
+                  textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
+                  add-ons — short work you stack on a class
+                </div>
+                {[...data.library].sort((a, b) => (b.addon ? 1 : 0) - (a.addon ? 1 : 0)).map((w) => (
+                  <button key={w.id} onClick={() => addSession(w)} className="tap" style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
+                    padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
+                    background: "transparent", cursor: "pointer", textAlign: "left",
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{w.name}</div>
+                      <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                        {w.goal} · {w.durations.join("/")} min
+                      </div>
+                    </div>
+                    <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>+</span>
+                  </button>
+                ))}
+                <button onClick={addCustom} className="tap" style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
+                  padding: "13px 2px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
+                }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: C.signal }}>Something else</div>
+                    <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      not in the library — type it in yourself
+                    </div>
+                  </div>
+                  <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>+</span>
+                </button>
+              </div>
+            )}
+          </Card>
+
+
+      {/* ---- 3. THE FINISHER --------------------------------------------
+               Straight after the sessions, while she is still standing there.
+               At the bottom of the page it was an afterthought she read once
+               the moment for it had passed. */}
+      {isToday && coach.bet && (() => {
+        const answered = log?.bet?.met === true || log?.bet?.met === false;
+        const won = log?.bet?.met === true;
+        return (
+          <Card style={{ background: answered ? (won ? C.mint : C.card) : C.card,
+            border: answered ? "none" : `1.5px dashed ${C.ochre}` }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <Eyebrow color={C.ochre}>The finisher</Eyebrow>
+              {coach.betsWon > 0 && (
+                <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                  {coach.betsWon} achieved
+                </span>
+              )}
+            </div>
+
+            <div className="serif-it" style={{ fontSize: 17, lineHeight: 1.45, color: C.ink, margin: "4px 0 0" }}>
+              {log?.bet?.text || coach.bet.text}
+            </div>
+            {!answered && coach.bet.note && (
+              <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>
+                {coach.bet.note}
+              </div>
+            )}
+
+            {!answered ? (
+              <>
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <div style={{ flex: 1 }}>
+                    <Btn kind="signal" onClick={() => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: true } })}>
+                      Achieved
+                    </Btn>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <Btn kind="quiet" onClick={() => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: false } })}>
+                      Not achieved
+                    </Btn>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
+                <span style={{ fontSize: 15, color: won ? C.moss : C.muted }}>{won ? "✓" : "—"}</span>
+                <span style={{ flex: 1, fontSize: 13, color: won ? C.moss : C.muted, fontWeight: won ? 600 : 400 }}>
+                  {won ? "Achieved" : "Not achieved"}
+                </span>
+                <button onClick={() => write({ bet: { ...log.bet, met: null } })} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                  fontSize: 11, color: C.muted,
+                }}>undo</button>
+              </div>
+            )}
+          </Card>
+        );
+      })()}
+
+
       {/* ---- ZONE 3: NEEDS YOU -------------------------------------------
                One block of rows in place of eight separate cards. A row is
                here only while it needs her; the block vanishes when nothing
@@ -6503,15 +6719,7 @@ function Today({ data, setData, coach, setSheet }) {
       {/* ---- ZONE 3: THIS MONTH, AND WHY IT LANDED THAT WAY ---- */}
       {isToday && <MonthPlanCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
-      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
-      {/* Rule 4 as amended: when she has said she is not up to it, the coach
-          does not accept that and stop — it walks down to something smaller.
-          Only on a day still open, and never after she has already logged. */}
-      {isToday && !log?.completed && log?.state !== "moved" && !restDay
-        && coach.moodToday && coach.moodToday !== "good" && (
-        <LadderCard data={data} setData={setData} coach={coach} />
-      )}
 
 
       {/* THE RETURN. What determines whether a break becomes a dropout is the
@@ -6606,19 +6814,12 @@ function Today({ data, setData, coach, setSheet }) {
             {coach.reading}
           </div>
 
-          {/* the input that makes these five work, inside the card that uses it */}
-          {log?.completed && !log?.rpe && (
-            <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
-          )}
-          {log?.completed && log?.rpe && (log?.sets === undefined || log?.sets === "") && (
-            <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />
-          )}
-          {log?.completed && log?.rpe && !log?.during && (
-            <DuringTap value={log?.during} onChange={(v) => write({ during: v })} />
-          )}
-          {log?.completed && log?.during && !log?.when && (
-            <WhenTap value={log?.when} onChange={(v) => write({ when: v })} />
-          )}
+          {/* THESE USED TO ASK FOR THE EFFORT SCORE TOO.
+              Three places asked the same question — here, the session card,
+              and a row in "Needs you" — and on a day with two classes none of
+              them could say WHICH class they meant. Effort belongs to a
+              session, not to a day. It is asked once, under the session it
+              is about, and nowhere else. */}
           {!log?.completed && !restDay && (
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
               fontSize: 12, lineHeight: 1.5, color: C.muted }}>
@@ -6627,100 +6828,6 @@ function Today({ data, setData, coach, setSheet }) {
           )}
         </Card>
       )}
-
-      {/* ---- 2. EVERYTHING YOU DID ------------------------------------
-               Always here, always countable, always addable — whether or not
-               the main class is finished. */}
-          <Card>
-            <Eyebrow>Everything you did {isToday ? "today" : "that day"}</Eyebrow>
-
-            {!log?.type && extraSessions.length === 0 ? (
-              <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
-                Nothing logged yet.
-              </div>
-            ) : (
-              <div style={{ marginBottom: 14 }}>
-                {log?.type && (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 0",
-                    borderBottom: `1px solid ${C.line}` }}>
-                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.type}</span>
-                    <input type="text" inputMode="numeric" value={log.minutes ?? ""}
-                      onChange={(e) => write({ minutes: e.target.value })}
-                      style={{ ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
-                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
-                    <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
-                  </div>
-                )}
-                {extraSessions.map((x) => {
-                  const cls = classByName(x.type);
-                  return (
-                    <div key={x.id} style={{ padding: "12px 0", borderBottom: `1px solid ${C.line}` }}>
-                      <SessionBlock
-                        custom={x.custom || !cls}
-                        name={x.type} onName={(v) => patchSession(x.id, { type: v })}
-                        cls={cls} note={x.note} minutes={x.minutes}
-                        onNote={(v) => patchSession(x.id, { note: v })}
-                        onMinutes={(v) => patchSession(x.id, { minutes: v })}
-                        onClass={(props) => cls && patchClass(cls.id, props)}
-                        onRemove={() => dropSession(x.id)} />
-                    </div>
-                  );
-                })}
-                {(log?.type || extraSessions.length > 0) && (
-                  <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>
-                    {totalMinutes} min across {extraSessions.length + (log?.type ? 1 : 0)} session
-                    {extraSessions.length + (log?.type ? 1 : 0) === 1 ? "" : "s"}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {isToday && log?.type === "Monthly benchmark" && !adding && extraSessions.length === 0 && (
-              <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
-                That was the session. Whatever comes after is yours — a stretch, a full class, or nothing at all.
-              </div>
-            )}
-            <Btn kind={adding ? "quiet" : "ghost"} onClick={() => setAdding((a) => !a)}>
-              {adding ? "Never mind" : "+ Add another session"}
-            </Btn>
-
-            {adding && (
-              <div style={{ marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
-                <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em",
-                  textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
-                  add-ons — short work you stack on a class
-                </div>
-                {[...data.library].sort((a, b) => (b.addon ? 1 : 0) - (a.addon ? 1 : 0)).map((w) => (
-                  <button key={w.id} onClick={() => addSession(w)} className="tap" style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
-                    padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
-                    background: "transparent", cursor: "pointer", textAlign: "left",
-                  }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{w.name}</div>
-                      <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                        {w.goal} · {w.durations.join("/")} min
-                      </div>
-                    </div>
-                    <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>+</span>
-                  </button>
-                ))}
-                <button onClick={addCustom} className="tap" style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
-                  padding: "13px 2px", border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
-                }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: C.signal }}>Something else</div>
-                    <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                      not in the library — type it in yourself
-                    </div>
-                  </div>
-                  <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>+</span>
-                </button>
-              </div>
-            )}
-          </Card>
 
       {/* ---- the coach calls the measurement day ---- */}
       {isToday && measureDue && (
@@ -6748,72 +6855,23 @@ function Today({ data, setData, coach, setSheet }) {
         </Card>
       )}
 
-      {/* ---- the bet: one small dare, answered honestly ---- */}
-      {isToday && coach.bet && (() => {
-        const answered = log?.bet?.met === true || log?.bet?.met === false;
-        const won = log?.bet?.met === true;
-        return (
-          <Card style={{ background: answered ? (won ? C.mint : C.card) : C.card,
-            border: answered ? "none" : `1.5px dashed ${C.ochre}` }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-              <Eyebrow color={C.ochre}>The finisher</Eyebrow>
-              {coach.betsWon > 0 && (
-                <span className="mono" style={{ fontSize: 10, color: C.muted }}>
-                  {coach.betsWon} achieved
-                </span>
-              )}
-            </div>
-
-            <div className="serif-it" style={{ fontSize: 17, lineHeight: 1.45, color: C.ink, margin: "4px 0 0" }}>
-              {log?.bet?.text || coach.bet.text}
-            </div>
-            {!answered && coach.bet.note && (
-              <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>
-                {coach.bet.note}
-              </div>
-            )}
-
-            {!answered ? (
-              <>
-                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <div style={{ flex: 1 }}>
-                    <Btn kind="signal" onClick={() => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: true } })}>
-                      Achieved
-                    </Btn>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <Btn kind="quiet" onClick={() => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: false } })}>
-                      Not achieved
-                    </Btn>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
-                <span style={{ fontSize: 15, color: won ? C.moss : C.muted }}>{won ? "✓" : "—"}</span>
-                <span style={{ flex: 1, fontSize: 13, color: won ? C.moss : C.muted, fontWeight: won ? 600 : 400 }}>
-                  {won ? "Achieved" : "Not achieved"}
-                </span>
-                <button onClick={() => write({ bet: { ...log.bet, met: null } })} className="tap" style={{
-                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                  fontSize: 11, color: C.muted,
-                }}>undo</button>
-              </div>
-            )}
-          </Card>
-        );
-      })()}
-
       {/* ---- everything else, folded away until asked for ---- */}
-      <Fold title="How today felt" note="energy, shoulder, sleep, notes">
+      {/* ---- THE DAY ITSELF, AND NOTHING THAT BELONGS TO A SESSION -------
+           This card used to hold "how you felt afterwards", "what you actually
+           did", "notes" and a row of add-on chips — every one of them a
+           session question, asked here a second time, with no way to say which
+           session it meant. Those live under each session now. What is left is
+           the short list of things that genuinely have no session attached:
+           how the shoulder is, how she slept, what the strain was.
+           Nothing has been deleted from her data — the fields still exist and
+           anything already written to them is untouched and still read. */}
+      <Fold title="The day itself" note="shoulder, sleep, strain">
         <Btn kind="quiet" onClick={() => setOpen((o) => !o)}>
-              {open ? "Hide the details" : "How it felt, sleep, shoulder, notes"}
+              {open ? "Hide it" : "Shoulder, sleep, strain"}
             </Btn>
             {open && (
               <div style={{ marginTop: 16 }}>
                 <>
-                <Scale label="How you felt afterwards" value={log?.energyAfter}
-                  onChange={(v) => write({ energyAfter: v })} max={5} lo="wiped" hi="great" />
                 {data.settings.shoulderInjury && (
                   <Scale label="Shoulder comfort" value={log?.shoulder}
                     onChange={(v) => write({ shoulder: v })} max={5} lo="painful" hi="no issue" />
@@ -6822,28 +6880,6 @@ function Today({ data, setData, coach, setSheet }) {
                 {data.settings.whoopConnected && (
                   <Field label="WHOOP strain" unit="" value={log?.whoopStrain} onChange={(v) => write({ whoopStrain: v })} />
                 )}
-
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Anything after the class</div>
-                {/* "mobility" was in this list twice — two identical chips, sharing
-                    one stored value, so tapping either lit both. One chip now, and
-                    it keeps the id it always had so anything already logged still
-                    matches; only what it is CALLED has changed. */}
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
-                  {EXTRA_TAGS.map((t) => {
-                    const on = (log?.extras || []).includes(t.id);
-                    return (
-                      <button key={t.id} onClick={() => write({ extras: on ? log.extras.filter((y) => y !== t.id) : [...(log?.extras || []), t.id] })}
-                        className="tap" style={{
-                        padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 500,
-                        border: `1.5px solid ${on ? C.signal : C.line}`,
-                        background: on ? C.signal : "transparent", color: on ? C.chalk : C.muted,
-                      }}>{t.label}</button>
-                    );
-                  })}
-                </div>
-
-                <Note label="What you actually did" value={log?.did} onChange={(v) => write({ did: v })} />
-                <Note label="Notes" value={log?.notes} onChange={(v) => write({ notes: v })} />
               </>
               </div>
             )}
@@ -9804,7 +9840,7 @@ const InfoTitle = ({ children, why, open, onToggle }) => (
 function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
   const [open, setOpen] = useState(null);    /* the "why does this matter" text */
   const [doing, setDoing] = useState(null);  /* the control for answering it */
-  const due = (coach.capture?.due || []);
+  const due = (coach.capture?.dueHere || coach.capture?.due || []);
   const failed = didStoreWriteFail();
 
   /* A row that has just been answered would otherwise vanish from under her
@@ -9851,13 +9887,9 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
         </div>
       );
       case "session":  return chip("mark done", () => write({ completed: true, type: coach.prescribed?.name || "Session", minutes: coach.prescribed?.minutes || 45 }), true, "session");
-      /* These five used to open one shared sheet — a screenful of prose that
-         answered none of them. Rule 11: the means to do it is right here. */
-      case "rpe":      return chip(doing === "rpe" ? "close" : "rate it", () => act("rpe"), doing !== "rpe", "rpe");
-      case "sets":
-      case "during":
-      case "felt":
-      case "note":     return chip(doing === r.id ? "close" : "add it", () => act(r.id), doing !== r.id, r.id);
+      /* rpe / sets / during / felt / note are no longer rows here at all —
+         they belong to a session, and this list belongs to the day. See the
+         filter below. */
       case "battery":  return chip("open", () => setSheet({ kind: "weekly" }), true, "battery");
       case "benchmark":return chip("open", () => setSheet({ kind: "monthly" }), true, "benchmark");
       case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true, "whoop");
