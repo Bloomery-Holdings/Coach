@@ -2387,6 +2387,20 @@ function useCoach(data) {
     const programWeek = programWeekOf(t, program);
     const programPhase = phaseForWeek(programWeek, program);
     const programPhases = phaseRanges(program);
+    const liveIdx = Math.max(0, programPhases.findIndex((ph) => programWeek >= ph.from && programWeek <= ph.to));
+    const livePhase = programPhases[liveIdx] || programPhases[0] || null;
+    const calibrating = !!(livePhase && livePhase.calibrate);
+    /* ---- THE CALIBRATION MONTH ------------------------------------------
+       Her correction, and it is the right one: "the app should be in charge
+       of everything, not me" applies AFTER the first month, not during it.
+       In the first block the coach has nothing to design from, so a class it
+       names is a guess she then has to work around — and a day logged against
+       a guess she did not take is worse than no plan at all.
+
+       So during calibration the coach proposes nothing. It asks what she did,
+       records it, chases what is missing, and says what it notices. It knows
+       what today WOULD have been (below, unused) only so that at the end of
+       the month it can see how close its instincts were to her real month. */
     const restDay = block ? block.id === "rest" : !isScheduled(t);
     const loggedToday = logs[t] || null;
 
@@ -3055,13 +3069,16 @@ function useCoach(data) {
     const reactiveResponse = recAfter("easy");
 
 
-    const prescribed = prescribe({
+    const wouldHavePicked = prescribe({
       library, logs, date: t, recovery, restDay, phase, themeGoal, block, bodywork,
       shoulderFrozen, shoulderInjury: settings.shoulderInjury,
       /* one uncomfortable day is enough to tilt the choice; two is what makes
          it a freeze. Nothing is ruled out at one - it is a lean, not a bar. */
       shoulderSore: !!settings.shoulderInjury && lowComfort >= 1,
     });
+    /* Nothing is offered in the calibration block. Everything downstream that
+       asks "what did the coach say today" gets null, and answers honestly. */
+    const prescribed = calibrating ? null : wouldHavePicked;
 
     /* the whole quarter, so she can see where today sits in it */
     const programDays = (from, count) => Array.from({ length: count }, (_, i) => {
@@ -3547,8 +3564,6 @@ function useCoach(data) {
     const balanceM = analysis.find((m) => m.id === "balance");
     const squatM = analysis.find((m) => m.id === "squat");
 
-    const liveIdx = Math.max(0, programPhases.findIndex((ph) => programWeek >= ph.from && programWeek <= ph.to));
-    const livePhase = programPhases[liveIdx] || programPhases[0] || null;
 
     /* ---- MORE PATTERNS -------------------------------------------------
        All computed from what is already stored. Each one answers a question
@@ -4685,7 +4700,6 @@ function useCoach(data) {
       return { rows, due, pct, complete: due.length === 0 };
     })();
 
-    const calibrating = !!(livePhase && livePhase.calibrate);
 
 
     /* ================= THE COACH LEADS =================================
@@ -5974,7 +5988,10 @@ function Today({ data, setData, coach, setSheet }) {
      originally asked. The swap is the interesting part. */
   const write = (patch) => {
     const existing = data.logs[t] || {};
-    const stamp = (existing.prescribed === undefined && coach.prescribed?.name)
+    /* Only ever stamp TODAY. Backfilling last Tuesday would otherwise record
+       today's suggestion as what the coach asked for on Tuesday, which is not
+       true and would quietly poison "coach vs you" with invented history. */
+    const stamp = (t === coach.t && existing.prescribed === undefined && coach.prescribed?.name)
       ? { prescribed: coach.prescribed.name } : {};
     setData({ ...data, logs: { ...data.logs, [t]: { ...existing, ...stamp, ...patch } } });
   };
@@ -6161,7 +6178,212 @@ function Today({ data, setData, coach, setSheet }) {
       )}
 
 
-      {/* ---- ZONE 2: NEEDS YOU -------------------------------------------
+      {/* ---- ZONE 2: TODAY'S SESSION ------------------------------------
+               Everything else on this page is derived from this one card, so
+               it sits directly under the coach rather than at the bottom. In
+               the calibration month it asks what she did; from block two it
+               carries what the coach picked. */}
+      {/* ---- 1. THE CLASS ---------------------------------------------
+               One card, one decision. Either the coach's pick waiting to be
+               accepted, or the class you're doing. Never both, never a menu
+               unless you ask for one. */}
+          <Card style={{ padding: 20 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+              <Eyebrow color={C.signal}>
+                {benchmarkIsSession ? "Benchmark day"
+                  : log?.type ? (log?.completed ? "Done" : "Your class")
+                  : coach.calibrating ? "Today"
+                  : restDay ? "Rest day" : "Your class"}
+              </Eyebrow>
+              {isToday && coach.block && (
+                <button onClick={() => setSheet({ kind: "program" })} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                  fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
+                  fontFamily: "'IBM Plex Mono', monospace", color: coach.block.color,
+                }}>
+                  {coach.block.label} · wk {coach.programWeek + 1} →
+                </button>
+              )}
+            </div>
+
+            <h1 className="disp" style={{ fontSize: 26, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 0" }}>
+              {log?.type
+                || (isToday && rx ? rx.name
+                  : isToday && coach.calibrating ? "What did you do today?"
+                  : restDay ? "Recovery day" : "Nothing logged")}
+            </h1>
+
+            <div className="mono" style={{ fontSize: 11.5, color: C.muted, marginTop: 7 }}>
+              {log?.type
+                ? `${log.minutes || "—"} min${s?.equipment ? " · " + s.equipment : ""}`
+                : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
+            </div>
+
+            {isToday && coach.calibrating && !log?.type ? (
+              <div style={{ marginTop: 12, padding: "11px 13px", background: C.chalk, borderRadius: 11,
+                fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+                <strong style={{ color: C.ink, fontWeight: 600 }}>No plan this month, on purpose.</strong>{" "}
+                I have nothing of yours to design from yet. Train what you want, tell me what it was,
+                and at the end of the month I will design September out of what actually happened.
+              </div>
+            ) : isToday && coach.block && !log?.type ? (
+              <div style={{ marginTop: 12, padding: "11px 13px", background: C.chalk, borderRadius: 11,
+                fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+                <strong style={{ color: C.ink, fontWeight: 600 }}>{coach.block.label} day.</strong>{" "}
+                {coach.block.why}
+              </div>
+            ) : null}
+
+            {/* the coach's reasoning, only while it's still a suggestion */}
+            {!log?.type && isToday && rx && (
+              <>
+                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginTop: 14,
+                  padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
+                  <strong style={{ color: C.ink, fontWeight: 600 }}>Why this one:</strong> {rx.reason}.
+                </div>
+                {rx.addon && (
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 12,
+                    padding: "11px 14px", background: C.mint, borderRadius: 12 }}>
+                    <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
+                      textTransform: "uppercase", color: C.moss }}>{rx.benchmark ? "if you're up for more" : "then"}</span>
+                    <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>
+                      {rx.addon.name} · {rx.addon.minutes} min
+                      {rx.benchmark && (
+                        <span style={{ color: C.muted }}> — or a full class, or nothing. Your call afterwards.</span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 14 }}>
+                  <Btn kind="signal" onClick={() => {
+                    if (rx.benchmark) setSheet({ kind: "monthly", key: coach.mk });
+                    else write({ type: rx.name, minutes: String(rx.minutes) });
+                  }}>
+                    {rx.benchmark ? "Start the benchmark" : "Start this class"}
+                  </Btn>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <Btn kind="quiet" onClick={() => setChoosing(true)}>
+                    {rx.benchmark ? "Skip it and train instead" : "I'd rather do something else"}
+                  </Btn>
+                </div>
+              </>
+            )}
+
+            {/* once a class is chosen */}
+            {log?.type && (
+              <>
+                {s && (
+                  <div style={{ marginTop: 14 }}>
+                    <SessionBlock primary cls={s} note={log?.sessionNote}
+                      onNote={(v) => write({ sessionNote: v })}
+                      onClass={(props) => patchClass(s.id, props)} />
+                  </div>
+                )}
+
+                {/* how long it actually ran — suggestions plus a free number,
+                    editable before and after you mark it done */}
+                <div style={{ marginTop: 16 }}>
+                  <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 7 }}>
+                    how long
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {(s?.durations || []).map((m) => (
+                      <button key={m} onClick={() => write({ minutes: String(m) })} className="tap mono" style={{
+                        flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                        border: `1.5px solid ${String(log.minutes) === String(m) ? C.ink : C.line}`,
+                        background: String(log.minutes) === String(m) ? C.ink : "transparent",
+                        color: String(log.minutes) === String(m) ? C.chalk : C.muted,
+                      }}>{m}</button>
+                    ))}
+                    <input type="text" inputMode="numeric" value={log.minutes ?? ""}
+                      onChange={(e) => write({ minutes: e.target.value })}
+                      placeholder="any"
+                      style={{ ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
+                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
+                        border: `1.5px solid ${(s?.durations || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` }} />
+                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.45 }}>
+                    Type any number in the box if it ran longer or shorter than usual.
+                  </div>
+                </div>
+
+                {s?.resistance && !log?.completed && (
+                  <div style={{ marginTop: 14, padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
+                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>loads</div>
+                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>{s.resistance}</div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 16 }}>
+                  {log?.completed ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 15px", borderRadius: 12,
+                      background: C.mint }}>
+                      <span style={{ color: C.moss, fontSize: 17 }}>✓</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: C.moss }}>
+                        Done — {coach.weekDone} of {coach.seasonTarget} this week
+                      </span>
+                    </div>
+                  ) : (
+                    <Btn kind="signal" onClick={() => { write({ completed: true }); }}>Mark it done</Btn>
+                  )}
+                  {log?.completed && (
+                    <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
+                  )}
+                  {log?.completed && log?.rpe && (
+                    <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />
+                  )}
+                </div>
+
+                {!log?.completed && (
+                  <div style={{ marginTop: 8 }}>
+                    <Btn kind="quiet" onClick={() => setChoosing((c) => !c)}>{choosing ? "Keep this class" : "Change class"}</Btn>
+                  </div>
+                )}
+              </>
+            )}
+
+            {restDay && !log?.type && !choosing && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 12 }}>
+                  Your cycle says rest. Recovery is what makes the next class count.
+                </div>
+                <Btn kind="quiet" onClick={() => setChoosing(true)}>Train anyway</Btn>
+              </div>
+            )}
+
+            {/* the override menu */}
+            {(choosing || (isToday && coach.calibrating && !log?.type)) && !log?.completed && (
+              <div style={{ marginTop: 16, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
+                <Eyebrow>{coach.calibrating && !log?.type ? "Log what you did" : "Pick any class"}</Eyebrow>
+                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
+                  {coach.calibrating && !log?.type
+                    ? "Anything at all, including something that isn't on this list — add it at the bottom."
+                    : "Your call always wins."}
+                </div>
+                {data.library.map((w) => (
+                  <button key={w.id} onClick={() => choose(w)} className="tap" style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
+                    padding: "12px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
+                    background: "transparent", cursor: "pointer", textAlign: "left",
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{w.name}</div>
+                      <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                        {w.goal} · {w.durations.join("/")} min
+                      </div>
+                    </div>
+                    <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+
+
+      {/* ---- ZONE 3: NEEDS YOU -------------------------------------------
                One block of rows in place of eight separate cards. A row is
                here only while it needs her; the block vanishes when nothing
                does. Every instruction those cards printed in full now waits
@@ -6298,192 +6520,6 @@ function Today({ data, setData, coach, setSheet }) {
           )}
         </Card>
       )}
-
-      {/* ---- 1. THE CLASS ---------------------------------------------
-               One card, one decision. Either the coach's pick waiting to be
-               accepted, or the class you're doing. Never both, never a menu
-               unless you ask for one. */}
-          <Card style={{ padding: 20 }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-              <Eyebrow color={C.signal}>
-                {benchmarkIsSession ? "Benchmark day"
-                  : log?.type ? (log?.completed ? "Done" : "Your class")
-                  : restDay ? "Rest day" : "Your class"}
-              </Eyebrow>
-              {isToday && coach.block && (
-                <button onClick={() => setSheet({ kind: "program" })} className="tap" style={{
-                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                  fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
-                  fontFamily: "'IBM Plex Mono', monospace", color: coach.block.color,
-                }}>
-                  {coach.block.label} · wk {coach.programWeek + 1} →
-                </button>
-              )}
-            </div>
-
-            <h1 className="disp" style={{ fontSize: 26, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 0" }}>
-              {log?.type || (isToday && rx ? rx.name : restDay ? "Recovery day" : "Nothing logged")}
-            </h1>
-
-            <div className="mono" style={{ fontSize: 11.5, color: C.muted, marginTop: 7 }}>
-              {log?.type
-                ? `${log.minutes || "—"} min${s?.equipment ? " · " + s.equipment : ""}`
-                : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
-            </div>
-
-            {isToday && coach.block && !log?.type && (
-              <div style={{ marginTop: 12, padding: "11px 13px", background: C.chalk, borderRadius: 11,
-                fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
-                <strong style={{ color: C.ink, fontWeight: 600 }}>{coach.block.label} day.</strong>{" "}
-                {coach.block.why}
-              </div>
-            )}
-
-            {/* the coach's reasoning, only while it's still a suggestion */}
-            {!log?.type && isToday && rx && (
-              <>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginTop: 14,
-                  padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
-                  <strong style={{ color: C.ink, fontWeight: 600 }}>Why this one:</strong> {rx.reason}.
-                </div>
-                {rx.addon && (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 12,
-                    padding: "11px 14px", background: C.mint, borderRadius: 12 }}>
-                    <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
-                      textTransform: "uppercase", color: C.moss }}>{rx.benchmark ? "if you're up for more" : "then"}</span>
-                    <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>
-                      {rx.addon.name} · {rx.addon.minutes} min
-                      {rx.benchmark && (
-                        <span style={{ color: C.muted }}> — or a full class, or nothing. Your call afterwards.</span>
-                      )}
-                    </span>
-                  </div>
-                )}
-
-                <div style={{ marginTop: 14 }}>
-                  <Btn kind="signal" onClick={() => {
-                    if (rx.benchmark) setSheet({ kind: "monthly", key: coach.mk });
-                    else write({ type: rx.name, minutes: String(rx.minutes) });
-                  }}>
-                    {rx.benchmark ? "Start the benchmark" : "Start this class"}
-                  </Btn>
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <Btn kind="quiet" onClick={() => setChoosing(true)}>
-                    {rx.benchmark ? "Skip it and train instead" : "I'd rather do something else"}
-                  </Btn>
-                </div>
-              </>
-            )}
-
-            {/* once a class is chosen */}
-            {log?.type && (
-              <>
-                {s && (
-                  <div style={{ marginTop: 14 }}>
-                    <SessionBlock primary cls={s} note={log?.sessionNote}
-                      onNote={(v) => write({ sessionNote: v })}
-                      onClass={(props) => patchClass(s.id, props)} />
-                  </div>
-                )}
-
-                {/* how long it actually ran — suggestions plus a free number,
-                    editable before and after you mark it done */}
-                <div style={{ marginTop: 16 }}>
-                  <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 7 }}>
-                    how long
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {(s?.durations || []).map((m) => (
-                      <button key={m} onClick={() => write({ minutes: String(m) })} className="tap mono" style={{
-                        flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer", fontSize: 12, fontWeight: 600,
-                        border: `1.5px solid ${String(log.minutes) === String(m) ? C.ink : C.line}`,
-                        background: String(log.minutes) === String(m) ? C.ink : "transparent",
-                        color: String(log.minutes) === String(m) ? C.chalk : C.muted,
-                      }}>{m}</button>
-                    ))}
-                    <input type="text" inputMode="numeric" value={log.minutes ?? ""}
-                      onChange={(e) => write({ minutes: e.target.value })}
-                      placeholder="any"
-                      style={{ ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
-                        border: `1.5px solid ${(s?.durations || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` }} />
-                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.45 }}>
-                    Type any number in the box if it ran longer or shorter than usual.
-                  </div>
-                </div>
-
-                {s?.resistance && !log?.completed && (
-                  <div style={{ marginTop: 14, padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
-                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>loads</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>{s.resistance}</div>
-                  </div>
-                )}
-
-                <div style={{ marginTop: 16 }}>
-                  {log?.completed ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 15px", borderRadius: 12,
-                      background: C.mint }}>
-                      <span style={{ color: C.moss, fontSize: 17 }}>✓</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: C.moss }}>
-                        Done — {coach.weekDone} of {coach.seasonTarget} this week
-                      </span>
-                    </div>
-                  ) : (
-                    <Btn kind="signal" onClick={() => { write({ completed: true }); }}>Mark it done</Btn>
-                  )}
-                  {log?.completed && (
-                    <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
-                  )}
-                  {log?.completed && log?.rpe && (
-                    <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />
-                  )}
-                </div>
-
-                {!log?.completed && (
-                  <div style={{ marginTop: 8 }}>
-                    <Btn kind="quiet" onClick={() => setChoosing((c) => !c)}>{choosing ? "Keep this class" : "Change class"}</Btn>
-                  </div>
-                )}
-              </>
-            )}
-
-            {restDay && !log?.type && !choosing && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 12 }}>
-                  Your cycle says rest. Recovery is what makes the next class count.
-                </div>
-                <Btn kind="quiet" onClick={() => setChoosing(true)}>Train anyway</Btn>
-              </div>
-            )}
-
-            {/* the override menu */}
-            {choosing && !log?.completed && (
-              <div style={{ marginTop: 16, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
-                <Eyebrow>Pick any class</Eyebrow>
-                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
-                  Your call always wins.
-                </div>
-                {data.library.map((w) => (
-                  <button key={w.id} onClick={() => choose(w)} className="tap" style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
-                    padding: "12px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
-                    background: "transparent", cursor: "pointer", textAlign: "left",
-                  }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{w.name}</div>
-                      <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                        {w.goal} · {w.durations.join("/")} min
-                      </div>
-                    </div>
-                    <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </Card>
 
       {/* ---- 2. EVERYTHING YOU DID ------------------------------------
                Always here, always countable, always addable — whether or not
@@ -9601,14 +9637,26 @@ const InfoTitle = ({ children, why, open, onToggle }) => (
 );
 
 function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
-  const [open, setOpen] = useState(null);
-  const rows = (coach.capture?.due || []);
+  const [open, setOpen] = useState(null);    /* the "why does this matter" text */
+  const [doing, setDoing] = useState(null);  /* the control for answering it */
+  const due = (coach.capture?.due || []);
   const failed = didStoreWriteFail();
+
+  /* A row that has just been answered would otherwise vanish from under her
+     hand mid-tap — worse, mid-sentence in the note box. So whichever row is
+     open for answering stays on screen until she closes it, even once the
+     answer has landed. */
+  const active = doing ? (coach.capture?.rows || []).find((r) => r.id === doing) : null;
+  const rows = active && !due.some((r) => r.id === doing) ? [...due, active] : due;
   if (!rows.length && !failed) return null;
 
   const toggle = (id) => setOpen(open === id ? null : id);
-  const chip = (label, onClick, strong) => (
-    <button key={label} onClick={onClick} className="tap" style={{
+  const act = (id) => { setDoing(doing === id ? null : id); setOpen(null); };
+  /* rowId rides along as the accessible label: four rows say "add it", and
+     without it neither a screen reader nor a test can tell them apart. */
+  const chip = (label, onClick, strong, rowId) => (
+    <button key={rowId || label} onClick={onClick} className="tap"
+      aria-label={rowId ? `${label} — ${rowId}` : label} style={{
       padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontWeight: 600,
       border: `1.5px solid ${strong ? C.signal : C.line}`,
       background: strong ? C.signal : C.chalk, color: strong ? C.chalk : C.muted,
@@ -9619,7 +9667,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
   /* the control that belongs to each row, actionable where it sits */
   const control = (r) => {
     switch (r.id) {
-      case "rhythm":   return chip("set it", () => setSheet({ kind: "settings-rhythm" }), true);
+      case "rhythm":   return chip(doing === "rhythm" ? "close" : "set it", () => act("rhythm"), doing !== "rhythm", "rhythm");
       case "recovery": return (
         <input inputMode="numeric" placeholder="%" defaultValue=""
           onBlur={(e) => { const v = e.target.value.trim(); if (v) setData((d) => ({ ...d,
@@ -9637,22 +9685,75 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
           ))}
         </div>
       );
-      case "session":  return chip("mark done", () => write({ completed: true, type: coach.prescribed?.name || "Session", minutes: coach.prescribed?.minutes || 45 }), true);
-      case "rpe":      return chip("rate it", () => setSheet({ kind: "briefing" }));
+      case "session":  return chip("mark done", () => write({ completed: true, type: coach.prescribed?.name || "Session", minutes: coach.prescribed?.minutes || 45 }), true, "session");
+      /* These five used to open one shared sheet — a screenful of prose that
+         answered none of them. Rule 11: the means to do it is right here. */
+      case "rpe":      return chip(doing === "rpe" ? "close" : "rate it", () => act("rpe"), doing !== "rpe", "rpe");
       case "sets":
       case "during":
       case "felt":
-      case "note":     return chip("add it", () => setSheet({ kind: "briefing" }));
-      case "battery":  return chip("open", () => setSheet({ kind: "weekly" }), true);
-      case "benchmark":return chip("open", () => setSheet({ kind: "monthly" }), true);
-      case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true);
-      case "mobility": return chip("open", () => setSheet({ kind: "mobility" }), true);
+      case "note":     return chip(doing === r.id ? "close" : "add it", () => act(r.id), doing !== r.id, r.id);
+      case "battery":  return chip("open", () => setSheet({ kind: "weekly" }), true, "battery");
+      case "benchmark":return chip("open", () => setSheet({ kind: "monthly" }), true, "benchmark");
+      case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true, "whoop");
+      case "mobility": return chip("open", () => setSheet({ kind: "mobility" }), true, "mobility");
       case "backup":   return <BackupNowButton data={data} label="back up" compact />;
       /* these two open the folded row below rather than a sheet, so she
          answers in the same place the record already lives */
-      case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true);
-      case "goal":     return chip("score it", () => openQuiet && openQuiet("goals"), true);
+      case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true, "issue");
+      case "goal":     return chip("score it", () => openQuiet && openQuiet("goals"), true, "goal");
       default:         return null;
+    }
+  };
+
+  /* ---- ANSWERING IT, WHERE IT IS ASKED --------------------------------
+     Every one of these already existed somewhere else in the app. They were
+     just not reachable from the row that asked for them, which is how five
+     different questions ended up pointing at the same essay. */
+  const inline = (r) => {
+    switch (r.id) {
+      case "rhythm": {
+        const sc = scheduleOf(data.settings);
+        const set = scheduleSet(data.settings);
+        const now = set && sc.mode === "count" ? Number(sc.perWeek) : null;
+        return (
+          <div>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+              How many times a week do you want to train? You choose which days, and
+              nothing counts as missed until the week runs out.
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+                <button key={n} className="tap mono"
+                  onClick={() => setData((d) => ({ ...d,
+                    settings: { ...d.settings, schedule: { mode: "count", perWeek: n } } }))}
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 9, cursor: "pointer",
+                    fontSize: 12.5, fontWeight: now === n ? 700 : 500,
+                    border: `1.5px solid ${now === n ? C.signal : C.line}`,
+                    background: now === n ? C.signal : "transparent",
+                    color: now === n ? "#fff" : C.muted }}>{n}</button>
+              ))}
+            </div>
+            <button onClick={() => setSheet({ kind: "settings-rhythm" })} className="tap" style={{
+              border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
+              fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+              Or set fixed days, or on-off cycles →
+            </button>
+          </div>
+        );
+      }
+      case "rpe":   return <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />;
+      case "sets":  return <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />;
+      case "during":return <DuringTap value={log?.during} onChange={(v) => write({ during: v })} />;
+      case "felt":  return (
+        <Scale label="How you felt afterwards" value={log?.energyAfter}
+          onChange={(v) => write({ energyAfter: v })} max={5} lo="wiped" hi="great" />
+      );
+      case "note":  return (
+        <Note label="A line about how it went" value={log?.sessionNote}
+          onChange={(v) => write({ sessionNote: v })} />
+      );
+      default: return null;
     }
   };
 
@@ -9660,7 +9761,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
     <Card style={{ background: C.pist }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
         <Eyebrow color={C.signal}>Needs you</Eyebrow>
-        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{rows.length + (failed ? 1 : 0)}</span>
+        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{due.length + (failed ? 1 : 0)}</span>
       </div>
 
       {/* the only one that jumps the queue: her last entry did not save */}
@@ -9685,6 +9786,11 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{r.why}</div>
             </div>
           )}
+          {doing === r.id && (
+            <div style={{ background: C.card, borderRadius: 10, padding: "12px 13px", margin: "0 0 10px" }}>
+              {inline(r)}
+            </div>
+          )}
         </div>
       ))}
     </Card>
@@ -9707,9 +9813,22 @@ function MonthPlanCard({ data, setData, coach, setSheet }) {
   const [open, setOpen] = useState(false);
   const ph = coach.livePhase;
   if (!ph) return null;
-  const week = ph.week || [];
   const firstWeek = (coach.weeksIntoBlock ?? 0) <= 1;
   const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+
+  /* In the calibration block there is no plan to draw, so the seven boxes show
+     what she actually did — filling in as the week goes, blank ahead of today.
+     A shape she made is worth looking at; a shape nobody chose is not. */
+  const actual = coach.weekDays.map((d) => {
+    const l = data.logs?.[d];
+    if (l?.completed) {
+      const cls = (coach.allClasses || []).find((w) => w.name === l.type);
+      return { kind: cls?.goal || "done", label: (l.type || "done"), color: BLOCKS[cls?.goal]?.color || C.moss };
+    }
+    if (l?.state === "moved") return { kind: "moved", label: "moved", color: C.pist };
+    return { kind: d > coach.t ? "ahead" : "none", label: "", color: null };
+  });
+  const week = coach.calibrating ? null : (ph.week || []);
 
   return (
     <Card style={{ background: firstWeek ? C.mint : C.card }}>
@@ -9727,9 +9846,32 @@ function MonthPlanCard({ data, setData, coach, setSheet }) {
         <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>{ph.line}</div>
       )}
 
-      {/* the shape of the week, so the month is a picture rather than a claim */}
+      {/* the shape of the week: what she chose while calibrating, what the
+          coach designed once it has something to design from */}
+      {coach.calibrating && (
+        <div className="mono" style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase",
+          color: C.muted, marginBottom: 5 }}>the week you have actually had</div>
+      )}
       <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
-        {week.map((kind, i) => {
+        {(week || actual).map((cell, i) => {
+          if (!week) {
+            const a = cell;
+            const filled = a.kind !== "none" && a.kind !== "ahead";
+            return (
+              <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ height: 26, borderRadius: 7,
+                  background: filled ? a.color : "transparent",
+                  border: filled ? "none" : `1px dashed ${C.line}`,
+                  display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span className="mono" style={{ fontSize: 8, color: filled ? "#fff" : C.line }}>
+                    {filled ? a.label.slice(0, 3).toLowerCase() : ""}
+                  </span>
+                </div>
+                <div className="mono" style={{ fontSize: 8, color: C.muted, marginTop: 3 }}>{DOW[i]}</div>
+              </div>
+            );
+          }
+          const kind = cell;
           const b = BLOCKS[kind] || { label: kind, color: C.muted };
           return (
             <div key={i} style={{ flex: 1, textAlign: "center" }}>
