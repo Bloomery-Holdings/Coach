@@ -6192,6 +6192,7 @@ function Today({ data, setData, coach, setSheet }) {
               <Eyebrow color={C.signal}>
                 {benchmarkIsSession ? "Benchmark day"
                   : log?.type ? (log?.completed ? "Done" : "Your class")
+                  : !isToday ? "That day"
                   : coach.calibrating ? "Today"
                   : restDay ? "Rest day" : "Your class"}
               </Eyebrow>
@@ -6210,6 +6211,7 @@ function Today({ data, setData, coach, setSheet }) {
               {log?.type
                 || (isToday && rx ? rx.name
                   : isToday && coach.calibrating ? "What did you do today?"
+                  : !isToday ? "What did you do that day?"
                   : restDay ? "Recovery day" : "Nothing logged")}
             </h1>
 
@@ -6355,12 +6357,16 @@ function Today({ data, setData, coach, setSheet }) {
             )}
 
             {/* the override menu */}
-            {(choosing || (isToday && coach.calibrating && !log?.type)) && !log?.completed && (
+            {(choosing
+              || (!log?.type && (isToday ? coach.calibrating : true))
+             ) && !log?.completed && (
               <div style={{ marginTop: 16, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
-                <Eyebrow>{coach.calibrating && !log?.type ? "Log what you did" : "Pick any class"}</Eyebrow>
+                <Eyebrow>{!log?.type ? "Log what you did" : "Pick any class"}</Eyebrow>
                 <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
-                  {coach.calibrating && !log?.type
-                    ? "Anything at all, including something that isn't on this list — add it at the bottom."
+                  {!log?.type
+                    ? (isToday
+                        ? "Anything at all, including something that isn't on this list — add it at the bottom."
+                        : "Whatever you actually did that day. It counts from the moment you mark it done.")
                     : "Your call always wins."}
                 </div>
                 {data.library.map((w) => (
