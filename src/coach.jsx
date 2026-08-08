@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 21";
+const BUILD = "8 August 2026 · 23";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5413,9 +5413,11 @@ function SessionBlock({ cls, note, minutes, onNote, onMinutes, onClass, onRemove
               fontFamily: "'IBM Plex Mono', monospace", fontSize: 13 }} />
           <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
           {onRemove && (
-            <button onClick={onRemove} className="tap" style={{
-              border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 15, padding: "2px 0 2px 2px",
-            }}>×</button>
+            <button onClick={onRemove} className="tap" aria-label="Remove this session" style={{
+              border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent", cursor: "pointer",
+              color: C.clay, fontSize: 11, fontWeight: 600, padding: "6px 9px", fontFamily: "inherit",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>Remove</button>
           )}
         </div>
       )}
@@ -6157,6 +6159,14 @@ function Today({ data, setData, coach, setSheet }) {
   };
   const patchSession = (id, p) => write({ extraSessions: extraSessions.map((x) => x.id === id ? { ...x, ...p } : x) });
   const dropSession = (id) => write({ extraSessions: extraSessions.filter((x) => x.id !== id) });
+  /* Clears the session and everything that belongs to it, and NOTHING else.
+     Written as an explicit list rather than a wipe so that a field added
+     later cannot start silently disappearing when she removes a class. */
+  const clearSession = () => write({
+    type: undefined, minutes: undefined, completed: false,
+    rpe: undefined, sets: undefined, during: undefined,
+    energyAfter: undefined, sessionNote: undefined, did: undefined, when: undefined,
+  });
   const totalMinutes = [Number(log?.minutes) || 0, ...extraSessions.map((x) => Number(x.minutes) || 0)]
     .reduce((a, b) => a + b, 0);
 
@@ -6442,10 +6452,43 @@ function Today({ data, setData, coach, setSheet }) {
                   </div>
                 </div>
 
-                {s?.resistance && !log?.completed && (
+                {/* ---- WHAT SHE ACTUALLY LIFTED, ON THIS DAY ---------------
+                     The class carried one fixed line of loads and the app
+                     showed it as though it were fact — "Dumbbells 4–8 kg ·
+                     Kettlebell 8–12 kg" on a day she used neither. That is a
+                     guess presented as a record, and it would be read back to
+                     her months later as one. The class line is a reminder
+                     now, clearly marked as last time's, and what she puts in
+                     the box is what gets stored against THIS session. */}
+                {(s?.resistance || s?.equipment || log?.loads) && (
                   <div style={{ marginTop: 14, padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
-                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>loads</div>
-                    <div style={{ fontSize: 13, lineHeight: 1.5 }}>{s.resistance}</div>
+                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em",
+                      textTransform: "uppercase", color: C.muted, marginBottom: 5 }}>
+                      weights and kit you used
+                    </div>
+                    {s?.resistance && (
+                      <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 8 }}>
+                        Usually: {s.resistance}
+                        {!log?.loads && (
+                          <button onClick={() => write({ loads: s.resistance })} className="tap" style={{
+                            border: "none", background: "transparent", cursor: "pointer", padding: "0 0 0 6px",
+                            fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                            same today
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                      <textarea rows={2} value={log?.loads ?? ""}
+                        onChange={(e) => write({ loads: e.target.value })}
+                        placeholder="8 kg kettlebell, 5 kg dumbbells — whatever you actually picked up"
+                        style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45, fontSize: 13 }} />
+                      <MicButton onText={(v) => write({ loads: v })} current={log?.loads || ""} />
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.45 }}>
+                      Leave it blank if there were no weights. This is stored against today,
+                      not against the class — so next month you can see what actually moved.
+                    </div>
                   </div>
                 )}
 
@@ -6487,6 +6530,41 @@ function Today({ data, setData, coach, setSheet }) {
                     <Btn kind="quiet" onClick={() => setChoosing((c) => !c)}>{choosing ? "Keep this class" : "Change class"}</Btn>
                   </div>
                 )}
+
+                {/* ---- LOGGED THE WRONG THING ----------------------------
+                     There was no way to undo this at all: the wrong class
+                     could be swapped but never removed, and a session logged
+                     by accident stayed on the record and in the count. Two
+                     taps, because it deletes something (rule 20) — and it
+                     only clears the session. The mood, the sleep, the
+                     shoulder reading and anything else you added that day
+                     are left exactly as they are. */}
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+                  {clearing ? (
+                    <div>
+                      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 9 }}>
+                        Remove <strong style={{ color: C.ink, fontWeight: 600 }}>{log.type}</strong> from
+                        {isToday ? " today" : " that day"}? Everything else you logged stays.
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => { clearSession(); setClearing(false); setChoosing(false); }}
+                          className="tap" style={{ flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
+                            border: "none", background: C.clay, color: "#fff", fontSize: 13, fontWeight: 600,
+                            fontFamily: "inherit" }}>Yes, remove it</button>
+                        <button onClick={() => setClearing(false)} className="tap" style={{
+                          flex: 1, padding: "11px 0", borderRadius: 10, cursor: "pointer",
+                          border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                          fontSize: 13, fontWeight: 600, fontFamily: "inherit" }}>Keep it</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => setClearing(true)} className="tap" style={{
+                      border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                      fontSize: 12, color: C.muted, fontFamily: "inherit" }}>
+                      Remove this session
+                    </button>
+                  )}
+                </div>
               </>
             )}
 
@@ -6587,13 +6665,35 @@ function Today({ data, setData, coach, setSheet }) {
                           onChange={(v) => patchSession(x.id, { energyAfter: v })}
                           max={5} lo="wiped" hi="great" />
                       )}
+                      {(cls?.resistance || cls?.equipment || x.loads) && (
+                        <div style={{ marginTop: 10 }}>
+                          <Note label="Weights and kit you used" value={x.loads}
+                            onChange={(v) => patchSession(x.id, { loads: v })} />
+                        </div>
+                      )}
                     </div>
                   );
                 })}
+                {/* THERE IS NO SAVE BUTTON, AND THAT WAS THE PROBLEM.
+                    Everything here writes to the device the moment it is
+                    typed or tapped — but nothing said so, so it read as
+                    unsaved, and adding a second session looked like the thing
+                    that committed the first. Saying it plainly costs one
+                    line and removes the doubt. */}
                 {(log?.type || extraSessions.length > 0) && (
-                  <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>
-                    {totalMinutes} min across {extraSessions.length + (log?.type ? 1 : 0)} session
-                    {extraSessions.length + (log?.type ? 1 : 0) === 1 ? "" : "s"}
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+                      {totalMinutes} min across {extraSessions.length + (log?.type ? 1 : 0)} session
+                      {extraSessions.length + (log?.type ? 1 : 0) === 1 ? "" : "s"}
+                    </span>
+                    <span style={{ fontSize: 11, color: C.moss, fontWeight: 600 }}>
+                      ✓ saved
+                    </span>
+                    <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, flexBasis: "100%" }}>
+                      Nothing here is waiting on you — there is no save button because every
+                      tap is written to this device as you make it. Add another only if you
+                      actually did another.
+                    </span>
                   </div>
                 )}
               </div>
@@ -10907,6 +11007,15 @@ ${about ? `- She tapped "${about}" and came here to ask about it. Answer that fi
 - Recent journal entries: ${(data.journal || []).slice(-6).map((e) => `${e.date}: ${e.text}`).join(" | ") || "none yet"}
 - Class notes she has written: ${(data.library || []).filter((w) => w.felt).map((w) => `${w.name}: ${w.felt}`).join(" | ") || "none yet"}
 - Loads she has recorded: ${(data.library || []).filter((w) => w.resistance).map((w) => `${w.name}: ${w.resistance}`).join(" | ") || "none yet"}
+- WHAT SHE ACTUALLY LIFTED, most recent first (this is the real record; the line above is only what the class usually calls for): ${(() => {
+    const out = [];
+    Object.keys(data.logs || {}).sort().reverse().forEach((d) => {
+      const l = data.logs[d];
+      if (l?.loads) out.push(`${d} ${l.type || "session"}: ${l.loads}`);
+      (l?.extraSessions || []).forEach((x) => { if (x.loads) out.push(`${d} ${x.type || "session"}: ${x.loads}`); });
+    });
+    return out.slice(0, 12).join(" | ") || "nothing recorded yet";
+  })()}
 
 HOW TO TALK TO HER — this matters more than any number above.
 
