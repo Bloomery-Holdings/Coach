@@ -1034,6 +1034,104 @@ const ladderFor = (ctx) => LADDER
 
 /* The next door down from whatever was just declined. Persistence lives in the
    offering, never in the asking: one rung at a time, and never back up. */
+
+/* ============================================================================
+   THE MONTHLY DEEP READ
+   ---------------------------------------------------------------------------
+   The one moment where the coach stops reacting and starts designing. Rule 8
+   says the review reads everything; this is the version that actually can,
+   because a model can read sentences and a rule cannot.
+
+   THE RULES ARE THE FLOOR, THE MODEL IS THE CEILING. The thirteen design rules
+   already produce a defensible block from evidence, offline, every time. That
+   never stops being true. The model gets the same evidence PLUS everything the
+   rules structurally cannot touch — the texture of what she actually wrote —
+   and may refine, reorder or overrule, with its reasoning shown beside theirs.
+
+   And NOTHING it returns becomes her month until it has been checked. A block
+   is seven days of kinds that exist. A goal she stated cannot silently vanish.
+   A constraint in the record cannot be contradicted. A profile entry without
+   dated evidence is not a belief, it is an assertion, and it is dropped. If
+   validation fails, the rule-based block stands and the app says so — it never
+   quietly serves her something unverified (rules 20, 23).
+========================================================================== */
+
+/* What the model is allowed to return. Kept as data so the prompt and the
+   validator can never drift apart. */
+const REVIEW_SHAPE = {
+  name: "a short name for the block, four words at most",
+  line: "one or two sentences to her, in the second person, saying what this month is for",
+  week: "exactly 7 entries, each one of: pilates, core, strength, move, cardio, rest",
+  reasoning: "3 to 6 short paragraphs: what you read, what changed, what you decided and why",
+  interpretation: "what her numbers actually did this month, in plain language, naming what is real and what is noise",
+  profile: "0 to 6 entries, each { claim, kind, evidence: [{ date, quote }] } — only things you can point at",
+  keptGoals: "the ids of every open goal you have kept in view",
+};
+
+const REVIEW_KINDS = ["pilates", "core", "strength", "move", "cardio", "rest"];
+
+/* THE GUARD. Everything below decides whether a returned month is allowed to
+   become her month. Deliberately strict and deliberately dumb — it checks
+   shape and consistency, never quality. */
+const validateReview = (parsed, ctx) => {
+  const errors = [];
+  const ok = (c, msg) => { if (!c) errors.push(msg); return c; };
+  if (!parsed || typeof parsed !== "object") return { ok: false, errors: ["nothing readable came back"] };
+
+  ok(typeof parsed.name === "string" && parsed.name.trim().length > 0 && parsed.name.length <= 40,
+    "the block has no usable name");
+  ok(typeof parsed.line === "string" && parsed.line.trim().length > 10,
+    "the block has no line explaining what it is for");
+  ok(Array.isArray(parsed.week) && parsed.week.length === 7,
+    `a week has to be 7 days, got ${Array.isArray(parsed.week) ? parsed.week.length : "none"}`);
+  if (Array.isArray(parsed.week)) {
+    const bad = parsed.week.filter((d) => !REVIEW_KINDS.includes(d));
+    ok(bad.length === 0, `${bad.join(", ")} ${bad.length === 1 ? "is not a kind of day" : "are not kinds of day"}`);
+    ok(parsed.week.some((d) => d !== "rest"), "a month of nothing but rest is not a block");
+  }
+  ok(typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 40,
+    "it did not show its reasoning");
+
+  /* Rule 9: her stated goals outrank the numbers, so they cannot quietly
+     disappear from a month designed for her. */
+  const open = (ctx.openGoals || []).map((g) => g.id);
+  if (open.length) {
+    const kept = Array.isArray(parsed.keptGoals) ? parsed.keptGoals : [];
+    const dropped = open.filter((id) => !kept.includes(id));
+    ok(dropped.length === 0, `it lost sight of ${dropped.length} goal${dropped.length === 1 ? "" : "s"} you set`);
+  }
+
+  /* Rule 19 and the shoulder: a physical constraint cannot be designed over. */
+  if (ctx.shoulderFrozen && Array.isArray(parsed.week))
+    ok(parsed.week.filter((d) => d === "strength").length <= (ctx.currentStrengthDays ?? 7),
+      "it added strength days while your shoulder is the thing talking");
+
+  /* A belief without dated evidence is an assertion. Dropped, not stored. */
+  const claims = Array.isArray(parsed.profile) ? parsed.profile : [];
+  const usable = claims.filter((p) =>
+    p && typeof p.claim === "string" && p.claim.trim().length > 5
+    && Array.isArray(p.evidence) && p.evidence.length > 0
+    && p.evidence.every((e) => e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)));
+  const rejected = claims.length - usable.length;
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    rejectedClaims: rejected,
+    block: errors.length ? null : {
+      name: parsed.name.trim(), line: parsed.line.trim(), week: parsed.week,
+      reasoning: parsed.reasoning.trim(),
+      interpretation: typeof parsed.interpretation === "string" ? parsed.interpretation.trim() : "",
+    },
+    profile: usable.map((p) => ({
+      id: "m" + Math.random().toString(36).slice(2, 9),
+      claim: p.claim.trim(),
+      kind: ["preference", "barrier", "motivator", "response", "limit", "routine"].includes(p.kind) ? p.kind : "response",
+      evidence: p.evidence.map((e) => ({ date: e.date, source: "said", quote: String(e.quote || "").slice(0, 200) })),
+      status: "active", hers: false, fromReview: true,
+    })),
+  };
+};
 const smallerDoor = (rungs, declinedId) => {
   if (!declinedId) return rungs[0] || null;
   const i = rungs.findIndex((r) => r.id === declinedId);
@@ -4482,6 +4580,10 @@ function useCoach(data) {
        The coach cannot design anything until it has a month of her actual
        numbers, so for these weeks its main job is making sure nothing goes
        unlogged — and telling her plainly why each thing matters. */
+    /* read once, outside the row builder, so the block does not reach into
+       browser storage while it is being described */
+    const backupDueRow = (() => { try { return backupDue(data); } catch (e) { return false; } })();
+
     const capture = (() => {
       const l = logs[t] || {};
       const mg = morning?.[t] || {};
@@ -4516,12 +4618,50 @@ function useCoach(data) {
             "In three months this will be the most useful thing you wrote.");
         }
       }
-      add("battery", "week", "This week's measurements", !!wkEntry,
-        "Every target the coach sets comes out of these numbers.");
-      add("benchmark", "month", "This month's benchmark", !!moEntry,
-        "Body composition and the heavier tests. Without two of these, nothing can be compared.");
-      add("whoop", "week", "WHOOP imported this week", importGap !== null && importGap < 8,
-        "One export backfills everything — recovery, sleep, heart rate, strain.");
+      add("battery", "week",
+        weeklyToday ? "Today is your measurement day"
+          : weeklyLate ? `This week's measurements — ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late`
+          : "This week's measurements",
+        !!wkEntry,
+        `Every target the coach sets comes out of these numbers. It rides on the first training day of the week — ${prettyShort(weeklyAssessDay)} — because you are already changed, already warm, already in the room.`);
+      add("benchmark", "month",
+        monthlyToday ? "Today is your benchmark day"
+          : monthlyLate ? `This month's benchmark — ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late`
+          : "This month's benchmark",
+        !!moEntry,
+        `Body composition and the heavier tests, on the first training day of the month — ${prettyShort(monthlyAssessDay)}. Without two of these, nothing can be compared to anything.`);
+      add("whoop", "week", "WHOOP imported this week", !settings.whoopConnected || (importGap !== null && importGap < 8),
+        "One export backfills everything — recovery, sleep, heart rate, strain. Recovery and the shoulder score can be typed by hand; nothing else can, so a stale import quietly ages every other signal.");
+
+      /* ---- rows that used to be cards of their own ---------------------
+         Eight separate cards said these things, each with its instruction
+         printed in full whether or not she had ever read it. One block of
+         rows, each actionable where it sits (rule 11), each explaining
+         itself only when asked. */
+      add("mobility", "week", "Mobility check", !mobDue,
+        "Seven tests, about ten minutes. The scores choose the ten minutes of drills you do after each session, so a stale battery means the drills are aimed at where you were, not where you are.");
+      add("backup", "block", "A copy off this device", !backupDueRow,
+        "Everything lives in this browser, on this device. Another device is a separate copy that never syncs. One tap sends a file you can drop into Drive.");
+
+      /* ---- the two quiet rows that stop being quiet --------------------
+         The record and the goals sit folded away on a normal day. The
+         moment either one is actually asking her something — a followed-up
+         issue, a goal due a score — it comes up here instead, because a
+         thing the app needs from her should never be behind a tap. */
+      if (issueFollowUp.length)
+        add("issue", "day",
+          issueFollowUp.length === 1
+            ? `You mentioned ${issueFollowUp[0].text} — how is it now?`
+            : `${issueFollowUp.length} things you mentioned — how are they now?`,
+          false,
+          "You told me about this two days ago. Whether it settled, stayed the same or got worse is the whole point of writing it down — without the second reading there is nothing to compare, and next time it happens I would be starting from scratch again.");
+      if (goalCheckDue.length)
+        add("goal", "week",
+          goalCheckDue.length === 1
+            ? `Try "${goalCheckDue[0].text}" and score it`
+            : `${goalCheckDue.length} of your goals are due a score`,
+          false,
+          "You score these by actually trying the thing, not by guessing. It is the only measure in the app that comes from what you said you wanted rather than what the app decided to measure, and it outranks the numbers when the month gets designed.");
 
       const due = rows.filter((r) => !r.done);
       const pct = rows.length ? Math.round(((rows.length - due.length) / rows.length) * 100) : 100;
@@ -4556,7 +4696,7 @@ function useCoach(data) {
 
     /* CALIBRATION — for the first block the coach's job is the logging.
        It leads with what's missing, because without it nothing else works. */
-    if (calibrating && capture.due.length) {
+    if (capture.due.length) {
       const first = capture.due[0];
       raise("day", capture.due.length > 3 ? "firm" : "push",
         `${first.label} is still open. ${first.why} This first month is the coach learning you — everything I design in September comes out of what you put in now.`);
@@ -5794,6 +5934,11 @@ function Today({ data, setData, coach, setSheet }) {
 
   const note = data.notes?.[coach.t];
 
+  /* Which folded row is open. Lifted to here so that a row in "Needs you"
+     can open the matching folded row rather than sending her hunting for
+     it — the demand and the means to answer it stay one tap apart. */
+  const [quietOpen, setQuietOpen] = useState(null);
+
   const [logDate, setLogDate] = useState(coach.t);
   const t = logDate;
   const isToday = logDate === coach.t;
@@ -5925,7 +6070,16 @@ function Today({ data, setData, coach, setSheet }) {
       <div style={{ fontSize: 13, color: C.muted, padding: "2px 4px", lineHeight: 1.5 }}>{weekLine}</div>
 
       <div style={{ padding: "0 2px" }}>
-        <WeekSpine coach={coach} selected={logDate} onPick={setLogDate} />
+        <WeekSpine coach={coach} selected={logDate} onPick={setLogDate} />        {/* The strip is seven days. Anything older than that had nowhere to go
+            — including sessions she did before this app could record them. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: C.muted }}>Or any earlier day</span>
+          <input type="date" value={logDate} max={coach.t}
+            onChange={(e) => { if (e.target.value) setLogDate(e.target.value); }}
+            style={{ padding: "6px 8px", borderRadius: 8, border: `1.5px solid ${C.line}`,
+              background: C.card, fontSize: 12, fontFamily: "inherit", color: C.ink }} />
+        </div>
+
         <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.45 }}>
           {isToday
             ? "Tap an earlier day to log or fix it."
@@ -5940,278 +6094,68 @@ function Today({ data, setData, coach, setSheet }) {
       </div>
 
       {/* ---- what you need in the moment, nothing else ---- */}
-      {/* ---- morning recovery: entered before training, shapes the day ---- */}
-        {isToday && (
-          <Card style={{ background: coach.recovery ? C.card : C.pist }}>
-            <Eyebrow color={coach.recovery ? C.muted : C.signal}>Before anything else</Eyebrow>
-            <Field label="Today's WHOOP recovery" unit="%" value={coach.recValue}
-              onChange={(v) => setData((d) => ({ ...d, morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } }))} />
-
-            {/* The 24-hour rule: how a joint feels the morning after load is
-                what decides whether the load was right. Asked here, on waking,
-                because asked during the session it measures something else. */}
-            {data.settings.shoulderInjury && coach.trainedYesterday && (
-              <div style={{ marginTop: 4, marginBottom: 14, padding: "13px 15px",
-                background: C.chalk, borderRadius: 12 }}>
-                <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em",
-                  textTransform: "uppercase", color: C.muted, marginBottom: 3 }}>
-                  shoulder this morning
-                </div>
-                <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 10 }}>
-                  You trained yesterday. How is it now, before you do anything?
-                </div>
-                <div style={{ display: "flex", gap: 5 }}>
-                  {[1, 2, 3, 4, 5].map((n) => {
-                    const on = Number(coach.shoulderAM) === n;
-                    return (
-                      <button key={n} className="tap"
-                        onClick={() => setData((d) => ({ ...d, morning: { ...d.morning,
-                          [coach.t]: { ...(d.morning?.[coach.t] || {}), shoulderAM: String(n) } } }))}
-                        style={{
-                          flex: 1, padding: "11px 0", borderRadius: 9, cursor: "pointer",
-                          fontSize: 13, fontWeight: on ? 700 : 500,
-                          fontFamily: "'IBM Plex Mono', monospace",
-                          border: `1.5px solid ${on ? C.signal : C.line}`,
-                          background: on ? C.signal : "transparent", color: on ? "#fff" : C.muted,
-                        }}>{n}</button>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                  <span style={{ fontSize: 10.5, color: C.muted }}>sore</span>
-                  <span style={{ fontSize: 10.5, color: C.muted }}>no issue</span>
-                </div>
-                {coach.shoulderVerdict && (
-                  <div style={{ marginTop: 11, paddingTop: 11, borderTop: `1px solid ${C.line}`,
-                    fontSize: 12.5, lineHeight: 1.55, color: coach.shoulderVerdict.color }}>
-                    {coach.shoulderVerdict.text}
-                  </div>
-                )}
-              </div>
-            )}
-            {!coach.recovery && (
-            <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 12 }}>
-              Open WHOOP and type today's recovery percentage here. It's the one number that decides
-              which class you get and how long it runs — without it I'm guessing.
-            </div>
-          )}
-          {coach.recovery ? (
-              <div style={{
-                padding: "12px 14px", borderRadius: 10, marginTop: 2,
-                background: coach.recovery.key === "rest" ? "rgba(194,84,47,0.09)" : coach.recovery.key === "easy" ? C.pist : C.mint,
-              }}>
-                <div className="disp" style={{ fontSize: 15, marginBottom: 3,
-                  color: coach.recovery.key === "rest" ? C.clay : C.ink }}>{coach.recovery.label}</div>
-                <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted }}>{coach.recovery.line}</div>
-                <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 7 }}>
-                  your normal sits at {coach.recovery.base}%
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
-                Add it and I'll tell you how hard to go today. Five seconds, and it decides everything else.
-              </div>
-            )}
-            {coach.shoulderFrozen && (
-              <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: "rgba(194,84,47,0.09)" }}>
-                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.clay }}>
-                  Shoulder comfort came in low twice this week. Overhead load is frozen — press, lateral raise
-                  and plank up-downs stay where they are until it settles.
-                </div>
-              </div>
-            )}
-            <div style={{ marginTop: 12 }}>
-              <Btn kind="quiet" onClick={() => setSheet({ kind: "whooplog" })}>Your WHOOP log</Btn>
-            </div>
-          </Card>
-        )}
-
-          {!isToday && (
-            <div style={{ background: C.pist, borderRadius: 14, padding: "12px 16px", fontSize: 13, lineHeight: 1.5, color: C.signal }}>
-              You're editing {parse(logDate).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}.
-            </div>
-          )}
-
-      {/* ---- CALIBRATION CHECKLIST ---------------------------------------
-               Month one has one job: get the data in. This is the coach
-               walking her through it rather than assuming she knows. */}
-      {isToday && coach.calibrating && (
-        <Card style={{ background: coach.capture.complete ? C.mint : C.pist }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
-            <Eyebrow color={coach.capture.complete ? C.moss : C.signal}>
-              {coach.capture.complete ? "All logged" : "Still to log"}
-            </Eyebrow>
-            <span className="mono" style={{ fontSize: 10, color: C.muted }}>
-              week {coach.weeksIntoBlock} of {coach.livePhase?.weeks} · {coach.capture.pct}%
+      {/* ---- ZONE 1: THE COACH SPEAKS FIRST ------------------------------
+               Rule 3 says the coach leads and never waits. It used to be the
+               tenth thing on this page, below ten cards of admin. */}
+      {/* ---- THE COACH SPEAKS FIRST -------------------------------------
+               Unprompted, every day, before she asks anything. The loudest
+               item on the standing agenda, plus a way into the rest of it. */}
+      {isToday && coach.leading.length > 0 && (
+        <Card style={{
+          background: coach.leading[0].tone === "firm" ? "rgba(194,84,47,0.07)"
+            : coach.leading[0].tone === "warm" ? C.mint : C.pist,
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+            <Eyebrow color={coach.leading[0].tone === "firm" ? C.clay
+              : coach.leading[0].tone === "warm" ? C.moss : C.signal}>Your coach</Eyebrow>
+            <span className="mono" style={{ fontSize: 9, letterSpacing: "0.11em",
+              textTransform: "uppercase", color: C.muted }}>
+              {SCOPE_LABEL[coach.leading[0].scope] || "today"}
             </span>
           </div>
 
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: C.ink, marginBottom: 14 }}>
-            {coach.capture.complete
-              ? "Nothing outstanding. This month is about building the record the next block gets designed from, and today's is complete."
-              : "This first month I'm learning you, so nothing here should go unlogged. Everything below can be done right here."}
-          </div>
+          <div style={{ fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>{coach.leading[0].text}</div>
 
-          {data.sample && (
-            <div style={{ padding: "12px 14px", background: "rgba(194,84,47,0.09)", borderRadius: 11,
-              marginBottom: 14 }}>
-              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
-                <strong style={{ fontWeight: 600 }}>Some of these are ticked by the sample data, not by you.</strong>
-                {" "}Demo history is loaded, so recovery, benchmarks and imports look done when they
-                aren't. Clear it before this month means anything — the whole point is that the next
-                block gets designed from your numbers.
-              </div>
-              <div style={{ marginTop: 11 }}>
-                {clearing ? (
-                  <>
-                    <div style={{ fontSize: 12, lineHeight: 1.5, color: C.ink, marginBottom: 9 }}>
-                      This removes the demo history — logs, mornings, batteries, benchmarks and journal.
-                      It cannot be undone.
-                    </div>
-                    <Btn kind="signal" onClick={() => {
-                      setData((d) => ({ ...d, logs: {}, morning: {}, weekly: {}, monthly: {},
-                        journal: [], sample: false }));
-                      setClearing(false);
-                    }}>Yes, clear it</Btn>
-                    <div style={{ marginTop: 7 }}>
-                      <Btn kind="quiet" onClick={() => setClearing(false)}>Keep it for now</Btn>
-                    </div>
-                  </>
-                ) : (
-                  <Btn kind="signal" onClick={() => setClearing(true)}>Clear the sample data</Btn>
-                )}
-              </div>
+          {coach.leading.slice(1).map((a, i) => (
+            <div key={i} style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
+              display: "flex", alignItems: "baseline", gap: 9 }}>
+              <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.11em", textTransform: "uppercase",
+                color: C.muted, minWidth: 46 }}>{SCOPE_LABEL[a.scope] || "today"}</span>
+              <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: C.muted }}>{a.text}</span>
+            </div>
+          ))}
+
+          <div style={{ marginTop: 14 }}>
+            <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
+          </div>
+          <button onClick={() => setSheet({ kind: "profile" })} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
+            fontSize: 11.5, color: C.signal, display: "block" }}>
+            What I think I know about you &rsaquo;
+          </button>
+          {coach.agenda.length > coach.leading.length && (
+            <div style={{ marginTop: 8 }}>
+              <Btn kind="quiet" onClick={() => setSheet({ kind: "briefing" })}>
+                Everything your coach is watching ({coach.agenda.length})
+              </Btn>
             </div>
           )}
-
-          {coach.capture.rows.map((r) => {
-            const sheetFor = { whoop: "whoop", battery: "weekly", benchmark: "monthly" }[r.id];
-            return (
-              <div key={r.id} style={{ padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  <span style={{ flexShrink: 0, width: 17, height: 17, borderRadius: 17, marginTop: 1,
-                    border: `1.5px solid ${r.done ? C.moss : C.line}`,
-                    background: r.done ? C.moss : "transparent", color: "#fff",
-                    fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {r.done ? "✓" : ""}
-                  </span>
-                  <span style={{ flex: 1 }}>
-                    <span style={{ display: "block", fontSize: 13, lineHeight: 1.4,
-                      color: r.done ? C.muted : C.ink, fontWeight: r.done ? 400 : 600 }}>
-                      {r.label}
-                    </span>
-                    {!r.done && (
-                      <span style={{ display: "block", fontSize: 11.5, lineHeight: 1.45, color: C.muted, marginTop: 3 }}>
-                        {r.why}
-                      </span>
-                    )}
-                  </span>
-                  {!r.done && sheetFor && (
-                    <button className="tap" onClick={() => setSheet({ kind: sheetFor,
-                      periodKey: r.id === "battery" ? coach.ws : coach.mk })}
-                      style={{ border: "none", background: "transparent", cursor: "pointer",
-                        fontSize: 11.5, color: C.signal, fontWeight: 600, padding: 0, flexShrink: 0 }}>
-                      open
-                    </button>
-                  )}
-                </div>
-
-                {/* do it here. Nothing on this list sends her hunting for a screen. */}
-                {!r.done && r.id === "recovery" && (
-                  <div style={{ marginTop: 9, marginLeft: 27 }}>
-                    <Field label="" unit="%" value={coach.recValue}
-                      onChange={(v) => setData((d) => ({ ...d, morning: { ...d.morning,
-                        [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } }))} />
-                  </div>
-                )}
-
-                {!r.done && r.id === "shoulderAM" && (
-                  <div style={{ marginTop: 9, marginLeft: 27, display: "flex", gap: 5 }}>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} className="tap"
-                        onClick={() => setData((d) => ({ ...d, morning: { ...d.morning,
-                          [coach.t]: { ...(d.morning?.[coach.t] || {}), shoulderAM: String(n) } } }))}
-                        style={{ flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer",
-                          fontSize: 12.5, fontFamily: "'IBM Plex Mono', monospace",
-                          border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted }}>
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {!r.done && r.id === "session" && (
-                  <div style={{ marginTop: 9, marginLeft: 27 }}>
-                    <Btn kind="signal" onClick={() => write({ completed: true,
-                      type: log?.type || coach.prescribed?.name,
-                      prescribed: coach.prescribed?.name || null,
-                      minutes: log?.minutes || coach.prescribed?.minutes })}>
-                      Mark today done
-                    </Btn>
-                  </div>
-                )}
-
-                {!r.done && r.id === "rpe" && (
-                  <div style={{ marginTop: 4, marginLeft: 27 }}>
-                    <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
-                  </div>
-                )}
-
-                {!r.done && r.id === "sets" && (
-                  <div style={{ marginTop: 4, marginLeft: 27 }}>
-                    <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />
-                  </div>
-                )}
-
-                {!r.done && r.id === "during" && (
-                  <div style={{ marginLeft: 27 }}>
-                    <DuringTap value={log?.during} onChange={(v) => write({ during: v })} />
-                  </div>
-                )}
-
-                {!r.done && r.id === "felt" && (
-                  <div style={{ marginTop: 9, marginLeft: 27, display: "flex", gap: 5 }}>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} className="tap" onClick={() => write({ energyAfter: String(n) })}
-                        style={{ flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer",
-                          fontSize: 12.5, fontFamily: "'IBM Plex Mono', monospace",
-                          border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted }}>
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {!r.done && r.id === "note" && (
-                  <div style={{ marginTop: 9, marginLeft: 27, display: "flex", gap: 8, alignItems: "flex-end" }}>
-                    <textarea rows={2} value={log?.sessionNote || ""}
-                      onChange={(e) => write({ sessionNote: e.target.value })}
-                      placeholder="A line about how it went — or hold the mic and say it"
-                      style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
-                    <MicButton onText={(v) => write({ sessionNote: v })} current={log?.sessionNote || ""} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </Card>
       )}
 
-      {/* ---- EFFORT, ALWAYS FINDABLE -------------------------------------
-               Load is minutes x effort, so a session without an effort score
-               is a session the app can't count properly. During calibration
-               the checklist owns this; afterwards it stands on its own. */}
-      {isToday && !coach.calibrating && log?.completed && !log?.rpe && (
-        <Card style={{ background: C.pist }}>
-          <Eyebrow color={C.signal}>Before you put the phone down</Eyebrow>
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 2 }}>
-            Session's logged. It needs an effort score to count properly — one tap, and it's the
-            number Effort, Balance and Coverage are all built from.
-          </div>
-          <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
-          {log?.rpe && <SetsTap value={log?.sets} onChange={(v) => write({ sets: v })} />}
-        </Card>
-      )}
+
+      {/* ---- ZONE 2: NEEDS YOU -------------------------------------------
+               One block of rows in place of eight separate cards. A row is
+               here only while it needs her; the block vanishes when nothing
+               does. Every instruction those cards printed in full now waits
+               behind its title. */}
+      {isToday && <NeedsYou data={data} setData={setData} coach={coach} setSheet={setSheet} write={write} log={log} openQuiet={setQuietOpen} />}
+
+      {/* ---- the one decision the app cannot explain ---- */}
+      {isToday && <WhyCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+
+      {/* ---- ZONE 3: THIS MONTH, AND WHY IT LANDED THAT WAY ---- */}
+      {isToday && <MonthPlanCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
       {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
@@ -6223,8 +6167,6 @@ function Today({ data, setData, coach, setSheet }) {
         <LadderCard data={data} setData={setData} coach={coach} />
       )}
 
-      {/* The one decision the app cannot explain, asked once, gone tomorrow. */}
-      {isToday && <WhyCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
       {/* THE RETURN. What determines whether a break becomes a dropout is the
           response to it — self-compassion predicts coming back, shame predicts
@@ -6262,25 +6204,27 @@ function Today({ data, setData, coach, setSheet }) {
         </Card>
       )}
 
-      {isToday && coach.mobDue && (
-        <Card style={{ background: C.pist }}>
-          <Eyebrow color={C.signal}>Mobility check</Eyebrow>
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 12 }}>
-            {coach.mobDaysAgo === null
-              ? "Seven tests, about ten minutes, and they set what your daily mobility work should be. The strength battery measures what you can move — this measures whether your body still goes where it should."
-              : `${coach.mobDaysAgo} days since the last one. Same day, same warm-up state, or the numbers won't compare.`}
-          </div>
-          <Btn kind="signal" onClick={() => setSheet({ kind: "mobility" })}>
-            {coach.mobDaysAgo === null ? "Take the first one" : "Do this week's"}
-          </Btn>
-        </Card>
+      {/* ---- ZONE 5: THE QUIET THINGS ------------------------------------
+               Four cards that used to sit open all day whether or not they
+               had anything to say. Folded to one line each; the card itself
+               is unchanged inside. Anything genuinely asking her something
+               has already come up in "Needs you" above, and tapping it
+               there opens the row here. */}
+      {isToday && (
+        <QuietRows open={quietOpen} setOpen={setQuietOpen} rows={[
+          { id: "record", title: "Anything you've noticed", count: coach.openIssues.length,
+            node: <RecordCard data={data} setData={setData} coach={coach} setSheet={setSheet} /> },
+          { id: "goals", title: "What you want to be able to do", count: coach.openGoals.length,
+            node: <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} /> },
+          { id: "drills", title: "Today's ten minutes", count: coach.dailyDrills.list.length,
+            node: coach.dailyDrills.list.length
+              ? <DrillsCard coach={coach} setSheet={setSheet} /> : null },
+          { id: "body", title: "Body work",
+            node: <BodyWorkCard log={log} write={write} isToday={isToday} /> },
+        ]} />
       )}
 
-      {isToday && <RecordCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
-      {isToday && <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
-      {isToday && <DrillsCard coach={coach} setSheet={setSheet} />}
-
-      <BodyWorkCard log={log} write={write} isToday={isToday} />
+      {!isToday && <BodyWorkCard log={log} write={write} isToday={isToday} />}
 
       {/* ---- THE FIVE VITALS ---------------------------------------------
                Five numbers, always the same five, always in the same order.
@@ -6333,116 +6277,6 @@ function Today({ data, setData, coach, setSheet }) {
             <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
               fontSize: 12, lineHeight: 1.5, color: C.muted }}>
               Log today's session and an effort score appears here — that's what these five are built on.
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ---- WHOOP import reminder. A browser app can't push a notification
-               to her phone, so the app asks in the one place she looks daily. */}
-      {isToday && data.settings.whoopConnected && coach.importDue && (
-        <Card style={{ background: coach.importGap !== null && coach.importGap >= 14 ? "rgba(194,84,47,0.07)" : C.pist }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
-            <Eyebrow color={C.signal}>WHOOP</Eyebrow>
-            <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>weekly</span>
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.55, color: C.ink }}>
-            {coach.importGap === null
-              ? "No WHOOP data imported yet."
-              : `Your last WHOOP data is from ${coach.importGap} days ago.`}
-            {" "}One export covers everything since, so importing once a week loses nothing.
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <Btn kind="signal" onClick={() => setSheet({ kind: "whoop" })}>Import now</Btn>
-          </div>
-        </Card>
-      )}
-
-      {/* ---- THE SAVE ACTUALLY FAILED -----------------------------------
-               A browser store can be full, or blocked, or private-mode. When
-               the write fails the app looks completely normal and the day's
-               logging is gone at the next open. Rule 20 says her data is
-               permanent, and rule 23 says be honest about what is missing:
-               this is the one thing the app must never keep to itself. */}
-      {isToday && didStoreWriteFail() && (
-        <Card style={{ background: "rgba(194,84,47,0.09)" }}>
-          <Eyebrow color={C.clay}>Not saved</Eyebrow>
-          <div style={{ fontSize: 14, lineHeight: 1.55, color: C.ink }}>
-            The last thing you entered did not make it into this device's storage. Nothing you have
-            already saved is affected, but today's entries are only on this screen. Take a copy now
-            and I will keep trying in the background.
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <BackupNowButton data={data} label="Take a copy now" />
-          </div>
-        </Card>
-      )}
-
-      {/* ---- NOTHING HAS LEFT THIS DEVICE -------------------------------
-               Her instruction was regular backups off the device, to Drive or
-               OneDrive. The app cannot push, so it asks - quietly, in the one
-               place she looks daily, and only once it has something to lose. */}
-      {isToday && !data.sample && backupDue(data) && (
-        <Card style={{ background: C.pist }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
-            <Eyebrow color={C.signal}>Backup</Eyebrow>
-            <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
-              {backupAgeDays() === null ? "never" : `${backupAgeDays()} days ago`}
-            </span>
-          </div>
-          <div style={{ fontSize: 14, lineHeight: 1.55, color: C.ink }}>
-            {backupAgeDays() === null
-              ? `You have ${Object.keys(data.logs || {}).length} days of your own logging on this device and no copy of it anywhere else.`
-              : `Your last copy off this device was ${backupAgeDays()} days ago.`}
-            {" "}One tap sends a file you can drop straight into OneDrive or Drive.
-          </div>
-          <div style={{ marginTop: 14 }}>
-            <BackupNowButton data={data} />
-          </div>
-        </Card>
-      )}
-
-      {/* ---- THE COACH SPEAKS FIRST -------------------------------------
-               Unprompted, every day, before she asks anything. The loudest
-               item on the standing agenda, plus a way into the rest of it. */}
-      {isToday && coach.leading.length > 0 && (
-        <Card style={{
-          background: coach.leading[0].tone === "firm" ? "rgba(194,84,47,0.07)"
-            : coach.leading[0].tone === "warm" ? C.mint : C.pist,
-        }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-            <Eyebrow color={coach.leading[0].tone === "firm" ? C.clay
-              : coach.leading[0].tone === "warm" ? C.moss : C.signal}>Your coach</Eyebrow>
-            <span className="mono" style={{ fontSize: 9, letterSpacing: "0.11em",
-              textTransform: "uppercase", color: C.muted }}>
-              {SCOPE_LABEL[coach.leading[0].scope] || "today"}
-            </span>
-          </div>
-
-          <div style={{ fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>{coach.leading[0].text}</div>
-
-          {coach.leading.slice(1).map((a, i) => (
-            <div key={i} style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
-              display: "flex", alignItems: "baseline", gap: 9 }}>
-              <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.11em", textTransform: "uppercase",
-                color: C.muted, minWidth: 46 }}>{SCOPE_LABEL[a.scope] || "today"}</span>
-              <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: C.muted }}>{a.text}</span>
-            </div>
-          ))}
-
-          <div style={{ marginTop: 14 }}>
-            <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
-          </div>
-          <button onClick={() => setSheet({ kind: "profile" })} className="tap" style={{
-            border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
-            fontSize: 11.5, color: C.signal, display: "block" }}>
-            What I think I know about you &rsaquo;
-          </button>
-          {coach.agenda.length > coach.leading.length && (
-            <div style={{ marginTop: 8 }}>
-              <Btn kind="quiet" onClick={() => setSheet({ kind: "briefing" })}>
-                Everything your coach is watching ({coach.agenda.length})
-              </Btn>
             </div>
           )}
         </Card>
@@ -9693,6 +9527,272 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
    higher or lower number is better. Ids never change once created, so renaming
    a test keeps every reading it has ever had (rules 12, 13 and 20).
    ==========================================================================*/
+
+/* ============================================================================
+   NEEDS YOU
+   ---------------------------------------------------------------------------
+   One block, compact rows, one under another, in fixed priority order. A row
+   exists only while it needs her, and the whole block disappears when nothing
+   does — absent, not empty. There is no all-done badge to earn, because that
+   is a scoreboard and rule 25 has views about scoreboards.
+
+   This replaces eight separate cards, each of which printed its instruction in
+   full whether or not she had ever read it. The instruction is not deleted —
+   it moves behind the title. Tap the title, it opens in place; tap again, it
+   closes. The small circled i is the only signal, and it appears only where an
+   explanation exists (progressive disclosure, rule 11, rule 14).
+   ==========================================================================*/
+const InfoTitle = ({ children, why, open, onToggle }) => (
+  <button onClick={why ? onToggle : undefined} className="tap" style={{
+    border: "none", background: "transparent", padding: 0, textAlign: "left", flex: 1,
+    cursor: why ? "pointer" : "default", fontFamily: "inherit",
+  }}>
+    <span style={{ fontSize: 13.5, fontWeight: 600, color: open ? C.signal : C.ink }}>{children}</span>
+    {why && (
+      <span style={{
+        display: "inline-block", width: 13, height: 13, marginLeft: 6, verticalAlign: "1px",
+        borderRadius: 999, border: `1px solid ${open ? C.signal : "#C9B8C4"}`,
+        color: open ? C.signal : C.muted, fontSize: 8.5, lineHeight: "11px", textAlign: "center",
+        fontFamily: "Georgia, serif", fontStyle: "italic",
+      }}>i</span>
+    )}
+  </button>
+);
+
+function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
+  const [open, setOpen] = useState(null);
+  const rows = (coach.capture?.due || []);
+  const failed = didStoreWriteFail();
+  if (!rows.length && !failed) return null;
+
+  const toggle = (id) => setOpen(open === id ? null : id);
+  const chip = (label, onClick, strong) => (
+    <button key={label} onClick={onClick} className="tap" style={{
+      padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 11.5, fontWeight: 600,
+      border: `1.5px solid ${strong ? C.signal : C.line}`,
+      background: strong ? C.signal : C.chalk, color: strong ? C.chalk : C.muted,
+      fontFamily: "inherit", whiteSpace: "nowrap",
+    }}>{label}</button>
+  );
+
+  /* the control that belongs to each row, actionable where it sits */
+  const control = (r) => {
+    switch (r.id) {
+      case "rhythm":   return chip("set it", () => setSheet({ kind: "settings-rhythm" }), true);
+      case "recovery": return (
+        <input inputMode="numeric" placeholder="%" defaultValue=""
+          onBlur={(e) => { const v = e.target.value.trim(); if (v) setData((d) => ({ ...d,
+            morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } })); }}
+          style={{ width: 62, padding: "7px 8px", borderRadius: 8, border: `1.5px solid ${C.line}`,
+            background: C.chalk, fontSize: 13, textAlign: "center", fontFamily: "inherit" }} />
+      );
+      case "shoulderAM": return (
+        <div style={{ display: "flex", gap: 3 }}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} onClick={() => setData((d) => ({ ...d,
+              morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), shoulderAM: String(n) } } }))}
+              className="tap mono" style={{ width: 24, height: 26, borderRadius: 6, cursor: "pointer",
+                border: `1.5px solid ${C.line}`, background: C.chalk, color: C.muted, fontSize: 11 }}>{n}</button>
+          ))}
+        </div>
+      );
+      case "session":  return chip("mark done", () => write({ completed: true, type: coach.prescribed?.name || "Session", minutes: coach.prescribed?.minutes || 45 }), true);
+      case "rpe":      return chip("rate it", () => setSheet({ kind: "briefing" }));
+      case "sets":
+      case "during":
+      case "felt":
+      case "note":     return chip("add it", () => setSheet({ kind: "briefing" }));
+      case "battery":  return chip("open", () => setSheet({ kind: "weekly" }), true);
+      case "benchmark":return chip("open", () => setSheet({ kind: "monthly" }), true);
+      case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true);
+      case "mobility": return chip("open", () => setSheet({ kind: "mobility" }), true);
+      case "backup":   return <BackupNowButton data={data} label="back up" compact />;
+      /* these two open the folded row below rather than a sheet, so she
+         answers in the same place the record already lives */
+      case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true);
+      case "goal":     return chip("score it", () => openQuiet && openQuiet("goals"), true);
+      default:         return null;
+    }
+  };
+
+  return (
+    <Card style={{ background: C.pist }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
+        <Eyebrow color={C.signal}>Needs you</Eyebrow>
+        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{rows.length + (failed ? 1 : 0)}</span>
+      </div>
+
+      {/* the only one that jumps the queue: her last entry did not save */}
+      {failed && (
+        <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: C.clay }}>The last thing you entered did not save</div>
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, margin: "3px 0 8px" }}>
+            Nothing already saved is affected, but today is only on this screen.
+          </div>
+          <BackupNowButton data={data} label="Take a copy now" />
+        </div>
+      )}
+
+      {rows.map((r, i) => (
+        <div key={r.id} style={{ borderTop: i || failed ? `1px solid ${C.line}` : "none" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
+            <InfoTitle why={r.why} open={open === r.id} onToggle={() => toggle(r.id)}>{r.label}</InfoTitle>
+            {control(r)}
+          </div>
+          {open === r.id && r.why && (
+            <div style={{ background: C.card, borderRadius: 10, padding: "10px 12px", margin: "0 0 10px" }}>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{r.why}</div>
+            </div>
+          )}
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/* ============================================================================
+   THIS MONTH, AND WHY IT LANDED THAT WAY
+   ---------------------------------------------------------------------------
+   Rule 8 says the design rules are visible in the app, never a black box, and
+   rule 12 says the coach proposes and she disposes. So at the start of a block
+   the landing page shows the month itself: the shape of the week, what the
+   coach read to arrive at it, which rules fired, and a way to argue.
+
+   It fades out of the way once the month is under way — it is loud in week one
+   and a single quiet line after that, because a plan you have already read
+   should not occupy the top of the page for four weeks.
+   ==========================================================================*/
+function MonthPlanCard({ data, setData, coach, setSheet }) {
+  const [open, setOpen] = useState(false);
+  const ph = coach.livePhase;
+  if (!ph) return null;
+  const week = ph.week || [];
+  const firstWeek = (coach.weeksIntoBlock ?? 0) <= 1;
+  const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+
+  return (
+    <Card style={{ background: firstWeek ? C.mint : C.card }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
+        <Eyebrow color={firstWeek ? C.moss : C.muted}>
+          {firstWeek ? "This month" : `Week ${(coach.weeksIntoBlock ?? 0) + 1} of ${ph.weeks}`}
+        </Eyebrow>
+        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+          {coach.blockWeeksLeft > 0 ? `${coach.blockWeeksLeft} week${coach.blockWeeksLeft === 1 ? "" : "s"} left` : "last week"}
+        </span>
+      </div>
+
+      <div className="disp" style={{ fontSize: firstWeek ? 20 : 16, marginBottom: 4 }}>{ph.name}</div>
+      {ph.line && (
+        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>{ph.line}</div>
+      )}
+
+      {/* the shape of the week, so the month is a picture rather than a claim */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+        {week.map((kind, i) => {
+          const b = BLOCKS[kind] || { label: kind, color: C.muted };
+          return (
+            <div key={i} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ height: 26, borderRadius: 7, background: kind === "rest" ? "transparent" : (b.color || C.pist),
+                border: kind === "rest" ? `1px dashed ${C.line}` : "none",
+                display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="mono" style={{ fontSize: 8, color: kind === "rest" ? C.muted : "#fff" }}>
+                  {kind === "rest" ? "—" : (b.label || kind).slice(0, 3).toLowerCase()}
+                </span>
+              </div>
+              <div className="mono" style={{ fontSize: 8, color: C.muted, marginTop: 3 }}>{DOW[i]}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button onClick={() => setOpen(!open)} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: 0,
+        fontSize: 11.5, color: C.signal, fontFamily: "inherit" }}>
+        {open ? "Hide the reasoning" : "Why it landed this way"} {open ? "▴" : "▾"}
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+          {(ph.basis || []).length ? (ph.basis || []).map((b, i) => (
+            <div key={i} style={{ fontSize: 12.5, lineHeight: 1.6, color: C.ink, marginBottom: 8 }}>{b}</div>
+          )) : (
+            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: C.muted }}>
+              This is the calibration month, so nothing was designed from your data yet — there wasn't any.
+              Its whole job is to make sure nothing goes unlogged, so next month has something real to be built from.
+            </div>
+          )}
+
+          {(ph.firedRules || []).length > 0 && (
+            <div style={{ marginTop: 6 }}>
+              <div className="mono" style={{ fontSize: 9, letterSpacing: "0.1em", textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
+                Rules that fired
+              </div>
+              {(ph.firedRules || []).map((id) => {
+                const rule = DESIGN_RULES.find((r) => r.id === id);
+                if (!rule) return null;
+                return (
+                  <div key={id} style={{ marginBottom: 7 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 600 }}>{rule.test}</div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45 }}>{rule.does} — {rule.why}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Btn kind="ghost" onClick={() => setSheet({ kind: "chat", about: "this month's plan",
+                seed: `About ${ph.name} — ` })}>Argue with it</Btn>
+            </div>
+            <div style={{ flex: 1 }}>
+              <Btn kind="ghost" onClick={() => setSheet({ kind: "program" })}>Change it</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ============================================================================
+   THE QUIET ROWS
+   ---------------------------------------------------------------------------
+   Four things sit on Today permanently and ask nothing of her: the record, her
+   goals, body work, and the day's drills. They are invitations, not demands,
+   and a full card each is three hundred words of standing furniture.
+
+   So they collapse to a line and open where they sit. Nothing inside them
+   changes — the same cards, one tap away. And the moment one of them HAS a
+   demand (a record entry due its follow-up, a goal due its weekly score) it
+   leaves this list and appears in Needs you instead. One rule, everywhere: it
+   is in Needs you while it needs her, and a quiet row when it doesn't.
+   ==========================================================================*/
+function QuietRows({ rows, open, setOpen }) {
+  const live = rows.filter((r) => r && r.node);
+  if (!live.length) return null;
+  return (
+    <Card style={{ padding: "4px 16px" }}>
+      {live.map((r, i) => (
+        <div key={r.id} style={{ borderTop: i ? `1px solid ${C.line}` : "none" }}>
+          <button onClick={() => setOpen(open === r.id ? null : r.id)} className="tap" style={{
+            width: "100%", border: "none", background: "transparent", cursor: "pointer",
+            padding: "13px 0", display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 10, fontFamily: "inherit", textAlign: "left" }}>
+            <span style={{ fontSize: 13.5, fontWeight: 500, color: open === r.id ? C.signal : C.ink }}>
+              {r.title}
+              {r.count > 0 && (
+                <span className="mono" style={{ fontSize: 10, color: C.muted, marginLeft: 7 }}>{r.count}</span>
+              )}
+            </span>
+            <span style={{ fontSize: 15, color: C.muted, lineHeight: 1 }}>{open === r.id ? "−" : "+"}</span>
+          </button>
+          {open === r.id && <div style={{ margin: "0 -16px 10px" }}>{r.node}</div>}
+        </div>
+      ))}
+    </Card>
+  );
+}
 function MobilityEditor({ data, setData, coach, close }) {
   const [tab, setTab] = useState("tests");
   const [openId, setOpenId] = useState(null);
