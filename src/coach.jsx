@@ -1805,7 +1805,11 @@ const C = {
 };
 
 const FONTS = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,300&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+/* The bold weights are loaded because she asked for the card titles in bold
+   and a weight the browser has not been given is faked, which looks smeared on
+   a phone. Same three families as before - rule 28 locks which fonts, not
+   which weights of them. */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300&family=Hanken+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
 * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 .disp { font-family: 'Fraunces', Georgia, serif; letter-spacing: -0.01em; font-variation-settings: 'SOFT' 60, 'WONK' 1; }
 .body { font-family: 'Hanken Grotesk', system-ui, sans-serif; }
@@ -1910,7 +1914,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 33";
+const BUILD = "8 August 2026 · 34";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5260,14 +5264,18 @@ const Card = ({ children, style = {}, ...p }) => (
 );
 
 const Eyebrow = ({ children, color = C.muted }) => (
-  <div className="mono" style={{ fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color, marginBottom: 8 }}>{children}</div>
+  <div className="mono" style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color, marginBottom: 8 }}>{children}</div>
 );
 
-const WeekSpine = ({ coach, big = false, selected, onPick }) => {
+const WeekSpine = ({ coach, big = false, selected, onPick, days }) => {
   const size = big ? 46 : 32;
+  /* Her question, 8 August: "if a week ends and I want to go back to the weeks
+     before, how do I do that?" The strip can now be handed any seven days.
+     Given none, it draws this week exactly as it always did. */
+  const week = days && days.length ? days : coach.weekDays;
   return (
     <div style={{ display: "flex", gap: 6 }}>
-      {coach.weekDays.map((d) => {
+      {week.map((d) => {
         const isDone = coach.done(d);
         const sched = coach.isScheduled(d);
         const isToday = d === coach.t;
@@ -5492,7 +5500,7 @@ function Fold({ title, note, accent, defaultOpen = false, children }) {
         border: "none", background: "transparent", cursor: "pointer", textAlign: "left",
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{title}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: C.ink }}>{title}</div>
           {note && <div style={{ fontSize: 12, color: accent || C.muted, marginTop: 3 }}>{note}</div>}
         </div>
         <span style={{ fontSize: 11, color: C.muted, transform: open ? "rotate(90deg)" : "none",
@@ -6192,6 +6200,10 @@ function Today({ data, setData, coach, setSheet }) {
   const [quietOpen, setQuietOpen] = useState(null);
 
   const [logDate, setLogDate] = useState(coach.t);
+  /* how many weeks back the strip is showing. 0 is this week. */
+  const [weekBack, setWeekBack] = useState(0);
+  const spineDays = weekBack === 0 ? coach.weekDays
+    : Array.from({ length: 7 }, (_, i) => addDays(weekStart(addDays(coach.t, -weekBack * 7)), i));
   /* If midnight passes while the app is open, the page moves to the new day -
      but only if she was sitting on today. If she had deliberately opened an
      earlier day to log it, she stays there rather than having the page move
@@ -6321,7 +6333,9 @@ function Today({ data, setData, coach, setSheet }) {
             <span className="disp" style={{ fontSize: 15, fontWeight: 300, color: C.muted }}>/{coach.seasonTarget}</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em", textTransform: "uppercase", color: C.muted, marginTop: 7 }}>
-            sessions this week
+            <InfoNote inherit why={`How many sessions you have completed since Monday, against the number you told the app you want each week (currently ${coach.seasonTarget}). Only a session marked done counts. Anything logged on an earlier day counts on that day, not today. Change the number itself in Settings, under your rhythm.`}>
+              sessions this week
+            </InfoNote>
           </div>
         </div>
         <div style={{ flex: 1, background: C.card, borderRadius: 16, padding: "14px 16px",
@@ -6333,7 +6347,9 @@ function Today({ data, setData, coach, setSheet }) {
             {coach.totalSessions > 0 && <span className="disp" style={{ fontSize: 15, fontWeight: 300, color: C.muted }}>%</span>}
           </div>
           <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em", textTransform: "uppercase", color: C.muted, marginTop: 7 }}>
-            consistency
+            <InfoNote inherit why="Of the days in the last 28 that you were meant to train, the share you actually trained. It counts nothing before your very first logged session, so the app can never show you a low number for weeks that happened before you started. It is a window, not a streak - one missed day moves it slightly and nothing about it resets.">
+              consistency
+            </InfoNote>
           </div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 5, lineHeight: 1.3 }}>
             {coach.totalSessions ? "of the last 28 days you planned to train" : "starts with your first session"}
@@ -6344,7 +6360,34 @@ function Today({ data, setData, coach, setSheet }) {
       <div style={{ fontSize: 13, color: C.muted, padding: "2px 4px", lineHeight: 1.5 }}>{weekLine}</div>
 
       <div style={{ padding: "0 2px" }}>
-        <WeekSpine coach={coach} selected={logDate} onPick={setLogDate} />        {/* The strip is seven days. Anything older than that had nowhere to go
+        {/* ---- STEPPING BACK A WEEK AT A TIME -----------------------------
+             Her question, 8 August: "if a week ends and I want to go back to
+             the weeks before ... how do I do that?" The strip now moves. The
+             arrow forward stops at this week - there is nothing to see ahead. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button onClick={() => setWeekBack((w) => w + 1)} className="tap"
+            aria-label="the week before" style={{
+              width: 30, height: 32, flexShrink: 0, borderRadius: 10, cursor: "pointer",
+              border: `1px solid ${C.line}`, background: "transparent", color: C.muted,
+              fontSize: 15, lineHeight: 1, fontFamily: "inherit", padding: 0 }}>‹</button>
+          <div style={{ flex: 1 }}>
+            <WeekSpine coach={coach} selected={logDate} onPick={setLogDate} days={spineDays} />
+          </div>
+          <button onClick={() => setWeekBack((w) => Math.max(0, w - 1))} disabled={weekBack === 0} className="tap"
+            aria-label="the week after" style={{
+              width: 30, height: 32, flexShrink: 0, borderRadius: 10,
+              cursor: weekBack === 0 ? "default" : "pointer", opacity: weekBack === 0 ? 0.3 : 1,
+              border: `1px solid ${C.line}`, background: "transparent", color: C.muted,
+              fontSize: 15, lineHeight: 1, fontFamily: "inherit", padding: 0 }}>›</button>
+        </div>
+
+        {weekBack > 0 && (
+          <div className="mono" style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
+            color: C.muted, marginTop: 6, textAlign: "center" }}>
+            week of {prettyShort(spineDays[0])}
+          </div>
+        )}
+        {/* The strip is seven days. Anything older than that had nowhere to go
             — including sessions she did before this app could record them. */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
           <span style={{ fontSize: 11, color: C.muted }}>Or any earlier day</span>
@@ -6359,7 +6402,7 @@ function Today({ data, setData, coach, setSheet }) {
             trap — but it is one word, and only when she is on one. */}
         {!isToday && (
           <div style={{ marginTop: 8 }}>
-            <button onClick={() => setLogDate(coach.t)} className="tap" style={{
+            <button onClick={() => { setLogDate(coach.t); setWeekBack(0); }} className="tap" style={{
               border: "none", background: "transparent", cursor: "pointer", padding: 0,
               fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
             }}>back to today</button>
@@ -6526,7 +6569,7 @@ function Today({ data, setData, coach, setSheet }) {
               )}
             </div>
 
-            <h1 className="disp" style={{ fontSize: 26, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 0" }}>
+            <h1 className="disp" style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, margin: "2px 0 0" }}>
               {log?.type
                 || (log?.rest ? "You logged this as a rest day"
                   : isToday && rx ? rx.name
@@ -7126,8 +7169,12 @@ function Today({ data, setData, coach, setSheet }) {
 
   {/* ---- what the week says to do next ---- */}
         <Card style={{ marginBottom: 12 }}>
-          <Eyebrow>This week's call</Eyebrow>
-          <div className="disp" style={{ fontSize: 17, marginBottom: 4,
+          <Eyebrow>
+            <InfoNote inherit why="One instruction for the coming week, worked out from five signals: whether you hit your session target, whether your shoulder was comfortable (only while you are tracking it), whether your recovery averaged at or near your own normal, how you rated your confidence in the weekly check, and how hard the last session felt. Fewer than three of those and it says so rather than guessing. All five pointing the right way means move ONE thing up - duration, load or complexity, not all three. Two or more pointing the wrong way means repeat last week's settings. Anything mixed means hold. It is deliberately slow: the aim is that you are still training in a year, not that this week is impressive.">
+              This week's call
+            </InfoNote>
+          </Eyebrow>
+          <div className="disp" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4,
             color: coach.verdict.key === "reduce" ? C.clay : coach.verdict.key === "advance" ? C.signal : C.ink }}>
             {coach.verdict.label}
           </div>
@@ -7141,7 +7188,9 @@ function Today({ data, setData, coach, setSheet }) {
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "baseline", gap: 8 }}>
               <span className="mono" style={{ fontSize: 22, color: C.ochre }}>{coach.health.score}</span>
               <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.4 }}>
-                week score{coach.health.partial ? " · built on partial data, treat it lightly" : ""}
+                <InfoNote inherit why={`One number out of 100 for the week as a whole. Six things go into it, weighted: sessions done against your target counts most, then your average recovery against your own normal, then how much you slept, then the three anchor lifts - strength, mobility and balance - each against your own previous score. Anything you have not logged is left out and the rest is rescaled, so a missing number never counts as a zero. ${coach.health.partial ? "Right now it is built on less than two-thirds of its inputs, which is why it says to treat it lightly." : "It is currently built on enough of its inputs to be worth reading."} It is not a grade. It is a way of seeing which of the six is dragging.`}>
+                  week score{coach.health.partial ? " · built on partial data, treat it lightly" : ""}
+                </InfoNote>
               </span>
             </div>
           )}
@@ -7149,7 +7198,11 @@ function Today({ data, setData, coach, setSheet }) {
 
         {(coach.themes.week || coach.themes.month || coach.themes.quarter) && (
           <Card>
-            <Eyebrow>What you're working on</Eyebrow>
+            <Eyebrow>
+              <InfoNote inherit why="Three horizons, counted from the day you started: which week you are in, which month (four weeks), and which quarter (three months). Each has a theme - the week's is the specific thing to pay attention to now, the month's and quarter's are broader. The coach writes them, and anything you type over them in Workouts wins. They describe emphasis, not a plan: training is only ever designed one month ahead.">
+                What you're working on
+              </InfoNote>
+            </Eyebrow>
             {[["Week " + coach.pos.week, coach.themes.week],
               ["Month " + coach.pos.month, coach.themes.month],
               ["Quarter " + coach.pos.quarter, coach.themes.quarter]].map(([l, v]) => v ? (
@@ -7162,7 +7215,11 @@ function Today({ data, setData, coach, setSheet }) {
         )}
   {/* ============ 3. WHAT YOU'RE WORKING ON ============ */}
         <Card style={{ marginBottom: 12, borderLeft: `3px solid ${coach.phase.key === "familiarise" ? C.ochre : C.signal}` }}>
-          <Eyebrow>{coach.season.key === "maintain" ? coach.season.name : coach.phase.name}</Eyebrow>
+          <Eyebrow>
+            <InfoNote inherit why="Where you are in the bigger arc, and what it changes. A phase reflects what you have available to train with; a season reflects the time of year. December through February the app holds the line rather than pushing it - the weekly target drops by one and progression pauses, because staying level through winter is the win. Outside those months progression is live.">
+              {coach.season.key === "maintain" ? coach.season.name : coach.phase.name}
+            </InfoNote>
+          </Eyebrow>
           <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted }}>
             {coach.season.key === "maintain" ? coach.season.line : coach.phase.line}
           </div>
@@ -7188,7 +7245,7 @@ function Today({ data, setData, coach, setSheet }) {
         {Object.keys(data.weekly).length === 0 && Object.keys(data.monthly).length === 0 && (
           <Card style={{ marginBottom: 12, borderLeft: `3px solid ${C.ochre}` }}>
             <Eyebrow color={C.ochre}>Start here</Eyebrow>
-            <div className="disp" style={{ fontSize: 17, marginBottom: 4 }}>Set your baseline</div>
+            <div className="disp" style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Set your baseline</div>
             <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 12 }}>
               Run the full battery once and every number after this has something to be measured against.
               Half an hour. Leave the cable row and elliptical blank until the gym exists — they'll start in September.
@@ -7201,7 +7258,7 @@ function Today({ data, setData, coach, setSheet }) {
              never be something you have to go hunting for. */}
         <Card style={coach.weeklyDue ? { background: C.pist } : {}}>
           <Eyebrow color={coach.weeklyDue ? C.signal : C.muted}>Your measurements</Eyebrow>
-          <div className="disp" style={{ fontSize: 18, fontWeight: 400, marginBottom: 6 }}>
+          <div className="disp" style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>
             {coach.weeklyDue ? "This week's numbers are open" : "This week's numbers are in"}
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
@@ -7611,9 +7668,48 @@ function Progress({ data, setData, coach, setSheet }) {
     setData({ ...data, logs });
   };
 
-  const recentDays = Array.from({ length: 14 }, (_, i) => addDays(coach.t, -i));
-  const recentWeeks = Array.from({ length: 8 }, (_, i) => weekStart(addDays(coach.t, -i * 7)));
-  const recentMonths = Array.from({ length: 6 }, (_, i) => {
+  /* HOW FAR BACK THESE LISTS GO. Her question, 8 August: "if I want to go back
+     to the weeks before or the months before, how do I do that?" They used to
+     stop at fourteen days, eight weeks and six months whatever her history
+     said, which meant the app quietly hid data she had entered herself. They
+     now run back to her earliest record and no further - the floors below are
+     minimums, not ceilings, so a new app still shows a sensible list. */
+  const earliest = (() => {
+    const keys = [
+      ...Object.keys(data.logs || {}),
+      ...Object.keys(data.morning || {}),
+      ...Object.keys(data.weekly || {}),
+    ].filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+    const monthKeys = Object.keys(data.monthly || {})
+      .filter((k) => /^\d{4}-\d{2}$/.test(k)).sort();
+    const first = keys.length ? keys[0] : null;
+    const firstMonth = monthKeys.length ? monthKeys[0] + "-01" : null;
+    if (first && firstMonth) return first < firstMonth ? first : firstMonth;
+    return first || firstMonth || null;
+  })();
+  const daysBack = (() => {
+    const floor = 14;
+    if (!earliest) return floor;
+    const n = Math.floor((parse(coach.t) - parse(earliest)) / 86400000) + 1;
+    return Math.max(floor, Math.min(n, 3650));
+  })();
+  const weeksBack = (() => {
+    const floor = 8;
+    if (!earliest) return floor;
+    const n = Math.floor((parse(coach.t) - parse(weekStart(earliest))) / (86400000 * 7)) + 1;
+    return Math.max(floor, Math.min(n, 520));
+  })();
+  const monthsBack = (() => {
+    const floor = 6;
+    if (!earliest) return floor;
+    const a2 = parse(coach.t), b2 = parse(earliest);
+    const n = (a2.getFullYear() - b2.getFullYear()) * 12 + (a2.getMonth() - b2.getMonth()) + 1;
+    return Math.max(floor, Math.min(n, 120));
+  })();
+
+  const recentDays = Array.from({ length: daysBack }, (_, i) => addDays(coach.t, -i));
+  const recentWeeks = Array.from({ length: weeksBack }, (_, i) => weekStart(addDays(coach.t, -i * 7)));
+  const recentMonths = Array.from({ length: monthsBack }, (_, i) => {
     const d = parse(coach.t + "");
     d.setMonth(d.getMonth() - i);
     return iso(d).slice(0, 7);
@@ -7725,7 +7821,7 @@ function Progress({ data, setData, coach, setSheet }) {
 
 
       {/* ---------- editable history: days ---------- */}
-      <Fold title="Last two weeks" note="day by day, editable">
+      <Fold title="Every day so far" note={`${recentDays.length} days, day by day, editable`}>
         <Explain>Tap any day to change it: empty → trained → rest → empty. Use this to fix a mistake or fill in a day you forgot.</Explain>
         <div style={{ display: "flex", flexDirection: "column" }}>
           {recentDays.map((d) => {
@@ -7757,7 +7853,7 @@ function Progress({ data, setData, coach, setSheet }) {
             </Fold>
 
       {/* ---------- editable history: weekly checks ---------- */}
-      <Fold title="Weekly checks" note="every battery you have filled in">
+      <Fold title="Weekly checks" note={`${recentWeeks.length} weeks, every battery you have filled in`}>
         <Explain>Tap a week to fill it in or change what you entered. Past weeks stay open — you can always go back.</Explain>
         {recentWeeks.map((ws) => {
           const entry = data.weekly[ws];
@@ -7917,7 +8013,7 @@ function Progress({ data, setData, coach, setSheet }) {
             </Fold>
 
       {/* ---------- editable history: monthly ---------- */}
-      <Fold title="Monthly benchmarks" note="body composition over time">
+      <Fold title="Monthly benchmarks" note={`${recentMonths.length} months, body composition over time`}>
         <Explain>The slow-moving numbers — body composition, mobility, the walk test. Tap a month to fill it in or edit it.</Explain>
         {recentMonths.map((mk) => {
           const entry = data.monthly[mk];
@@ -10093,7 +10189,10 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
    explained, I will click the info button." InfoTitle below is the
    controlled version, used by rows whose parent already tracks which one is
    open; this one is for anywhere else. */
-function InfoNote({ children, why, small }) {
+/* `inherit` leaves the label's type alone, so the circle can be put beside an
+   eyebrow or a caption without turning it into a heading. Without it the label
+   is styled as a title, which is right in a card and wrong everywhere else. */
+function InfoNote({ children, why, small, inherit }) {
   const [open, setOpen] = useState(false);
   if (!why) return <span>{children}</span>;
   return (
@@ -10101,11 +10200,15 @@ function InfoNote({ children, why, small }) {
       <button onClick={() => setOpen((v) => !v)} className="tap" aria-label="What this is"
         style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer",
           fontFamily: "inherit", textAlign: "left" }}>
-        <span style={{ fontSize: small ? 11 : 13.5, fontWeight: small ? 400 : 600,
-          color: open ? C.signal : (small ? C.muted : C.ink) }}>{children}</span>
-        <span style={{ display: "inline-block", width: 13, height: 13, marginLeft: 6, verticalAlign: "1px",
+        <span style={inherit
+          ? (open ? { color: C.signal } : {})
+          : { fontSize: small ? 11 : 13.5, fontWeight: small ? 400 : 600,
+              color: open ? C.signal : (small ? C.muted : C.ink) }}>{children}</span>
+        <span style={{ display: "inline-block", width: inherit ? 11 : 13, height: inherit ? 11 : 13,
+          marginLeft: inherit ? 5 : 6, verticalAlign: "1px",
           borderRadius: 999, border: `1px solid ${open ? C.signal : "#C9B8C4"}`,
-          color: open ? C.signal : C.muted, fontSize: 8.5, lineHeight: "11px", textAlign: "center",
+          color: open ? C.signal : C.muted, fontSize: inherit ? 7.5 : 8.5,
+          lineHeight: inherit ? "9px" : "11px", textAlign: "center",
           fontFamily: "Georgia, serif", fontStyle: "italic" }}>i</span>
       </button>
       {open && (
