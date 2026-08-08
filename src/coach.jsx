@@ -4622,32 +4622,51 @@ function useCoach(data) {
       const wkEntry = weekly[ws] || null;
       const moEntry = monthly[mk] || null;
       const rows = [];
-      const add = (id, scope, label, done, why) => rows.push({ id, scope, label, done, why });
+      /* THREE DIFFERENT REGISTERS, AND THEY ARE NOT INTERCHANGEABLE.
+           label — the row, four or five words, read at a glance
+           why   — the explanation behind the circled i, read once, if ever
+           say   — one sentence the COACH says out loud
+
+         The coach used to speak by pasting `why` into its own mouth, which
+         produced things like "How hard it was, 1-10 is still open. Minutes
+         alone can't tell BODYPUMP from stretching." — an instruction manual
+         read aloud. Rule 31: write like the coach. So every row now carries a
+         line written to be spoken, and nothing else is ever put in its mouth. */
+      const add = (id, scope, label, done, why, say) => rows.push({ id, scope, label, done, why, say });
 
       /* Before anything else: how often does she actually want to train? Every
          count in the app is a share of this, so guessing it makes every other
          number a guess too. */
       add("rhythm", "block", "How often you want to train", scheduleSet(settings),
-        "Everything the app counts is measured against this and nothing else — how consistent you are, what counts as a missed day, and how the month is laid out. Tell me the rhythm you actually want and I will build around it rather than assuming.");
+        "Everything the app counts is measured against this and nothing else — how consistent you are, what counts as a missed day, and how the month is laid out. Tell me the rhythm you actually want and I will build around it rather than assuming.",
+        "How often do you want to train? Tell me that one number and I will build everything else around it.");
       add("recovery", "day", "This morning's WHOOP recovery", !!mg.recovery,
-        "It sets your bands. Without it every recovery judgement is a guess.");
+        "It sets your bands. Without it every recovery judgement is a guess.",
+        "I don't have your recovery score this morning, so anything I say about how today should feel is a guess.");
       if (settings.shoulderInjury && trainedYesterday)
         add("shoulderAM", "day", "How the shoulder woke up", !!mg.shoulderAM,
-          "The morning after load is the only reading that tells us whether the load was right.");
+          "The morning after load is the only reading that tells us whether the load was right.",
+        "You trained yesterday — how did the shoulder wake up? The morning after is the reading that matters.");
       if (!restDay) {
         add("session", "day", "Today's session logged", !!l.completed,
-          "Everything downstream counts from this.");
+          "Everything downstream counts from this.",
+        "Nothing logged today yet. When you have done something, tell me what it was.");
         if (l.completed) {
           add("rpe", "day", "How hard it was, 1–10", !!l.rpe,
-            "Minutes alone can't tell BODYPUMP from stretching. This is the number load is built from.");
+            "Minutes alone can't tell BODYPUMP from stretching. This is the number load is built from.",
+        "The session is in but not how hard it was. One tap, and it stops being just minutes.");
           add("sets", "day", "Roughly how many working sets", l.sets !== undefined && l.sets !== "",
-            "Sets are the dose that decides whether you hold muscle. Nothing else can see it.");
+            "Sets are the dose that decides whether you hold muscle. Nothing else can see it.",
+        "About how many working sets was that? A rough number is fine — it is the part that decides whether you hold muscle.");
           add("during", "day", "How it felt while you were doing it", !!l.during,
-            "How a session feels DURING is one of the better predictors of whether you do it again. Afterwards doesn't carry the same signal.");
+            "How a session feels DURING is one of the better predictors of whether you do it again. Afterwards doesn't carry the same signal.",
+        "How did that feel while you were in it? Not afterwards — during. It is the better predictor of whether you come back.");
           add("felt", "day", "How you felt afterwards", !!l.energyAfter,
-            "The subjective read often moves before the objective one does.");
+            "The subjective read often moves before the objective one does.",
+        "How did you feel afterwards? It often moves before anything I can measure does.");
           add("note", "day", "A line about how it went", !!(l.sessionNote || l.did),
-            "In three months this will be the most useful thing you wrote.");
+            "In three months this will be the most useful thing you wrote.",
+        "Say a line about how that went, if you have one in you. In three months it will be the most useful thing here.");
         }
       }
       add("battery", "week",
@@ -4655,15 +4674,26 @@ function useCoach(data) {
           : weeklyLate ? `This week's measurements — ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late`
           : "This week's measurements",
         !!wkEntry,
-        `Every target the coach sets comes out of these numbers. It rides on the first training day of the week — ${prettyShort(weeklyAssessDay)} — because you are already changed, already warm, already in the room.`);
+        `Every target the coach sets comes out of these numbers. It rides on the first training day of the week — ${prettyShort(weeklyAssessDay)} — because you are already changed, already warm, already in the room.`,
+        weeklyToday
+          ? "Today is your measurement day. It rides on a training day because you are already warm and in the room."
+          : weeklyLate
+          ? `This week's measurements are ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late. Ten minutes and the week has something to compare against.`
+          : "This week's measurements are still open. Every target I set comes out of them.");
       add("benchmark", "month",
         monthlyToday ? "Today is your benchmark day"
           : monthlyLate ? `This month's benchmark — ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late`
           : "This month's benchmark",
         !!moEntry,
-        `Body composition and the heavier tests, on the first training day of the month — ${prettyShort(monthlyAssessDay)}. Without two of these, nothing can be compared to anything.`);
+        `Body composition and the heavier tests, on the first training day of the month — ${prettyShort(monthlyAssessDay)}. Without two of these, nothing can be compared to anything.`,
+        monthlyToday
+          ? "Today is your benchmark day — the full battery and body composition. About half an hour."
+          : monthlyLate
+          ? `The month's benchmark is ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late. Without two of these there is nothing to compare.`
+          : "This month's benchmark is still open. It is the one that lets me see change rather than noise.");
       add("whoop", "week", "WHOOP imported this week", !settings.whoopConnected || (importGap !== null && importGap < 8),
-        "One export backfills everything — recovery, sleep, heart rate, strain. Recovery and the shoulder score can be typed by hand; nothing else can, so a stale import quietly ages every other signal.");
+        "One export backfills everything — recovery, sleep, heart rate, strain. Recovery and the shoulder score can be typed by hand; nothing else can, so a stale import quietly ages every other signal.",
+        "Your WHOOP export is getting stale. One file backfills recovery, sleep, heart rate and strain in one go.");
 
       /* ---- rows that used to be cards of their own ---------------------
          Eight separate cards said these things, each with its instruction
@@ -4671,9 +4701,11 @@ function useCoach(data) {
          rows, each actionable where it sits (rule 11), each explaining
          itself only when asked. */
       add("mobility", "week", "Mobility check", !mobDue,
-        "Seven tests, about ten minutes. The scores choose the ten minutes of drills you do after each session, so a stale battery means the drills are aimed at where you were, not where you are.");
+        "Seven tests, about ten minutes. The scores choose the ten minutes of drills you do after each session, so a stale battery means the drills are aimed at where you were, not where you are.",
+        "The mobility battery is due. It is about ten minutes, and it is what chooses your drills for the week.");
       add("backup", "block", "A copy off this device", !backupDueRow,
-        "Everything lives in this browser, on this device. Another device is a separate copy that never syncs. One tap sends a file you can drop into Drive.");
+        "Everything lives in this browser, on this device. Another device is a separate copy that never syncs. One tap sends a file you can drop into Drive.",
+        "Take a copy of your data off this device. One tap, and it is the difference between a lost phone costing you nothing or everything.");
 
       /* ---- the two quiet rows that stop being quiet --------------------
          The record and the goals sit folded away on a normal day. The
@@ -4686,14 +4718,20 @@ function useCoach(data) {
             ? `You mentioned ${issueFollowUp[0].text} — how is it now?`
             : `${issueFollowUp.length} things you mentioned — how are they now?`,
           false,
-          "You told me about this two days ago. Whether it settled, stayed the same or got worse is the whole point of writing it down — without the second reading there is nothing to compare, and next time it happens I would be starting from scratch again.");
+          "You told me about this two days ago. Whether it settled, stayed the same or got worse is the whole point of writing it down — without the second reading there is nothing to compare, and next time it happens I would be starting from scratch again.",
+          issueFollowUp.length === 1
+            ? `You mentioned ${issueFollowUp[0].text} a couple of days ago. How is it now?`
+            : "A couple of things you mentioned are due a second look. How are they now?");
       if (goalCheckDue.length)
         add("goal", "week",
           goalCheckDue.length === 1
             ? `Try "${goalCheckDue[0].text}" and score it`
             : `${goalCheckDue.length} of your goals are due a score`,
           false,
-          "You score these by actually trying the thing, not by guessing. It is the only measure in the app that comes from what you said you wanted rather than what the app decided to measure, and it outranks the numbers when the month gets designed.");
+          "You score these by actually trying the thing, not by guessing. It is the only measure in the app that comes from what you said you wanted rather than what the app decided to measure, and it outranks the numbers when the month gets designed.",
+          goalCheckDue.length === 1
+            ? `Try "${goalCheckDue[0].text}" this week and tell me how close it is now.`
+            : "A couple of your goals are due a score. Try them and tell me where they are.");
 
       const due = rows.filter((r) => !r.done);
       const pct = rows.length ? Math.round(((rows.length - due.length) / rows.length) * 100) : 100;
@@ -4727,10 +4765,18 @@ function useCoach(data) {
 
     /* CALIBRATION — for the first block the coach's job is the logging.
        It leads with what's missing, because without it nothing else works. */
+    /* One thing, said once, in a sentence. Not the row label, not the
+       explanation behind the circled i, and never both stapled together. The
+       calibration tail is added only while there is a real backlog — said
+       every single day it becomes wallpaper. */
     if (capture.due.length) {
-      const first = capture.due[0];
+      const first = capture.due.find((r) => r.say) || capture.due[0];
+      const tail = calibrating && capture.due.length > 3
+        ? " This first month is me learning you — everything I design in September comes out of what you put in now."
+        : "";
       raise("day", capture.due.length > 3 ? "firm" : "push",
-        `${first.label} is still open. ${first.why} This first month is the coach learning you — everything I design in September comes out of what you put in now.`);
+        (first.say || `${first.label} is still open.`) + tail,
+        { capture: first.id });
     }
     if (calibrating && capture.complete)
       raise("day", "warm", "Everything logged today. That is the whole job this month — you're building the evidence the next block gets designed from.");
@@ -4749,7 +4795,10 @@ function useCoach(data) {
     if (!loggedToday && !restDay && thinnest.length && hasLoad)
       raise("day", "push", `${thinnest[0].label} has taken the smallest share of your work this week. If you add anything on the end today, make it that — ${thinnest[0].note.toLowerCase()}`);
 
-    if (loggedToday?.completed && !loggedToday.rpe)
+    /* The capture line above may already have said this. Two agenda items
+       about the same missing number is how the coach starts sounding like a
+       form rather than a person. */
+    if (loggedToday?.completed && !loggedToday.rpe && capture.due[0]?.id !== "rpe")
       raise("day", "push", "Session's in — it needs an effort score to count properly. The tap is on this screen, just below; guessing at it tomorrow isn't the same thing.");
 
     if (loggedToday?.completed && loggedToday.rpe)
