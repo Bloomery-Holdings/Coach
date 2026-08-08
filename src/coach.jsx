@@ -687,6 +687,18 @@ const DESIGN_RULES = [
   { id: "ready", test: "consistency 80%+, load steady, shoulder stable, nothing declining",
     does: "Progress. Add a strength day, or lengthen the existing ones.",
     why: "This is the only condition under which adding work is a good idea." },
+  { id: "why", test: "she has given reasons for missed days, and one reason accounts for most of them",
+    does: "Change the thing that reason names — the day, the length, the class — rather than the amount of training.",
+    why: "Knowing she missed is not enough to coach her. Missing because she was exhausted and missing because she was unmotivated need opposite responses, and the app used to be unable to tell them apart." },
+  { id: "prefers", test: "what she reliably swaps out of, and what she reaches for instead",
+    does: "Move the avoided class off its day and put what she actually chooses in its place.",
+    why: "Revealed preference beats anything said once. A class she quietly never does is a hole in the block, however good it looks on paper." },
+  { id: "brakes", test: "twelve weeks of conditions naming what reliably costs her a session",
+    does: "Build the block around the conditions that work and defuse the ones that don't.",
+    why: "This was computed for months and read by nothing. The whole point of watching what precedes a session is to stop it being a surprise." },
+  { id: "profile", test: "anything the coach has come to believe about her at BELIEVED confidence",
+    does: "Order the block by it — never restrict by it. A class she disliked still appears; it stops being first.",
+    why: "One comment must never become a permanent rule, and a preference confirmed three times should not have to be said a fourth." },
   { id: "goals", test: "she has stated something she wants to be able to do, or a mobility test is short or asymmetric",
     does: "Bias the block toward the regions that goal needs, and set the daily ten minutes to its drills.",
     why: "A capability she chose is more durable motivation than any number the app produces — and it is the part of this that answers to her rather than to the data." },
@@ -880,7 +892,12 @@ const sameIssue = (a, b) => {
   return regionMatch && kindMatch && sideOk;
 };
 
-const MOBILITY_TESTS = [
+/* SEED ONLY. Like the strength battery, the mobility battery is hers: she can
+   rename a test, change its unit, add one, delete one, change whether it is
+   measured on both sides. What ships here is a starting point, not the app's
+   opinion of what should be measured. Ids never change once created, so
+   renaming a test keeps every reading it has ever had (rule 12, rule 13). */
+const SEED_MOBILITY = [
   { id: "sitrise", label: "Sit-to-rise", unit: "/10", better: "higher", max: 10,
     how: "Sit down cross-legged on the floor and stand back up. Start with 10 points: lose one for each hand, forearm, knee or side of leg you use for support, on the way down and on the way up. Half a point for wobbling.",
     why: "This is the single most-studied whole-body functional test there is — hip mobility, ankle range, single-leg strength and trunk control in one movement. It is also exactly the thing that quietly disappears in your fifties if nobody measures it.",
@@ -919,7 +936,8 @@ const MOBILITY_TESTS = [
 
 /* Ten minutes of work, chosen by what the tests say is short. Never a whole
    session — these are add-ons after whatever she already did. */
-const DRILLS = [
+/* SEED ONLY — same deal. Add a drill, delete one, rewrite how it is done. */
+const SEED_DRILLS = [
   { id: "deepsquat", label: "Deep squat hold", mins: 2, how: "Sink into the lowest squat you can hold, heels down, elbows inside knees gently pushing them out. Hold and breathe. Hold a doorframe if you need to.", targets: "hips, ankles, adductors" },
   { id: "hipopen", label: "90/90 hip switches", mins: 3, how: "Sit with one leg bent in front at ninety degrees and one behind at ninety. Sit tall, lean gently over the front shin, then switch sides without using your hands if you can.", targets: "hip rotation both directions" },
   { id: "pigeon", label: "Pigeon or figure-four", mins: 3, how: "One shin across in front, back leg long — or lying on your back, ankle over the opposite knee, pulling the thigh in. Breathe rather than push.", targets: "glutes, deep hip rotators" },
@@ -935,8 +953,173 @@ const DRILLS = [
   { id: "latstretch", label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
   { id: "getup", label: "Floor sit-and-rise practice", mins: 3, how: "Practise the movement itself, slowly, using as little support as you need — and notice which point you need it. That point is the thing to work on.", targets: "the whole pattern, and it improves with practice alone" },
 ];
-const drillById = (id) => DRILLS.find((d) => d.id === id) || null;
-const mobTestById = (id) => MOBILITY_TESTS.find((m) => m.id === id) || null;
+const drillById = (id, list) => (list && list.length ? list : SEED_DRILLS).find((d) => d.id === id) || null;
+const mobTestById = (id, list) => (list && list.length ? list : SEED_MOBILITY).find((m) => m.id === id) || null;
+/* ============================================================================
+   THE LADDER
+   ---------------------------------------------------------------------------
+   Rule 4 as amended, and rule 32. The coach does not accept a no and close the
+   conversation. "That's fine, see you tomorrow" is not an available ending,
+   because the app exists to get her moving and a coach that agrees with every
+   not-today moves the one-year number in the wrong direction.
+
+   So there is always a smaller door, and the coach walks DOWN rather than
+   making one offer and dropping it. The question is never whether she trains.
+   It is what is the smallest thing that would still count today.
+
+   A list, so a rung can be added, reworded or removed without touching
+   anything that walks it (rule 13).
+
+   `load` marks a rung that puts force through the body. When a physical signal
+   is present — the shoulder talking, recovery genuinely low, pain in the
+   record, illness flags up — those rungs are skipped and the ladder continues
+   with what is left. Sore is not the same as can't-face-it, and rest
+   prescribed for a reason is not a day given away.
+
+   Every rung returns null when it cannot be offered today, and the walk simply
+   steps past it. The last rung needs no equipment, no time and no decision, so
+   the ladder can never run out.
+========================================================================== */
+const LADDER = [
+  { id: "full", load: true, kind: "trained",
+    make: (c) => (c.prescribed ? {
+      label: c.prescribed.name,
+      mins: c.prescribed.minutes,
+      line: "What the day was always going to be.",
+    } : null) },
+
+  { id: "short", load: true, kind: "trained",
+    make: (c) => {
+      if (!c.prescribed) return null;
+      const ds = c.prescribed.durations || [];
+      const mins = ds.length ? Math.min(...ds) : Math.max(15, Math.round((c.prescribed.minutes || 45) / 2));
+      if (mins >= (c.prescribed.minutes || 45)) return null;
+      return { label: `${c.prescribed.name}, the short version`, mins,
+        line: "Same class, less of it. Starting is the part that matters." };
+    } },
+
+  { id: "easiest", load: true, kind: "trained",
+    make: (c) => (c.easiest && (!c.prescribed || c.easiest.name !== c.prescribed.name) ? {
+      label: c.easiest.name,
+      mins: (c.easiest.durations || [30])[0],
+      line: "The gentlest thing you own. It still counts as a session.",
+    } : null) },
+
+  { id: "drills", load: false, kind: "moved",
+    make: (c) => (c.drills && c.drills.list && c.drills.list.length ? {
+      label: `${c.drills.mins} minutes of your drills`,
+      mins: c.drills.mins,
+      line: `${c.drills.list.map((d) => d.label).join(", ")}. Chosen from your own mobility scores.`,
+    } : null) },
+
+  { id: "walk", load: false, kind: "moved",
+    make: () => ({ label: "A walk", mins: 20,
+      line: "Outside, no pace, no plan. It counts as a day you moved." }) },
+
+  { id: "floor", load: false, kind: "moved",
+    make: () => ({ label: "Five minutes on the floor", mins: 5,
+      line: "Cat-cow, hips, whatever is stiff. Put a timer on and stop when it goes." }) },
+
+  { id: "stand", load: false, kind: "moved",
+    make: () => ({ label: "Stand up and reach overhead, twice", mins: 1,
+      line: "Genuinely. On the days that is all there is, that is the rung." }) },
+];
+
+/* What is actually available today, hardest first.
+   ctx: { prescribed, easiest, drills, physical } */
+const ladderFor = (ctx) => LADDER
+  .filter((r) => !(ctx.physical && r.load))
+  .map((r) => { const m = r.make(ctx); return m ? { id: r.id, kind: r.kind, load: r.load, ...m } : null; })
+  .filter(Boolean);
+
+/* The next door down from whatever was just declined. Persistence lives in the
+   offering, never in the asking: one rung at a time, and never back up. */
+const smallerDoor = (rungs, declinedId) => {
+  if (!declinedId) return rungs[0] || null;
+  const i = rungs.findIndex((r) => r.id === declinedId);
+  return i === -1 ? (rungs[0] || null) : (rungs[i + 1] || null);
+};
+/* ============================================================================
+   WHY
+   ---------------------------------------------------------------------------
+   The thing the app could not see. A day she did not train was a blank, and
+   there is all the difference in the world between exhausted, unmotivated, out
+   of time, and deliberately resting. Knowing only that she skipped is not
+   enough to coach her.
+
+   One tap plus, if she wants, her own words. The tap is countable and drives
+   the learning; the words carry what a tap never could. Both are stored.
+
+   Scripted rather than model-written, so it works with no signal and no key,
+   and every level offers a way out that costs nothing. The questions are
+   curious, never an accounting — rule 24 does not stop applying because she is
+   being asked something.
+
+   `tag` is what the arithmetic counts. Adding a reason is a list entry.
+========================================================================== */
+const WHY_TREES = {
+  skip: {
+    ask: "What got in the way?",
+    reasons: [
+      { id: "commitment", label: "I had a commitment", tag: "time",
+        follow: [{ id: "recurs", q: "One-off, or does something land here most weeks?",
+          opts: ["One-off", "Most weeks", "It's new"] }] },
+      { id: "overslept", label: "I ran out of time", tag: "time",
+        follow: [{ id: "had", q: "How long did you actually have?",
+          opts: ["None at all", "About ten minutes", "About twenty"] }] },
+      { id: "mood", label: "I wasn't in the mood", tag: "motivation",
+        follow: [{ id: "which", q: "Was it the training, or the day?",
+          opts: ["The training", "The day", "Both"] },
+          { id: "part", q: "Which part put you off?", when: "The training",
+            opts: ["The class itself", "How long it is", "How hard it is"] }] },
+      { id: "hurt", label: "Something hurt", tag: "body",
+        follow: [{ id: "where", q: "Where?",
+          opts: ["Shoulder", "Back", "Legs", "Core", "Arms", "Somewhere else"] },
+          { id: "again", q: "First time, or has this been back before?",
+            opts: ["First time", "It's been back"] }] },
+      { id: "tired", label: "I was too tired", tag: "tired",
+        follow: [{ id: "source", q: "Was it sleep, or the week?",
+          opts: ["Sleep", "The week", "Both"] }] },
+      { id: "dislike", label: "Didn't fancy what was on", tag: "dislike",
+        follow: [{ id: "instead", q: "What would you rather have done?", library: true }] },
+      { id: "chose", label: "I chose to rest", tag: "chosen", follow: [] },
+      { id: "away", label: "I was away", tag: "away",
+        follow: [{ id: "kit", q: "Anything with you to train with?",
+          opts: ["Nothing", "A mat", "Bands or weights"] }] },
+    ],
+  },
+  swap: {
+    ask: "What made you change it?",
+    reasons: [
+      { id: "notfancy", label: "Didn't fancy it", tag: "dislike", follow: [] },
+      { id: "toohard", label: "Too hard today", tag: "load", follow: [] },
+      { id: "tooeasy", label: "Too easy", tag: "load", follow: [] },
+      { id: "length", label: "Wrong length", tag: "time", follow: [] },
+      { id: "kit", label: "Didn't have the equipment", tag: "kit", follow: [] },
+      { id: "wanted", label: "Wanted this instead", tag: "preference", follow: [] },
+      { id: "shoulder", label: "The shoulder", tag: "body", follow: [] },
+    ],
+    after: { id: "worked", q: "Did the swap turn out to be the right call?",
+      opts: ["Yes", "Not really", "Too soon to say"] },
+  },
+  short: {
+    ask: "What happened?",
+    reasons: [
+      { id: "ranout", label: "Ran out of time", tag: "time", follow: [] },
+      { id: "flat", label: "Had nothing in the tank", tag: "tired", follow: [] },
+      { id: "pain", label: "Something started hurting", tag: "body", follow: [] },
+      { id: "enough", label: "It was enough", tag: "chosen", follow: [] },
+    ],
+    after: { id: "right", q: "Did stopping feel like the right call?",
+      opts: ["Yes", "Not really", "Not sure"] },
+  },
+};
+const whyTree = (kind) => WHY_TREES[kind] || WHY_TREES.skip;
+const whyReason = (kind, id) => whyTree(kind).reasons.find((r) => r.id === id) || null;
+const whyLabel = (kind, id) => whyReason(kind, id)?.label || id;
+const whyTag = (kind, id) => whyReason(kind, id)?.tag || "other";
+
+
 
 const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork }) => {
   if (!library.length) return null;
@@ -1602,6 +1785,9 @@ const BLANK = {
     scheduleMode: "cycle", cycleOn: 2, cycleOff: 1, cycleStart: today(),
   },
   fields: { weekly: SEED_WEEKLY, monthly: SEED_MONTHLY },
+  /* Both batteries are hers to change. Seeded, never fixed. */
+  mobTests: SEED_MOBILITY,
+  drills: SEED_DRILLS,
   library: SEED_LIBRARY,
   program: SEED_PROGRAM,
   morning: {},
@@ -1618,6 +1804,10 @@ const BLANK = {
   issues: [],
   /* Every conversation, kept. The coach reads them before it answers. */
   chats: [],
+  /* What the coach has come to believe about her. Never deleted, always
+     visible, always correctable. Entries she wrote herself carry hers: true
+     and outrank anything inferred. */
+  profile: [],
   /* Mobility battery, keyed by week start, same shape as the strength one. */
   mobility: {},
 };
@@ -1638,6 +1828,10 @@ async function loadData() {
         goals: Array.isArray(d.goals) ? d.goals : [],
         issues: Array.isArray(d.issues) ? d.issues : [],
         chats: Array.isArray(d.chats) ? d.chats : [],
+        profile: Array.isArray(d.profile) ? d.profile : [],
+        /* An older file has neither — seed them, never wipe them (rule 20). */
+        mobTests: Array.isArray(d.mobTests) && d.mobTests.length ? d.mobTests : SEED_MOBILITY,
+        drills: Array.isArray(d.drills) && d.drills.length ? d.drills : SEED_DRILLS,
         mobility: d.mobility || {},
         /* One block at a time: anything after the live block was written
            before that rule existed and would pre-empt a design the coach
@@ -2284,7 +2478,9 @@ function useCoach(data) {
     const mobDue = mobDaysAgo === null || mobDaysAgo >= 7;
 
     /* every test, scored, with its asymmetry and its direction of travel */
-    const mobRows = MOBILITY_TESTS.map((m) => {
+    const mobTests = data.mobTests?.length ? data.mobTests : SEED_MOBILITY;
+    const drills = data.drills?.length ? data.drills : SEED_DRILLS;
+    const mobRows = mobTests.map((m) => {
       const cur = lastMob?.[m.id] || null;
       const old = prevMob?.[m.id] || null;
       const val = (o) => {
@@ -2328,7 +2524,7 @@ function useCoach(data) {
       const out = [];
       let mins = 0;
       for (const id of ids) {
-        const d = drillById(id);
+        const d = drillById(id, drills);
         if (!d || mins + d.mins > 11) continue;
         out.push(d); mins += d.mins;
       }
@@ -2359,6 +2555,9 @@ function useCoach(data) {
         if (d < firstSession) continue;
         if (d >= t) continue;                 /* today is not a miss yet */
         if (!missableDay(d)) continue;        /* her rhythm, not the calendar */
+        /* Reaching any rung means the day was not missed. A walk is not a
+           session, but it is not a miss either. */
+        if (logs[d]?.state === "moved") continue;
         if (!logs[d]?.completed) missed++;
       }
       return missed;
@@ -2369,6 +2568,37 @@ function useCoach(data) {
       for (let i = 0; i < 60; i++) if (logs[addDays(t, -i)]?.completed) return i;
       return null;
     })();
+    /* ---- A DAY HAS THREE STATES, NOT TWO -------------------------------
+       Rule 4 as amended: reaching any rung of the ladder means the day was
+       not missed. That is only true if the app can record movement that was
+       not the prescribed session — a walk, ten minutes on the floor — without
+       either pretending she trained or counting it against her.
+
+       `moved` is that third state. It is deliberately weak: it keeps her out
+       of the missed column and it lets the coach say something true, and it
+       reaches NOTHING that measures training. Sessions this week, consistency,
+       load, sets, ACWR, the batteries and every region calculation all key off
+       `completed`, which a moved day never sets. A small day must never be
+       able to look like a training day.
+
+       And there is no chain here on purpose. A run of consecutive days is a
+       streak, and rule 25 forbids streaks — one bad day must not be able to
+       cost her anything. So this is a window, exactly like consistency: how
+       many of the last 28 days had movement in them. */
+    const movedOn = (d) => !logs[d]?.completed && logs[d]?.state === "moved";
+    const touched = (d) => done(d) || movedOn(d);
+    const daysSinceMovement = (() => {
+      for (let i = 0; i < 60; i++) if (touched(addDays(t, -i))) return i;
+      return null;
+    })();
+    const movedDays28 = Array.from({ length: 28 }, (_, i) => addDays(t, -i)).filter(movedOn).length;
+    const touchedDays28 = Array.from({ length: 28 }, (_, i) => addDays(t, -i)).filter(touched).length;
+
+    /* Still about training, on purpose — a fortnight of walks is not the same
+       as a fortnight of sessions and the coach should not pretend it is. What
+       movement changes is the TONE, not the verdict: `stillMoving` lets the
+       return line credit what she actually did instead of opening on a gap. */
+    const stillMoving = movedDays28 > 0 && daysSinceMovement !== null && daysSinceMovement <= 2;
     const lapseState =
       daysSinceSession === null ? "none"
       : daysSinceSession >= 10 ? "away"          /* a real break */
@@ -3030,6 +3260,33 @@ function useCoach(data) {
     if (tempBase && tempNow && tempNow - tempBase >= 0.4) illnessFlags.push("skin temperature up");
     if (respBase && respNow && respNow - respBase >= 1.0) illnessFlags.push("breathing rate up");
     if (spo2Now && spo2Now < 95) illnessFlags.push("blood oxygen below 95%");
+    /* ---- THE SMALLER DOOR ----------------------------------------------
+       Rule 4 as amended: the coach never accepts a no and closes the
+       conversation. What is available today, hardest first, with the
+       load-bearing rungs removed when her body is the thing talking.
+
+       `physical` is deliberately broad. Sore is not the same as can't-face-it,
+       and on the days it IS her body the ladder must not offer her load — it
+       offers what is left, which is still not nothing. */
+    const physicalSignal = !!(
+      shoulderFrozen
+      || (settings.shoulderInjury && lowComfort >= 1)
+      || recovery?.key === "rest"
+      || illnessFlags.length > 0
+    );
+    const ladder = ladderFor({
+      prescribed: prescribed || null,
+      easiest,
+      drills: dailyDrills,
+      physical: physicalSignal,
+    });
+    const ladderWhy = physicalSignal
+      ? (shoulderFrozen || (settings.shoulderInjury && lowComfort >= 1)
+          ? "Your shoulder is the thing talking today, so nothing here loads it."
+          : illnessFlags.length ? "Something is showing in your overnight numbers, so nothing here loads you."
+          : "Recovery is well below your normal, so nothing here loads you.")
+      : null;
+
 
     /* 2. Sleep quality, as distinct from quantity. Deep and REM are the two
           stages that do the physical and neural repair; efficiency and
@@ -3372,6 +3629,130 @@ function useCoach(data) {
         share: Math.round((v.done / total) * 100) })).sort((a, b) => b.n - a.n);
       return { rows, best: rows[0], total };
     })();
+
+
+    /* ---- WHAT THE COACH HAS LEARNED ABOUT HER ---------------------------
+       Two sources, one list.
+
+       OBSERVED is arithmetic, recomputed every render from what she has
+       actually done and the reasons she gave. It never needs writing down
+       because it is always current, it works with no key and no signal, and it
+       cannot drift out of date. Tier one.
+
+       STORED is `data.profile` — entries the model wrote after a conversation,
+       and entries she wrote or corrected herself. Those need persisting
+       because nothing recomputes them. Tier two, plus her.
+
+       Confidence is EARNED, and this is the rule that stops one bad morning
+       becoming a permanent belief about her:
+
+         noted      said or seen once      the coach does not act on it
+         tentative  twice, or once + behaviour agreeing
+         believed   three or more
+
+       Anything she wrote herself is `hers` and outranks everything inferred,
+       at any confidence. Nothing here becomes a rule: a believed preference
+       changes the ORDER the coach picks in, never what is available. A class
+       she disliked once still appears — it stops being first. */
+    const confidenceOf = (n) => (n >= 3 ? "believed" : n >= 2 ? "tentative" : "noted");
+
+    const whyEntries = Object.keys(logs)
+      .filter((d) => logs[d]?.why?.reason)
+      .map((d) => ({ date: d, ...logs[d].why }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+    const observed = (() => {
+      const out = [];
+      const add = (id, kind, claim, evidence) => {
+        if (!evidence.length) return;
+        out.push({ id, kind, claim, evidence, source: "did",
+          confidence: confidenceOf(evidence.length), status: "active", computed: true });
+      };
+
+      /* why she actually stops — counted, not guessed (rule 16) */
+      const byTag = {};
+      whyEntries.forEach((w) => {
+        const tag = whyTag(w.kind || "skip", w.reason);
+        (byTag[tag] = byTag[tag] || []).push(w);
+      });
+      const TAG_CLAIM = {
+        motivation: "When you miss, it is usually motivation rather than your body",
+        time: "When you miss, it is usually time rather than not wanting to",
+        tired: "Tiredness is what stops you most often",
+        body: "Your body is what stops you most often",
+        dislike: "You skip when you don't like what was prescribed",
+        chosen: "You choose rest deliberately rather than drifting out of it",
+        away: "Being away from home is what interrupts you",
+      };
+      Object.entries(byTag).forEach(([tag, list]) => {
+        if (!TAG_CLAIM[tag] || list.length < 2) return;
+        add(`why-${tag}`, "barrier", TAG_CLAIM[tag],
+          list.slice(0, 6).map((w) => ({ date: w.date, source: "said",
+            quote: whyLabel(w.kind || "skip", w.reason) })));
+      });
+
+      /* what she swaps out of — revealed preference beats anything said once */
+      if (swaps && swaps.avoided && swaps.avoided[1] >= 2)
+        add("swap-avoid", "preference", `You swap out of ${swaps.avoided[0]} more than anything else`,
+          Array.from({ length: swaps.avoided[1] }, () => ({ date: t, source: "did", quote: swaps.avoided[0] })));
+      if (swaps && swaps.chosen && swaps.chosen[1] >= 2)
+        add("swap-choose", "preference", `When you change the plan you reach for ${swaps.chosen[0]}`,
+          Array.from({ length: swaps.chosen[1] }, () => ({ date: t, source: "did", quote: swaps.chosen[0] })));
+
+      /* THE TIRED-ANYWAY LEDGER. The most useful sentence the app can say, on
+         exactly the morning it is needed, entirely from her own history. */
+      const tiredAnyway = Object.keys(logs).filter((d) => {
+        const l = logs[d];
+        if (!l?.completed) return false;
+        const m = morning?.[d] || {};
+        const rec = Number(m.recovery);
+        const rough = (rec > 0 && recBaseline && rec < recBaseline - 5) || l.mood === "tired" || l.mood === "flat" || l.mood === "low";
+        return rough && (l.energyAfter !== undefined || l.during !== undefined);
+      });
+      const better = tiredAnyway.filter((d) => Number(logs[d].energyAfter) >= 4 || Number(logs[d].during) >= 4);
+      if (tiredAnyway.length >= 3)
+        add("tired-anyway", "response",
+          `You have trained ${tiredAnyway.length} times when you felt rough, and felt better afterwards ${better.length} of them`,
+          tiredAnyway.slice(0, 8).map((d) => ({ date: d, source: "did", quote: logs[d].type || "session" })));
+
+      /* the weekday that reliably costs her — already computed, never used */
+      (learned?.brakes || []).forEach((b, i) =>
+        add(`brake-${i}`, "barrier", b, [{ date: t, source: "did", quote: b }, { date: t, source: "did", quote: b }]));
+      (learned?.motivators || []).forEach((m, i) =>
+        add(`motiv-${i}`, "motivator", m, [{ date: t, source: "did", quote: m }, { date: t, source: "did", quote: m }]));
+
+      return out;
+    })();
+
+    const storedProfile = (data.profile || []).map((p) => ({
+      ...p,
+      confidence: p.hers ? "believed" : confidenceOf((p.evidence || []).length),
+      computed: false,
+    }));
+
+    /* One list. Hers first, then what the model concluded, then arithmetic. */
+    const profile = [
+      ...storedProfile.filter((p) => p.hers),
+      ...storedProfile.filter((p) => !p.hers),
+      ...observed,
+    ].filter((p) => p.status !== "retired");
+    const profileBelieved = profile.filter((p) => p.confidence === "believed" || p.hers);
+    /* The most recent decision the app cannot explain. Only ever one, only
+       within the last few days, and only where something actually happened —
+       never on an ordinary day, and gone tomorrow whether or not she answers. */
+    const whyDue = (() => {
+      for (let i = 1; i <= 3; i++) {
+        const d = addDays(t, -i);
+        const l = logs[d] || {};
+        if (l.why) continue;
+        if (l.completed && l.prescribed && l.type && l.prescribed !== l.type)
+          return { date: d, kind: "swap", was: l.prescribed, did: l.type };
+        if (!l.completed && l.state !== "moved" && missableDay(d) && d >= (firstSession || d))
+          return { date: d, kind: "skip" };
+      }
+      return null;
+    })();
+
 
     const M = (o) => ({ key: false, group: "week", ...o });
 
@@ -3951,7 +4332,7 @@ function useCoach(data) {
       metricsTotal: allMetrics.length,
     } : null;
 
-    /* apply the written rules, in order, and record which fired */    /* apply the written rules, in order, and record which fired */
+    /* apply the written rules, in order, and record which fired */
     const proposeNext = () => {
       if (!livePhase) return null;
       const fired = [];
@@ -3974,6 +4355,66 @@ function useCoach(data) {
       const shoulderWorse = shoulderAMTrend !== null && shoulderAMTrend < 3;
       const spiking = chronicGrowth !== null && chronicGrowth / 4 > 10;
       const ready = consistency >= 80 && !deload && !shoulderWorse && !spiking && realDown.length === 0;
+      /* ---- WHAT SHE SAID, NOT JUST WHAT SHE DID ------------------------
+         Rule 8 says the review reads everything she wrote. It never did — it
+         counted her notes and emitted a line telling a human to read them.
+         The mining has existed for months and reached nothing that designs
+         her training. This is that wire.
+
+         Every claim below is counted, gated and silent when thin (rule 16),
+         and it changes the ORDER of the block rather than restricting it — a
+         class she disliked still exists, it stops being first. */
+
+      /* the reason that accounts for most of her missed days */
+      const whyTally = {};
+      whyEntries.filter((w) => (w.kind || "skip") === "skip").forEach((w) => {
+        const tag = whyTag("skip", w.reason);
+        whyTally[tag] = (whyTally[tag] || 0) + 1;
+      });
+      const whyTotal = Object.values(whyTally).reduce((a, b) => a + b, 0);
+      const topWhy = Object.entries(whyTally).sort((a, b) => b[1] - a[1])[0] || null;
+      /* at least three reasons given, and one accounting for half of them */
+      const whyDominant = whyTotal >= 3 && topWhy && topWhy[1] / whyTotal >= 0.5 ? topWhy[0] : null;
+
+      if (whyDominant) {
+        const SAYS = {
+          motivation: `${topWhy[1]} of the ${whyTotal} days you explained, you said you were not in the mood rather than tired or hurt. That is not a fitness problem and it does not get fixed by asking for less. This block puts the sessions you actually like on the days you actually miss.`,
+          time: `${topWhy[1]} of ${whyTotal} missed days came down to time, not willingness. The sessions get shorter rather than fewer — a short one you do beats a long one you don't.`,
+          tired: `${topWhy[1]} of ${whyTotal} were tiredness. This block does less, and the easy days are genuinely easy rather than nominally easy.`,
+          body: `${topWhy[1]} of ${whyTotal} were your body rather than your mood. Load holds where it is and the mobility work goes up.`,
+          dislike: `${topWhy[1]} of ${whyTotal} times you skipped, you said you did not fancy what was on. That is the plan's fault, not yours — what you avoid comes off the block.`,
+          away: `${topWhy[1]} of ${whyTotal} were being away from home. This block carries a version that needs nothing but a floor.`,
+          chosen: `You chose rest deliberately ${topWhy[1]} times out of ${whyTotal}. That is a decision, not a lapse, and the block is built around a body that asks for it.`,
+        };
+        if (SAYS[whyDominant]) fired.push({ id: "why", note: SAYS[whyDominant] });
+        if (whyDominant === "time") {
+          /* shorter, not fewer */
+        } else if (whyDominant === "tired" || whyDominant === "body") {
+          if (!swapFirst("strength", "move")) swapFirst("cardio", "move");
+        } else if (whyDominant === "dislike" || whyDominant === "motivation") {
+          /* what she reaches for, put where the misses are */
+          const want = swaps?.chosen?.[0] || null;
+          const wantGoal = (allClasses.find((w) => w.name === want) || {}).goal;
+          const asBlock = wantGoal === "strength" ? "strength" : wantGoal === "core" ? "core"
+            : wantGoal === "cardio" ? "cardio" : wantGoal === "mobility" ? "move" : null;
+          if (asBlock && count(asBlock) < 3) { if (!restToward(asBlock)) swapFirst("cardio", asBlock); }
+        }
+      }
+
+      /* revealed preference — what she quietly never does */
+      if (swaps && swaps.n >= 5 && swaps.avoided && swaps.avoided[1] >= 2) {
+        fired.push({ id: "prefers", note: `You were given ${swaps.avoided[0]} ${swaps.avoided[1]} times and did something else. ${swaps.chosen ? `What you reached for instead was ${swaps.chosen[0]}.` : ""} It stays in the library, but it stops being first.` });
+      }
+
+      /* the conditions that reliably cost her a session — computed for months,
+         read by nothing until now */
+      (learned?.brakes || []).slice(0, 2).forEach((b) =>
+        fired.push({ id: "brakes", note: `${b.charAt(0).toUpperCase()}${b.slice(1)}. Built into this block rather than discovered again.` }));
+
+      /* and anything the coach has actually earned the right to believe */
+      (profileBelieved || []).filter((p) => !p.computed || p.hers).slice(0, 3).forEach((p) =>
+        fired.push({ id: "profile", note: `${p.claim}. ${p.hers ? "Your words, so it outranks anything I worked out." : `Seen ${(p.evidence || []).length} times.`}` }));
+
 
       if (deload) {
         fired.push({ id: "autonomic", note: `Resting heart rate and HRV say you were absorbing, not adapting. This block does less, on purpose.` });
@@ -4014,7 +4455,10 @@ function useCoach(data) {
       if (wintering) fired.push({ id: "season", note: "December to February. Maintenance, deliberately — getting through the low months still training is the win." });
 
       const names = { autonomic: "Recovery block", shoulder: "Steady load", adherence: "Fewer, kept",
-        spike: "Consolidation", ready: "Progression", hold: "Repeat", season: "Maintenance" };
+        spike: "Consolidation", ready: "Progression", hold: "Repeat", season: "Maintenance",
+        /* named after what she said, not what the numbers noticed */
+        why: "Built round the reason", prefers: "What you actually do",
+        brakes: "Around what stops you", profile: "What I know about you" };
       const lead = fired[0]?.id || "hold";
       return {
         id: `blk${programPhases.length + 1}`,
@@ -4414,7 +4858,11 @@ function useCoach(data) {
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
       planned, session, hasPlan, pos, themes, prescribed, themeGoal, bet, betsWon, betsTaken, phase, season, seasonTarget, themesAuto, auto,
-      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS, DRILLS, lapseState, daysSinceSession, missedThisWeek, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
+      ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
+      profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
+      WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
+      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
   }, [data]);
 }
@@ -4850,7 +5298,7 @@ function MobilitySheet({ data, setData, coach, close }) {
         or the numbers won't compare. Tap any test for how to do it and why it matters.
       </div>
 
-      {MOBILITY_TESTS.map((m) => {
+      {(coach.mobTests || []).map((m) => {
         const e = entry[m.id] || {};
         const isOpen = open === m.id;
         return (
@@ -5767,6 +6215,17 @@ function Today({ data, setData, coach, setSheet }) {
 
       {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
+      {/* Rule 4 as amended: when she has said she is not up to it, the coach
+          does not accept that and stop — it walks down to something smaller.
+          Only on a day still open, and never after she has already logged. */}
+      {isToday && !log?.completed && log?.state !== "moved" && !restDay
+        && coach.moodToday && coach.moodToday !== "good" && (
+        <LadderCard data={data} setData={setData} coach={coach} />
+      )}
+
+      {/* The one decision the app cannot explain, asked once, gone tomorrow. */}
+      {isToday && <WhyCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+
       {/* THE RETURN. What determines whether a break becomes a dropout is the
           response to it — self-compassion predicts coming back, shame predicts
           the spiral. So this card offers one easy thing and no accounting. */}
@@ -5974,6 +6433,11 @@ function Today({ data, setData, coach, setSheet }) {
           <div style={{ marginTop: 14 }}>
             <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
           </div>
+          <button onClick={() => setSheet({ kind: "profile" })} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
+            fontSize: 11.5, color: C.signal, display: "block" }}>
+            What I think I know about you &rsaquo;
+          </button>
           {coach.agenda.length > coach.leading.length && (
             <div style={{ marginTop: 8 }}>
               <Btn kind="quiet" onClick={() => setSheet({ kind: "briefing" })}>
@@ -7351,6 +7815,7 @@ function Settings({ data, setData, setSheet }) {
     issues: mergeById(prev.issues, incoming.issues),
     goals:  mergeById(prev.goals,  incoming.goals),
     chats:  mergeById(prev.chats,  incoming.chats),
+    profile: mergeById(prev.profile, incoming.profile),
     /* Her library and her programme are current state, not history: keep what
        is on the device unless this copy is the only one that has any. */
     library: (prev.library && prev.library.length) ? prev.library : incoming.library,
@@ -7552,7 +8017,13 @@ function Settings({ data, setData, setSheet }) {
         <Field label="This month's theme" unit="" type="text" value={s.monthTheme} onChange={(v) => set("monthTheme", v)} />
             </Fold>
 
-      <Fold title="Assessments" note="edit the battery and the formulas">
+      <Fold title="Assessments" note="edit both batteries and the formulas">
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+          Both batteries are yours. Add a measure, drop one, change the reps, the weights, the units,
+          what counts as progress. Strength, cardio and mobility all work the same way.
+        </div>
+        <Btn kind="ghost" onClick={() => setSheet({ kind: "edit-mobility" })}>Edit the mobility battery</Btn>
+        <div style={{ marginBottom: 12 }} />
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
           Rename exercises, change units, reorder, or add your own. Renaming keeps the history — the chart just picks up the new name.
         </div>
@@ -8957,6 +9428,423 @@ function MicButton({ onText, current }) {
 /* The whole programme, and every part of it editable. The coach wrote the
    first draft; she owns it from here. Tap any day to change what it is, drag
    phase lengths, move the start date. */
+
+/* ============================================================================
+   THE SMALLER DOOR, ON SCREEN
+   ---------------------------------------------------------------------------
+   Rule 4 as amended. One rung at a time, warmly, and never back up. Declining
+   a rung moves DOWN — it does not re-ask, and it does not return to it later.
+   The last rung costs a minute, so this card can always end in something.
+   ==========================================================================*/
+function LadderCard({ data, setData, coach }) {
+  const [idx, setIdx] = useState(0);
+  const [done, setDone] = useState(null);
+  const rungs = coach.ladder || [];
+  if (!rungs.length) return null;
+  const rung = rungs[Math.min(idx, rungs.length - 1)];
+  const last = idx >= rungs.length - 1;
+
+  const take = () => {
+    setData((d) => {
+      const prev = d.logs?.[coach.t] || {};
+      const entry = rung.kind === "trained"
+        ? { ...prev, completed: true, type: rung.label.replace(/, the short version$/, ""),
+            minutes: rung.mins, prescribed: prev.prescribed || coach.prescribed?.name || null }
+        /* A moved day is deliberately weak: it keeps her out of the missed
+           column and reaches nothing that measures training. */
+        : { ...prev, state: "moved", movedWhat: rung.label, movedMins: rung.mins };
+      return { ...d, logs: { ...d.logs, [coach.t]: entry } };
+    });
+    setDone(rung);
+  };
+
+  if (done) {
+    return (
+      <Card style={{ background: C.mint }}>
+        <Eyebrow color={C.moss}>{done.kind === "trained" ? "Logged" : "That counts"}</Eyebrow>
+        <div style={{ fontSize: 14.5, lineHeight: 1.55 }}>
+          {done.kind === "trained"
+            ? `${done.label}. Down as a session.`
+            : `${done.label}. Not a session, and not a day you missed either — which is the whole point.`}
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={{ background: C.pist }}>
+      <Eyebrow color={C.signal}>Something smaller</Eyebrow>
+      {coach.ladderWhy && (
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>{coach.ladderWhy}</div>
+      )}
+      <div className="disp" style={{ fontSize: 18, marginBottom: 3 }}>{rung.label}</div>
+      <div className="mono" style={{ fontSize: 10, color: C.muted, marginBottom: 6 }}>{rung.mins} min</div>
+      <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginBottom: 12 }}>{rung.line}</div>
+      <Btn kind="signal" onClick={take}>Yes, that</Btn>
+      {!last && (
+        <div style={{ marginTop: 8 }}>
+          <Btn kind="ghost" onClick={() => setIdx(idx + 1)}>Smaller</Btn>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/* ============================================================================
+   WHY
+   ---------------------------------------------------------------------------
+   One tap, then the questions that belong to that answer, then her own words
+   if she wants them. Every level can be left without answering, and leaving
+   costs nothing. Curious, never an accounting (rule 24).
+   ==========================================================================*/
+function WhyCard({ data, setData, coach, setSheet }) {
+  const due = coach.whyDue;
+  const [reason, setReason] = useState(null);
+  const [answers, setAnswers] = useState({});
+  const [words, setWords] = useState("");
+  const [shut, setShut] = useState(false);
+  if (!due || shut) return null;
+
+  const tree = whyTree(due.kind);
+  const chosen = reason ? whyReason(due.kind, reason) : null;
+  const follows = (chosen?.follow || []).filter((f) => !f.when || answers[Object.keys(answers)[0]] === f.when);
+  const nextQ = follows.find((f) => answers[f.id] === undefined) || null;
+
+  const save = (extra = {}) => {
+    setData((d) => ({ ...d, logs: { ...d.logs,
+      [due.date]: { ...(d.logs?.[due.date] || {}),
+        why: { kind: due.kind, reason, answers, words: words.trim(), at: coach.t, ...extra } } } }));
+    setShut(true);
+  };
+
+  const stop = (
+    <button onClick={() => (reason ? save() : setShut(true))} className="tap" style={{
+      border: "none", background: "transparent", cursor: "pointer", padding: "8px 0 0",
+      fontSize: 12, color: C.muted }}>That's it for now</button>
+  );
+
+  const when = prettyShort ? prettyShort(due.date) : due.date;
+
+  return (
+    <Card>
+      <Eyebrow>{due.kind === "swap" ? "You changed the plan" : "About that day"}</Eyebrow>
+      <div style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 10 }}>
+        {due.kind === "swap"
+          ? `On ${when} the plan said ${due.was} and you did ${due.did}. ${tree.ask}`
+          : `${when} was a training day and nothing went down. ${tree.ask} No wrong answers, and you can skip this.`}
+      </div>
+
+      {!reason && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {tree.reasons.map((r) => (
+            <button key={r.id} onClick={() => setReason(r.id)} className="tap" style={{
+              padding: "9px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+              border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+              fontFamily: "inherit" }}>{r.label}</button>
+          ))}
+        </div>
+      )}
+
+      {reason && nextQ && (
+        <>
+          <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 7 }}>{nextQ.q}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {(nextQ.library ? (data.library || []).map((w) => w.name) : nextQ.opts).map((o) => (
+              <button key={o} onClick={() => setAnswers((a) => ({ ...a, [nextQ.id]: o }))} className="tap" style={{
+                padding: "9px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+                border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+                fontFamily: "inherit" }}>{o}</button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {reason && !nextQ && (
+        <>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 7 }}>
+            Anything else about it? Only if you want to.
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea rows={2} value={words} onChange={(e) => setWords(e.target.value)}
+              style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 }} />
+            <MicButton onText={setWords} current={words} />
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <Btn kind="signal" onClick={() => save()}>Done</Btn>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Btn kind="ghost" onClick={() => { save(); setSheet({ kind: "chat", about: "that day",
+              seed: `${whyLabel(due.kind, reason)}${words ? ` — ${words}` : ""}` }); }}>
+              Talk to me about it
+            </Btn>
+          </div>
+        </>
+      )}
+
+      {stop}
+    </Card>
+  );
+}
+
+/* ============================================================================
+   WHAT THE COACH THINKS IT KNOWS
+   ---------------------------------------------------------------------------
+   Every belief it holds about her, its evidence, how sure it is, and a way to
+   correct any line. This is the override that makes rule 32 safe: the coach
+   acts without asking, and she can always see what it is acting on and change
+   it. An entry she writes herself outranks anything inferred.
+   ==========================================================================*/
+function ProfileSheet({ data, setData, coach, setSheet }) {
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const list = coach.profile || [];
+
+  const correct = (p) => setData((d) => ({ ...d, profile: [...(d.profile || []).filter((x) => x.id !== p.id),
+    { id: p.id, claim: p.claim, kind: p.kind, evidence: p.evidence || [], status: "retired",
+      hers: true, corrected: coach.t }] }));
+
+  const addOwn = () => {
+    if (!text.trim()) return;
+    setData((d) => ({ ...d, profile: [...(d.profile || []),
+      { id: "p" + Math.random().toString(36).slice(2, 9), claim: text.trim(), kind: "preference",
+        evidence: [{ date: coach.t, source: "said", quote: text.trim() }],
+        status: "active", hers: true }] }));
+    setText(""); setAdding(false);
+  };
+
+  const TONE = { believed: C.moss, tentative: C.ochre, noted: C.muted };
+
+  return (
+    <>
+      <Eyebrow color={C.signal}>What I think I know about you</Eyebrow>
+      <h2 className="disp" style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>
+        {list.length ? `${list.length} things, and where each came from` : "Nothing yet"}
+      </h2>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 18px", lineHeight: 1.5 }}>
+        I act on the ones marked <strong>believed</strong>. Anything I have only seen once I note and leave alone.
+        If I have got something wrong, say so here and I will stop — what you write outranks anything I worked out.
+      </p>
+
+      {!list.length && (
+        <Card style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 14, lineHeight: 1.55 }}>
+            I have not earned an opinion yet. This fills in as you log, as you tell me why you
+            changed something, and as we talk.
+          </div>
+        </Card>
+      )}
+
+      {["believed", "tentative", "noted"].map((level) => {
+        const rows = list.filter((p) => p.confidence === level);
+        if (!rows.length) return null;
+        return (
+          <Card key={level} style={{ marginBottom: 12 }}>
+            <Eyebrow color={TONE[level]}>
+              {level === "believed" ? "I act on these" : level === "tentative" ? "Probably, not sure yet" : "Noticed once"}
+            </Eyebrow>
+            {rows.map((p, i) => (
+              <div key={p.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 14, lineHeight: 1.5 }}>{p.claim}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+                  {p.hers ? "You told me this." : `${(p.evidence || []).length} time${(p.evidence || []).length === 1 ? "" : "s"}, ${p.computed ? "from what you did" : "from what you said"}`}
+                  {(p.evidence || []).length > 0 && !p.hers && ` · most recently ${(p.evidence || [])[0]?.date || "—"}`}
+                </div>
+                {!p.hers && (
+                  <button onClick={() => correct(p)} className="tap" style={{
+                    border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 0",
+                    fontSize: 11.5, color: C.signal }}>That's not right — stop using this</button>
+                )}
+              </div>
+            ))}
+          </Card>
+        );
+      })}
+
+      <Card>
+        <Eyebrow>Tell me something yourself</Eyebrow>
+        {adding ? (
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
+              <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
+                placeholder="I never want an early session on a Monday"
+                style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 }} />
+              <MicButton onText={setText} current={text} />
+            </div>
+            <Btn kind="signal" onClick={addOwn}>Add it</Btn>
+            <div style={{ marginTop: 8 }}><Btn kind="quiet" onClick={() => setAdding(false)}>Never mind</Btn></div>
+          </>
+        ) : (
+          <Btn kind="ghost" onClick={() => setAdding(true)}>Add something I should know</Btn>
+        )}
+      </Card>
+    </>
+  );
+}
+
+/* ============================================================================
+   THE MOBILITY BATTERY, EDITABLE
+   ---------------------------------------------------------------------------
+   It used to be seven fixed tests written into the file, which made it the one
+   thing she measured that she could not change. The strength battery has been
+   hers from the start; this brings the other half into line.
+
+   Add a test, delete one, rename it, change its unit, change whether it is
+   scored on both sides, change which drills it points at, change whether a
+   higher or lower number is better. Ids never change once created, so renaming
+   a test keeps every reading it has ever had (rules 12, 13 and 20).
+   ==========================================================================*/
+function MobilityEditor({ data, setData, coach, close }) {
+  const [tab, setTab] = useState("tests");
+  const [openId, setOpenId] = useState(null);
+  const tests = data.mobTests?.length ? data.mobTests : coach.mobTests;
+  const drills = data.drills?.length ? data.drills : coach.drills;
+
+  const setTests = (fn) => setData((d) => ({ ...d, mobTests: fn(d.mobTests?.length ? d.mobTests : tests) }));
+  const setDrills = (fn) => setData((d) => ({ ...d, drills: fn(d.drills?.length ? d.drills : drills) }));
+
+  const patchTest = (id, props) => setTests((l) => l.map((m) => (m.id === id ? { ...m, ...props } : m)));
+  const patchDrill = (id, props) => setDrills((l) => l.map((x) => (x.id === id ? { ...x, ...props } : x)));
+
+  const addTest = () => {
+    const m = { id: newId(), label: "New test", unit: "cm", better: "lower", side: false,
+      how: "", why: "", needs: [], drills: [] };
+    setTests((l) => [...l, m]); setOpenId(m.id);
+  };
+  const addDrill = () => {
+    const x = { id: newId(), label: "New drill", mins: 2, how: "", targets: "" };
+    setDrills((l) => [...l, x]); setOpenId(x.id);
+  };
+
+  /* Rule 20: a reading is never deleted with the test it belonged to. The
+     history stays in `data.mobility` keyed by id, so putting the test back
+     brings its numbers with it. */
+  const removeTest = (id) => setTests((l) => l.filter((m) => m.id !== id));
+  const removeDrill = (id) => setDrills((l) => l.filter((x) => x.id !== id));
+
+  const row = (item, isTest) => (
+    <div key={item.id} style={{ borderTop: `1px solid ${C.line}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 6px" }}>
+        <button onClick={() => setOpenId(openId === item.id ? null : item.id)} className="tap" style={{
+          flex: 1, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 500 }}>{item.label || "Untitled"}</div>
+          <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+            {isTest
+              ? `${item.unit || "—"} · ${item.better === "lower" ? "lower is better" : "higher is better"}${item.side ? " · left/right" : ""}`
+              : `${item.mins} min${item.targets ? ` · ${item.targets}` : ""}`}
+          </div>
+        </button>
+        <button onClick={() => (isTest ? removeTest(item.id) : removeDrill(item.id))} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px" }}>×</button>
+      </div>
+
+      {openId === item.id && (
+        <div style={{ padding: "0 6px 14px" }}>
+          <Field label="Name" unit="" type="text" value={item.label}
+            onChange={(v) => (isTest ? patchTest : patchDrill)(item.id, { label: v })} />
+
+          {isTest ? (
+            <>
+              <Field label="Unit" unit="cm, /10, seconds…" type="text" value={item.unit || ""}
+                onChange={(v) => patchTest(item.id, { unit: v })} />
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Which way is progress?</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                {[["higher", "Higher is better"], ["lower", "Lower is better"]].map(([v, l]) => (
+                  <button key={v} onClick={() => patchTest(item.id, { better: v })} className="tap" style={{
+                    flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                    border: `1.5px solid ${item.better === v ? C.ink : C.line}`,
+                    background: item.better === v ? C.ink : "transparent",
+                    color: item.better === v ? C.chalk : C.muted }}>{l}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <button onClick={() => patchTest(item.id, { side: !item.side })} className="tap" style={{
+                  flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  border: `1.5px solid ${item.side ? C.signal : C.line}`,
+                  background: item.side ? C.signal : "transparent",
+                  color: item.side ? C.chalk : C.muted }}>Scored left and right{item.side ? " ✓" : ""}</button>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How to do it</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
+                <textarea rows={3} value={item.how || ""} onChange={(e) => patchTest(item.id, { how: e.target.value })}
+                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <MicButton onText={(v) => patchTest(item.id, { how: v })} current={item.how || ""} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>Why it matters</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
+                <textarea rows={3} value={item.why || ""} onChange={(e) => patchTest(item.id, { why: e.target.value })}
+                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <MicButton onText={(v) => patchTest(item.id, { why: v })} current={item.why || ""} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
+                Drills this points at <span style={{ fontWeight: 400, color: C.muted }}>— a weak score sends you here</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {drills.map((dr) => {
+                  const on = (item.drills || []).includes(dr.id);
+                  return (
+                    <button key={dr.id} onClick={() => patchTest(item.id, {
+                      drills: on ? (item.drills || []).filter((x) => x !== dr.id) : [...(item.drills || []), dr.id],
+                    })} className="tap" style={{
+                      padding: "7px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11.5,
+                      border: `1.5px solid ${on ? C.signal : C.line}`,
+                      background: on ? C.pist : "transparent", color: C.ink, fontFamily: "inherit" }}>{dr.label}</button>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="Minutes" unit="" value={item.mins}
+                onChange={(v) => patchDrill(item.id, { mins: Number(v) || 1 })} />
+              <Field label="What it targets" unit="" type="text" value={item.targets || ""}
+                onChange={(v) => patchDrill(item.id, { targets: v })} />
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How to do it</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                <textarea rows={3} value={item.how || ""} onChange={(e) => patchDrill(item.id, { how: e.target.value })}
+                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <MicButton onText={(v) => patchDrill(item.id, { how: v })} current={item.how || ""} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <>
+      <Eyebrow color={C.ochre}>Yours to change</Eyebrow>
+      <h2 className="disp" style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>
+        The mobility battery
+      </h2>
+      <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 16px", lineHeight: 1.5 }}>
+        Add a test, drop one, rename it, change what it measures or which drills it sends you to.
+        Nothing here is fixed. Every reading you have already taken stays where it is — a test you
+        remove and put back brings its history with it.
+      </p>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[["tests", `Tests (${tests.length})`], ["drills", `Drills (${drills.length})`]].map(([v, l]) => (
+          <button key={v} onClick={() => { setTab(v); setOpenId(null); }} className="tap" style={{
+            flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer", fontSize: 13, fontWeight: 600,
+            border: `1.5px solid ${tab === v ? C.ink : C.line}`,
+            background: tab === v ? C.ink : "transparent", color: tab === v ? C.chalk : C.muted }}>{l}</button>
+        ))}
+      </div>
+
+      <Card style={{ padding: 8, marginBottom: 12 }}>
+        {(tab === "tests" ? tests : drills).map((item) => row(item, tab === "tests"))}
+      </Card>
+
+      <Btn kind="ghost" onClick={tab === "tests" ? addTest : addDrill}>
+        {tab === "tests" ? "Add a test" : "Add a drill"}
+      </Btn>
+      <div style={{ marginTop: 10 }}>
+        <Btn kind="quiet" onClick={close}>Done</Btn>
+      </div>
+    </>
+  );
+}
 function ProgramView({ data, setData, coach, setSheet }) {
   const [editing, setEditing] = useState(null);   /* { phase, day } */
   const program = coach.program;
@@ -9598,7 +10486,12 @@ Two or three sentences unless she asks for more.`;
     const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
       messages: all.map((m) => ({ role: m.role, text: m.content })) };
     if (idx >= 0) chats[idx] = entry; else chats.push(entry);
-    return { ...d, chats: chats.slice(-200) };
+    /* No cap. Conversations were capped at the last 200 and older ones
+       silently dropped — roughly seven months at any real rate of use. They
+       are the raw material the coach learns her from (rule 15), they are
+       never deleted without her approval (rule 20), and they are small: a
+       year of normal use measures 48 KB. */
+    return { ...d, chats };
   });
 
   const send = async () => {
@@ -9945,6 +10838,10 @@ function CoachApp() {
             <ProgramView data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "vital" ? (
             <VitalDetail id={sheet.id} coach={coach} setSheet={setSheet} />
+          ) : sheet.kind === "edit-mobility" ? (
+            <MobilityEditor data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+          ) : sheet.kind === "profile" ? (
+            <ProfileSheet data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "vitals" ? (
             <VitalsAll coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "mobility" ? (
