@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 23";
+const BUILD = "8 August 2026 · 24";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3947,6 +3947,7 @@ function useCoach(data) {
         meaning: `Your own median sits near ${recBaseline}. A 55 is an ordinary day for you even though it looks middling on WHOOP's dial — which is exactly why the app judges you against yourself. This decides how hard today's class goes, not whether it happens.`,
         need: recValue ? null : "Type this morning's recovery into the card at the top of Today, or import your WHOOP export — either fills this in." }),
 
+      ...(settings.shoulderInjury ? [
       M({ group: "day", id: "shoulder", label: "Shoulder", scope: "all sessions logged",
         display: shoulderCost === null ? "—" : `${100 - shoulderCost}%`,
         sub: shoulderTrend === null ? "needs more history"
@@ -3955,7 +3956,7 @@ function useCoach(data) {
         plain: "The share of sessions where your shoulder was comfortable, and whether that share is rising.",
         how: "Sessions with a comfort score of 4 or 5, as a percentage of all sessions where you recorded one. The trend compares the last 28 days with everything before.",
         meaning: `This turns the shoulder from a permanent label into a number with a direction. ${shoulderTrend > 0.2 ? "It is getting better, which is what you said would happen." : "What matters is not today's score but whether the line is moving."} The decision rule now runs on the NEXT MORNING reading, which is the standard for irritable tissue: same or better than before the session means the load was right and can go up; worse means step back one. ${shoulderAMTrend !== null ? `Your morning-after scores are averaging ${shoulderAMTrend} out of 5.` : "It asks you the morning after any day you trained."}`,
-        need: shoulderCost === null ? "Needs shoulder comfort scores. The app asks for one the morning after each day you train." : null }),
+        need: shoulderCost === null ? "Needs shoulder comfort scores. The app asks for one the morning after each day you train." : null })] : []),
 
       M({ group: "week", id: "autonomic", label: "Autonomic", scope: "7 days vs 28",
         display: rhrDrift === null ? "—" : `${rhrDrift > 0 ? "+" : ""}${Math.round(rhrDrift)}`,
@@ -4294,6 +4295,7 @@ function useCoach(data) {
         meaning: "Efficiency falling while volume rises is the earliest sign a programme has gone stale — it shows up before any single measure declines. It is a slow number and should only be read a quarter at a time.",
         need: returnOnLoad === null ? "Needs effort scores plus a few months of strength benchmarks." : null }),
 
+      ...(settings.shoulderInjury ? [
       M({ group: "quarter", id: "shouldercost", label: "Shoulder cost", scope: "sessions affected",
         display: shoulderCost === null ? "—" : `${shoulderCost}%`,
         sub: shoulderCost === null ? "no comfort scores yet"
@@ -4302,7 +4304,7 @@ function useCoach(data) {
         plain: "The share of sessions where the shoulder was uncomfortable enough to matter.",
         how: "Sessions with comfort of 3 or below, as a percentage of all sessions with a comfort score.",
         meaning: "Quarter over quarter, is the shoulder costing you less? That is the only question worth asking about an injury that is healing. A falling number here is the evidence that you were right about it.",
-        need: shoulderCost === null ? "Needs shoulder comfort scores, asked the morning after a training day. A few weeks of them and this gets a direction." : null }),
+        need: shoulderCost === null ? "Needs shoulder comfort scores, asked the morning after a training day. A few weeks of them and this gets a direction." : null })] : []),
 
       M({ group: "year", id: "survival", label: "Still here", scope: "against the dropout curve",
         /* Survival is TIME STILL TRAINING, not weeks that hit a target. Using
@@ -4481,8 +4483,8 @@ function useCoach(data) {
       /* body composition and the shoulder */
       if (muscleCredit !== null && muscleCredit > 0) out.strong.push({ kind: "body", id: "muscle", text: `muscle ${muscleCredit} ahead of the expected decline` });
       if (worstGap && worstGap.gap >= FX.bilateralPct) out.weak.push({ kind: "body", id: "asym", text: `${worstGap.gap}% gap between sides on ${worstGap.label.toLowerCase()}` });
-      if (shoulderAMTrend !== null && shoulderAMTrend >= 4.5) out.strong.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5` });
-      if (shoulderAMTrend !== null && shoulderAMTrend < 3) out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
+      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= 4.5) out.strong.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5` });
+      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < 3) out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
 
       /* adherence and load */
       if (consistency >= 80) out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
@@ -4892,9 +4894,18 @@ function useCoach(data) {
       raise("week", "warm", `${setsMet} of seven regions are at the six-set mark. That's the dose the research actually calls for, and most people training four days a week never reach it.`);
     if (timingSpread !== null && timingSpread >= 75)
       raise("week", "push", `Your sleep timing swings by about ${Math.round(timingSpread / 6) / 10} hours night to night. Regularity predicts more than duration does — and you already have the hours. Pulling bedtime into a narrower window is the cheapest gain available to you.`);
-    if (shoulderVerdict?.key === "back")
+    /* One switch, and it means it. "Track shoulder comfort" off must remove
+       the shoulder as a READING everywhere — no comfort score, no morning
+       reading, no verdict, no trend, no headline number, no line from the
+       coach about it. It used to only hide the inputs while the outputs kept
+       talking, which is why turning it off did nothing visible.
+       Her words, 8 August: "I will tell the coach about anything that is
+       annoying me. Remove the shoulder from the app as a reading."
+       Everything already recorded is kept (rule 20) and comes straight back
+       if she ever turns it on again (rule 19). */
+    if (settings.shoulderInjury && shoulderVerdict?.key === "back")
       raise("day", "firm", "Your shoulder woke up worse than it started yesterday. That's the one signal worth acting on immediately — step the overhead work back a level today rather than testing it again.");
-    if (shoulderVerdict?.key === "clear")
+    if (settings.shoulderInjury && shoulderVerdict?.key === "clear")
       raise("day", "warm", "Shoulder was back to baseline this morning after training. That's a green light: the load you used was right, and it can go up a step next time.");
 
 
@@ -8175,7 +8186,8 @@ function Settings({ data, setData, setSheet }) {
             <Btn kind="quiet" onClick={() => setSheet({ kind: "whooplog" })}>See everything WHOOP has sent</Btn>
           </div>
         </div>
-        {[["shoulderInjury", "Track shoulder comfort", "Adds a daily comfort score to the log."],
+        {[["shoulderInjury", "Track the shoulder as a number",
+           "Off: the app never asks about your shoulder and never reports on it — tell the coach in your own words instead, and it will remember. On: a comfort score each day, a morning-after reading, and a headline number. Anything already recorded is kept either way."],
           ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."]].map(([k, label, hint]) => (
           <div key={k} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div style={{ flex: 1 }}>
