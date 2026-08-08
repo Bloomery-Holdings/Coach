@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 24";
+const BUILD = "8 August 2026 · 26";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5209,7 +5209,12 @@ const WeekSpine = ({ coach, big = false, selected, onPick }) => {
 
 
 
-const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 9, border: `1px solid ${C.line}`, background: C.chalk, color: C.ink };
+/* Her question, 8 August: "Why can't I type? Why does it always have to be
+   through the microphone?" — every one of these has always taken typing. But
+   on a phone a pale hairline box next to a big round microphone reads as a
+   label beside a button. A visible border and a little more height is the
+   whole fix. The microphone is the alternative, not the requirement. */
+const inputStyle = { width: "100%", padding: "12px 13px", borderRadius: 9, border: `1.5px solid ${C.line}`, background: C.chalk, color: C.ink, minHeight: 44 };
 
 /* shared chart styling — used by Progress and the WHOOP log */
 const axis = { stroke: C.muted, fontSize: 10, tickLine: false, axisLine: false };
@@ -5251,14 +5256,16 @@ const Scale = ({ label, value, onChange, max = 5, lo, hi, pb }) => (
 
 /* Rule 22: typing is friction, and friction is why people stop. Every box that
    takes her words takes her voice too. */
-const Note = ({ label, value, onChange }) => (
+const Note = ({ label, value, onChange, hint }) => (
   <div style={{ display: "block", marginBottom: 12 }}>
     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>{label}</div>
     <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
       <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
+        placeholder="Type here, or use the microphone"
         style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontFamily: "'IBM Plex Sans', sans-serif" }} />
       <MicButton onText={onChange} current={value || ""} />
     </div>
+    {hint && <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.45 }}>{hint}</div>}
   </div>
 );
 
@@ -5906,11 +5913,11 @@ function MoodCard({ log, write, setSheet, coach }) {
 
   return (
     <Card>
-      <Eyebrow>Before anything else</Eyebrow>
-      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 12 }}>
-        {current
-          ? "Noted. Tap it again any time you want to talk it through rather than train."
-          : "How are you, in yourself? Not your body — you. If today is hard, say so and we'll start there instead of with the session."}
+      {/* Two words and five taps. Everything the card used to say out loud
+          is behind the i — "I don't want too much writing on each card." */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+        <Eyebrow>How are you</Eyebrow>
+        <InfoNote small why="Not your body — you. If today is hard, say so and we start there instead of with the session. Whatever you tap opens the coach on that, and it is remembered: over time it learns which days go well for you and which do not.">what this is</InfoNote>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {moods.map((m) => {
@@ -6286,26 +6293,16 @@ function Today({ data, setData, coach, setSheet }) {
             </span>
           </div>
 
+          {/* ONE line, not three. The rest is behind the button — her words:
+              "I just want a tab to talk to your coach. And if there is
+              something that I need to see that the coach needs to tell me,
+              that's when something comes up." */}
           <div style={{ fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>{coach.leading[0].text}</div>
-
-          {coach.leading.slice(1).map((a, i) => (
-            <div key={i} style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
-              display: "flex", alignItems: "baseline", gap: 9 }}>
-              <span className="mono" style={{ fontSize: 8.5, letterSpacing: "0.11em", textTransform: "uppercase",
-                color: C.muted, minWidth: 46 }}>{SCOPE_LABEL[a.scope] || "today"}</span>
-              <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: C.muted }}>{a.text}</span>
-            </div>
-          ))}
 
           <div style={{ marginTop: 14 }}>
             <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
           </div>
-          <button onClick={() => setSheet({ kind: "profile" })} className="tap" style={{
-            border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
-            fontSize: 11.5, color: C.signal, display: "block" }}>
-            What I think I know about you &rsaquo;
-          </button>
-          {coach.agenda.length > coach.leading.length && (
+          {coach.agenda.length > 1 && (
             <div style={{ marginTop: 8 }}>
               <Btn kind="quiet" onClick={() => setSheet({ kind: "briefing" })}>
                 Everything your coach is watching ({coach.agenda.length})
@@ -6328,6 +6325,35 @@ function Today({ data, setData, coach, setSheet }) {
         && coach.moodToday && coach.moodToday !== "good" && (
         <LadderCard data={data} setData={setData} coach={coach} />
       )}
+
+      {/* ---- BENCHMARK DAY, BEFORE THE SESSION ---------------------------
+               Her instruction: "then benchmark day before the sessions." On a
+               day it is due it IS the session, so it has to be read first. */}
+      {isToday && measureDue && (
+        <Card style={{ background: C.pist }}>
+          <Eyebrow color={C.signal}>
+            {showMonthlyCall ? "Benchmark day" : "Measurement day"}
+          </Eyebrow>
+          <div className="disp" style={{ fontSize: 20, fontWeight: 400, lineHeight: 1.2, margin: "2px 0 8px" }}>
+            {(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate)
+              ? `Your numbers were due ${(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate) === 1
+                  ? "yesterday" : `${showMonthlyCall ? coach.monthlyLate : coach.weeklyLate} days ago`}`
+              : showMonthlyCall
+                ? "Full benchmark before today's session"
+                : "Measurements before today's session"}
+          </div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
+            {showMonthlyCall
+              ? "Once a month, everything gets measured — body composition included. Thirty minutes, then you train."
+              : "First session of the week, so you're already warm and it's done. Ten minutes, then you train."}
+          </div>
+          <Btn kind="signal" onClick={() => setSheet({ kind: showMonthlyCall ? "monthly" : "weekly",
+            key: showMonthlyCall ? coach.mk : coach.ws })}>
+            {showMonthlyCall ? "Start the benchmark" : "Take your measurements"}
+          </Btn>
+        </Card>
+      )}
+
 
       {/* ---- ZONE 2: TODAY'S SESSION ------------------------------------
                Everything else on this page is derived from this one card, so
@@ -6372,20 +6398,18 @@ function Today({ data, setData, coach, setSheet }) {
                 : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
             </div>
 
-            {isToday && coach.calibrating && !log?.type ? (
-              <div style={{ marginTop: 12, padding: "11px 13px", background: C.chalk, borderRadius: 11,
-                fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
-                <strong style={{ color: C.ink, fontWeight: 600 }}>No plan this month, on purpose.</strong>{" "}
-                I have nothing of yours to design from yet. Train what you want, tell me what it was,
-                and at the end of the month I will design September out of what actually happened.
+            {/* The explanation used to sit here in full. It is behind the i now
+                — "If anything I want described or explained, I will click the
+                info button." */}
+            {isToday && !log?.type && (
+              <div style={{ marginTop: 10 }}>
+                <InfoNote why={coach.calibrating
+                  ? "There is no plan this month on purpose. I have nothing of yours to design from yet, so you train what you want and tell me what it was. At the end of the month I design September out of what actually happened."
+                  : (coach.block ? coach.block.label + " day. " + coach.block.why : "")}>
+                  {coach.calibrating ? "No plan this month" : coach.block ? `${coach.block.label} day` : "Today"}
+                </InfoNote>
               </div>
-            ) : isToday && coach.block && !log?.type ? (
-              <div style={{ marginTop: 12, padding: "11px 13px", background: C.chalk, borderRadius: 11,
-                fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
-                <strong style={{ color: C.ink, fontWeight: 600 }}>{coach.block.label} day.</strong>{" "}
-                {coach.block.why}
-              </div>
-            ) : null}
+            )}
 
             {/* the coach's reasoning, only while it's still a suggestion */}
             {!log?.type && isToday && rx && (
@@ -6496,9 +6520,8 @@ function Today({ data, setData, coach, setSheet }) {
                         style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45, fontSize: 13 }} />
                       <MicButton onText={(v) => write({ loads: v })} current={log?.loads || ""} />
                     </div>
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 7, lineHeight: 1.45 }}>
-                      Leave it blank if there were no weights. This is stored against today,
-                      not against the class — so next month you can see what actually moved.
+                    <div style={{ marginTop: 7 }}>
+                      <InfoNote small why="Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class — so next month you can see what actually moved rather than what the class usually calls for.">what this is for</InfoNote>
                     </div>
                   </div>
                 )}
@@ -6588,18 +6611,24 @@ function Today({ data, setData, coach, setSheet }) {
               </div>
             )}
 
+            {/* ---- THE LIBRARY IS BEHIND A BUTTON --------------------------
+                 I put the whole list on the landing page. She never asked for
+                 that — she asked to be able to log her own classes. It only
+                 opens when she taps for it. */}
+            {!log?.type && !choosing && !log?.completed && (
+              <div style={{ marginTop: 14 }}>
+                <Btn kind="signal" onClick={() => setChoosing(true)}>Pick a session</Btn>
+              </div>
+            )}
+
             {/* the override menu */}
-            {(choosing
-              || (!log?.type && (isToday ? coach.calibrating : true))
-             ) && !log?.completed && (
+            {choosing && !log?.completed && (
               <div style={{ marginTop: 16, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
-                <Eyebrow>{!log?.type ? "Log what you did" : "Pick any class"}</Eyebrow>
-                <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
-                  {!log?.type
-                    ? (isToday
-                        ? "Anything at all, including something that isn't on this list — add it at the bottom."
-                        : "Whatever you actually did that day. It counts from the moment you mark it done.")
-                    : "Your call always wins."}
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Eyebrow>{!log?.type ? "Your library" : "Pick any class"}</Eyebrow>
+                  <button onClick={() => setChoosing(false)} className="tap" style={{
+                    border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                    fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>close</button>
                 </div>
                 {data.library.map((w) => (
                   <button key={w.id} onClick={() => choose(w)} className="tap" style={{
@@ -6700,10 +6729,8 @@ function Today({ data, setData, coach, setSheet }) {
                     <span style={{ fontSize: 11, color: C.moss, fontWeight: 600 }}>
                       ✓ saved
                     </span>
-                    <span style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, flexBasis: "100%" }}>
-                      Nothing here is waiting on you — there is no save button because every
-                      tap is written to this device as you make it. Add another only if you
-                      actually did another.
+                    <span style={{ flexBasis: "100%" }}>
+                      <InfoNote small why="There is no save button because there is nothing to save. Every tap and every letter is written to this device as you make it. Add another session only if you actually did another one.">why there's no save button</InfoNote>
                     </span>
                   </div>
                 )}
@@ -6937,32 +6964,6 @@ function Today({ data, setData, coach, setSheet }) {
               Log today's session and an effort score appears here — that's what these five are built on.
             </div>
           )}
-        </Card>
-      )}
-
-      {/* ---- the coach calls the measurement day ---- */}
-      {isToday && measureDue && (
-        <Card style={{ background: C.pist }}>
-          <Eyebrow color={C.signal}>
-            {showMonthlyCall ? "Benchmark day" : "Measurement day"}
-          </Eyebrow>
-          <div className="disp" style={{ fontSize: 20, fontWeight: 400, lineHeight: 1.2, margin: "2px 0 8px" }}>
-            {(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate)
-              ? `Your numbers were due ${(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate) === 1
-                  ? "yesterday" : `${showMonthlyCall ? coach.monthlyLate : coach.weeklyLate} days ago`}`
-              : showMonthlyCall
-                ? "Full benchmark before today's session"
-                : "Measurements before today's session"}
-          </div>
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
-            {showMonthlyCall
-              ? "Once a month, everything gets measured — body composition included. Thirty minutes, then you train."
-              : "First session of the week, so you're already warm and it's done. Ten minutes, then you train."}
-          </div>
-          <Btn kind="signal" onClick={() => setSheet({ kind: showMonthlyCall ? "monthly" : "weekly",
-            key: showMonthlyCall ? coach.mk : coach.ws })}>
-            {showMonthlyCall ? "Start the benchmark" : "Take your measurements"}
-          </Btn>
         </Card>
       )}
 
@@ -9509,6 +9510,19 @@ function useDictation(onText) {
      which is how dictation ends up writing to yesterday's log. */
   const cb = useRef(onText);
   useEffect(() => { cb.current = onText; });
+  /* ---- WHY IT KEPT CUTTING OUT AFTER A SECOND -------------------------
+     Chrome on Android ends the recognition session at the first pause,
+     whatever `continuous` says. The old onend just switched the button off,
+     so a sentence with a breath in it needed five taps.
+
+     It restarts itself now, and keeps restarting until she taps stop. Two
+     guards, because an auto-restart is exactly the kind of thing that spins:
+     nothing restarts after a real error (a refused microphone, no network),
+     and if the browser ends the session immediately several times in a row
+     it gives up rather than thrashing. */
+  const wants = useRef(false);          /* does she still intend to be talking */
+  const shortEnds = useRef(0);          /* consecutive sessions that died instantly */
+  const startedAt = useRef(0);
 
   useEffect(() => {
     const SR = typeof window !== "undefined" &&
@@ -9525,7 +9539,7 @@ function useDictation(onText) {
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-GB";
-    r.onstart = () => setProblem(null);
+    r.onstart = () => { startedAt.current = Date.now(); setProblem(null); };
     r.onresult = (e) => {
       /* Rebuilt from the whole list every time, never accumulated between
          events — so a browser that repeats itself cannot double anything. */
@@ -9533,12 +9547,27 @@ function useDictation(onText) {
       for (let i = 0; i < e.results.length; i++) out = mergeHeard(out, e.results[i][0].transcript);
       cb.current(out);
     };
-    r.onend = () => setListening(false);
+    r.onend = () => {
+      if (!wants.current) { setListening(false); return; }
+      const lasted = Date.now() - (startedAt.current || 0);
+      shortEnds.current = lasted < 900 ? shortEnds.current + 1 : 0;
+      if (shortEnds.current >= 4) {
+        wants.current = false; setListening(false);
+        setProblem("Dictation keeps stopping on its own. Type instead for now — the box beside the microphone takes typing.");
+        return;
+      }
+      try { r.start(); } catch (err) { wants.current = false; setListening(false); }
+    };
     r.onerror = (e) => {
+      wants.current = false;
+      shortEnds.current = 0;
       setListening(false);
       if (e?.error === "not-allowed" || e?.error === "service-not-allowed")
         setProblem("Microphone permission was refused. Allow it for this site in your browser settings.");
-      else if (e?.error === "no-speech") setProblem("Didn't catch anything — try again a bit closer.");
+      /* no-speech fires on any silence and is not a failure — it used to
+         stop her mid-thought and show a message. It just keeps listening. */
+      else if (e?.error === "no-speech") { wants.current = true; setProblem(null); }
+      else if (e?.error === "aborted") setProblem(null);
       else if (e?.error === "network") setProblem("Dictation needs a connection. It's the one part of the app that does.");
       else if (e?.error) setProblem(`Dictation stopped: ${e.error}`);
     };
@@ -9549,8 +9578,16 @@ function useDictation(onText) {
   const toggle = () => {
     const r = recRef.current;
     if (!r) return;
-    if (listening) { try { r.stop(); } catch (err) { /* ignore */ } setListening(false); }
-    else { try { r.start(); setListening(true); setProblem(null); } catch (err) { setListening(false); } }
+    if (listening) {
+      wants.current = false;
+      try { r.stop(); } catch (err) { /* already stopped */ }
+      setListening(false);
+    } else {
+      wants.current = true;
+      shortEnds.current = 0;
+      try { r.start(); setListening(true); setProblem(null); }
+      catch (err) { wants.current = false; setListening(false); }
+    }
   };
   return { listening, supported, toggle, problem };
 }
@@ -9932,6 +9969,35 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
    closes. The small circled i is the only signal, and it appears only where an
    explanation exists (progressive disclosure, rule 11, rule 14).
    ==========================================================================*/
+/* A self-contained circled i: tap it, the explanation appears underneath,
+   tap again and it goes. Used wherever a card should carry no prose of its
+   own — her instruction of 8 August: "if anything I want described or
+   explained, I will click the info button." InfoTitle below is the
+   controlled version, used by rows whose parent already tracks which one is
+   open; this one is for anywhere else. */
+function InfoNote({ children, why, small }) {
+  const [open, setOpen] = useState(false);
+  if (!why) return <span>{children}</span>;
+  return (
+    <span style={{ display: "block" }}>
+      <button onClick={() => setOpen((v) => !v)} className="tap" aria-label="What this is"
+        style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer",
+          fontFamily: "inherit", textAlign: "left" }}>
+        <span style={{ fontSize: small ? 11 : 13.5, fontWeight: small ? 400 : 600,
+          color: open ? C.signal : (small ? C.muted : C.ink) }}>{children}</span>
+        <span style={{ display: "inline-block", width: 13, height: 13, marginLeft: 6, verticalAlign: "1px",
+          borderRadius: 999, border: `1px solid ${open ? C.signal : "#C9B8C4"}`,
+          color: open ? C.signal : C.muted, fontSize: 8.5, lineHeight: "11px", textAlign: "center",
+          fontFamily: "Georgia, serif", fontStyle: "italic" }}>i</span>
+      </button>
+      {open && (
+        <span style={{ display: "block", fontSize: 12, lineHeight: 1.55, color: C.muted,
+          background: C.chalk, borderRadius: 10, padding: "10px 12px", marginTop: 7 }}>{why}</span>
+      )}
+    </span>
+  );
+}
+
 const InfoTitle = ({ children, why, open, onToggle }) => (
   <button onClick={why ? onToggle : undefined} className="tap" style={{
     border: "none", background: "transparent", padding: 0, textAlign: "left", flex: 1,
