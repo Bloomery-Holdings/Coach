@@ -1880,7 +1880,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 26";
+const BUILD = "8 August 2026 · 27";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5934,9 +5934,7 @@ function MoodCard({ log, write, setSheet, coach }) {
           );
         })}
       </div>
-      <div style={{ fontSize: 11, lineHeight: 1.5, color: C.muted, marginTop: 11 }}>
-        Nothing here counts against you. A rest day you chose on purpose is a decision, not a miss.
-      </div>
+      
     </Card>
   );
 }
@@ -6251,17 +6249,17 @@ function Today({ data, setData, coach, setSheet }) {
               background: C.card, fontSize: 12, fontFamily: "inherit", color: C.ink }} />
         </div>
 
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.45 }}>
-          {isToday
-            ? "Tap an earlier day to log or fix it."
-            : `Logging ${parse(logDate).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}.`}
-          {!isToday && (
+        {/* The sentence said what the date field above it already says. Gone.
+            The way back is still here, because otherwise an earlier day is a
+            trap — but it is one word, and only when she is on one. */}
+        {!isToday && (
+          <div style={{ marginTop: 8 }}>
             <button onClick={() => setLogDate(coach.t)} className="tap" style={{
-              border: "none", background: "transparent", cursor: "pointer", padding: "0 0 0 6px",
-              fontSize: 11, color: C.signal, fontWeight: 500,
+              border: "none", background: "transparent", cursor: "pointer", padding: 0,
+              fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
             }}>back to today</button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ---- what you need in the moment, nothing else ---- */}
@@ -6319,8 +6317,6 @@ function Today({ data, setData, coach, setSheet }) {
           announce a class. It offers something smaller instead, immediately,
           in the space between the mood and the session. Only while the day is
           still open, and never once she has logged something. */}
-          does not accept that and stop — it walks down to something smaller.
-          Only on a day still open, and never after she has already logged. */}
       {isToday && !log?.completed && log?.state !== "moved" && !restDay
         && coach.moodToday && coach.moodToday !== "good" && (
         <LadderCard data={data} setData={setData} coach={coach} />
@@ -6330,27 +6326,22 @@ function Today({ data, setData, coach, setSheet }) {
                Her instruction: "then benchmark day before the sessions." On a
                day it is due it IS the session, so it has to be read first. */}
       {isToday && measureDue && (
-        <Card style={{ background: C.pist }}>
-          <Eyebrow color={C.signal}>
-            {showMonthlyCall ? "Benchmark day" : "Measurement day"}
-          </Eyebrow>
-          <div className="disp" style={{ fontSize: 20, fontWeight: 400, lineHeight: 1.2, margin: "2px 0 8px" }}>
-            {(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate)
-              ? `Your numbers were due ${(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate) === 1
-                  ? "yesterday" : `${showMonthlyCall ? coach.monthlyLate : coach.weeklyLate} days ago`}`
-              : showMonthlyCall
-                ? "Full benchmark before today's session"
-                : "Measurements before today's session"}
+        <Card style={{ background: C.pist, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.ink }}>
+              {showMonthlyCall ? "Monthly benchmark" : "Weekly measurements"}
+              {(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate) > 0 && (
+                <span style={{ fontWeight: 400, color: C.muted }}>
+                  {" — "}{showMonthlyCall ? coach.monthlyLate : coach.weeklyLate} days late
+                </span>
+              )}
+            </span>
+            <button onClick={() => setSheet({ kind: showMonthlyCall ? "monthly" : "weekly",
+              key: showMonthlyCall ? coach.mk : coach.ws })} className="tap" style={{
+                padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit",
+                whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
           </div>
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
-            {showMonthlyCall
-              ? "Once a month, everything gets measured — body composition included. Thirty minutes, then you train."
-              : "First session of the week, so you're already warm and it's done. Ten minutes, then you train."}
-          </div>
-          <Btn kind="signal" onClick={() => setSheet({ kind: showMonthlyCall ? "monthly" : "weekly",
-            key: showMonthlyCall ? coach.mk : coach.ws })}>
-            {showMonthlyCall ? "Start the benchmark" : "Take your measurements"}
-          </Btn>
         </Card>
       )}
 
@@ -6655,8 +6646,6 @@ function Today({ data, setData, coach, setSheet }) {
                words: "if there is something decided by the coach and I add
                something else after it, this all should be at the beginning
                of the page." Whatever she did today is one block. */}
-               Always here, always countable, always addable — whether or not
-               the main class is finished. */}
           <Card>
             <Eyebrow>Everything you did {isToday ? "today" : "that day"}</Eyebrow>
 
@@ -6844,6 +6833,56 @@ function Today({ data, setData, coach, setSheet }) {
       })()}
 
 
+      {/* ---- WHERE YOU STAND, RIGHT AFTER THE SESSIONS -------------------
+               Her instruction: these five are built out of the sessions, so
+               they belong next to them rather than at the bottom of the page. */}
+      {isToday && (
+        <Card>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 3 }}>
+            <Eyebrow>Where you stand</Eyebrow>
+            <button onClick={() => setSheet({ kind: "vitals" })} className="tap" style={{
+              border: "none", background: "transparent", cursor: "pointer",
+              fontSize: 11.5, color: C.signal, padding: 0 }}>All of it →</button>
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 14 }}>
+            Tap any number to find out what it's telling you.
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
+            {coach.vitals.map((v) => (
+              <button key={v.id} onClick={() => setSheet({ kind: "vital", id: v.id })} className="tap" style={{
+                border: "none", background: C.chalk, borderRadius: 12, cursor: "pointer",
+                padding: "12px 4px", textAlign: "center", display: "block",
+              }}>
+                <div className="mono" style={{ fontSize: 17, fontWeight: 600, color: v.color, lineHeight: 1.1 }}>
+                  {v.display}
+                </div>
+                <div style={{ fontSize: 9.5, color: C.muted, marginTop: 5, lineHeight: 1.2 }}>{v.label}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 13, paddingTop: 12, borderTop: `1px solid ${C.line}`,
+            fontSize: 13, lineHeight: 1.55, color: C.ink }}>
+            {coach.reading}
+          </div>
+
+          {/* THESE USED TO ASK FOR THE EFFORT SCORE TOO.
+              Three places asked the same question — here, the session card,
+              and a row in "Needs you" — and on a day with two classes none of
+              them could say WHICH class they meant. Effort belongs to a
+              session, not to a day. It is asked once, under the session it
+              is about, and nowhere else. */}
+          {!log?.completed && !restDay && (
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
+              fontSize: 12, lineHeight: 1.5, color: C.muted }}>
+              Log today's session and an effort score appears here — that's what these five are built on.
+            </div>
+          )}
+        </Card>
+      )}
+
+
       {/* ---- ZONE 3: NEEDS YOU -------------------------------------------
                One block of rows in place of eight separate cards. A row is
                here only while it needs her; the block vanishes when nothing
@@ -6917,55 +6956,6 @@ function Today({ data, setData, coach, setSheet }) {
       )}
 
       {!isToday && <BodyWorkCard log={log} write={write} isToday={isToday} />}
-
-      {/* ---- THE FIVE VITALS ---------------------------------------------
-               Five numbers, always the same five, always in the same order.
-               Tap any one for what it means and a way to ask about it. */}
-      {isToday && (
-        <Card>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 3 }}>
-            <Eyebrow>Where you stand</Eyebrow>
-            <button onClick={() => setSheet({ kind: "vitals" })} className="tap" style={{
-              border: "none", background: "transparent", cursor: "pointer",
-              fontSize: 11.5, color: C.signal, padding: 0 }}>All of it →</button>
-          </div>
-          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, marginBottom: 14 }}>
-            Tap any number to find out what it's telling you.
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 5 }}>
-            {coach.vitals.map((v) => (
-              <button key={v.id} onClick={() => setSheet({ kind: "vital", id: v.id })} className="tap" style={{
-                border: "none", background: C.chalk, borderRadius: 12, cursor: "pointer",
-                padding: "12px 4px", textAlign: "center", display: "block",
-              }}>
-                <div className="mono" style={{ fontSize: 17, fontWeight: 600, color: v.color, lineHeight: 1.1 }}>
-                  {v.display}
-                </div>
-                <div style={{ fontSize: 9.5, color: C.muted, marginTop: 5, lineHeight: 1.2 }}>{v.label}</div>
-              </button>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 13, paddingTop: 12, borderTop: `1px solid ${C.line}`,
-            fontSize: 13, lineHeight: 1.55, color: C.ink }}>
-            {coach.reading}
-          </div>
-
-          {/* THESE USED TO ASK FOR THE EFFORT SCORE TOO.
-              Three places asked the same question — here, the session card,
-              and a row in "Needs you" — and on a day with two classes none of
-              them could say WHICH class they meant. Effort belongs to a
-              session, not to a day. It is asked once, under the session it
-              is about, and nowhere else. */}
-          {!log?.completed && !restDay && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}`,
-              fontSize: 12, lineHeight: 1.5, color: C.muted }}>
-              Log today's session and an effort score appears here — that's what these five are built on.
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* ---- everything else, folded away until asked for ---- */}
       {/* ---- THE DAY ITSELF, AND NOTHING THAT BELONGS TO A SESSION -------
@@ -10216,9 +10206,15 @@ function MonthPlanCard({ data, setData, coach, setSheet }) {
         </span>
       </div>
 
-      <div className="disp" style={{ fontSize: firstWeek ? 20 : 16, marginBottom: 4 }}>{ph.name}</div>
+      {/* The paragraph was the card. During calibration there is no plan to
+          read at all — only a description of one — so the name and the week
+          she has actually had are the whole card, and the words sit behind
+          the i like everything else. */}
+      <div className="disp" style={{ fontSize: firstWeek ? 20 : 16, marginBottom: ph.line ? 6 : 4 }}>{ph.name}</div>
       {ph.line && (
-        <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>{ph.line}</div>
+        <div style={{ marginBottom: 10 }}>
+          <InfoNote small why={ph.line}>what this month is</InfoNote>
+        </div>
       )}
 
       {/* the shape of the week: what she chose while calibrating, what the
