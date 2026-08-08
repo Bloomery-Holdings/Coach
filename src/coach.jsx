@@ -14,6 +14,15 @@ import {
    intensity / recoveryCost are 1–5 estimates, shoulderLoad is low|medium|high.
    They are rough working figures for the coaching engine, not medical values.
 --------------------------------------------------------------------------- */
+/* What she might add on after a class. The id is what gets stored and must
+   never change; the label is what she reads and can. */
+const EXTRA_TAGS = [
+  { id: "strength",      label: "strength" },
+  { id: "mobility",      label: "stretching and mobility" },
+  { id: "shoulder work", label: "shoulder work" },
+  { id: "cardio",        label: "cardio" },
+];
+
 const SEED_LIBRARY = [
   { id: "pilates", body: { legs: 1, back: 2, chest: 0, shoulders: 1, arms: 0, core: 3, heart: 1 },    name: "Pilates class",         goal: "core",        intensity: 4, recoveryCost: 3, shoulderLoad: "medium", durations: [45, 60],     equipment: "Mat, studio",           cue: "Move from the centre. Let her push the pace.", home: false , resistance: "Whatever the class calls for", structure: "Instructor-led. Fill this in with how the class actually runs and I'll take it into account.", felt: ""},
   { addon: true, id: "shoulder", body: { legs: 0, back: 1, chest: 0, shoulders: 3, arms: 1, core: 0, heart: 0 },   name: "Shoulder session",      goal: "mobility",    intensity: 2, recoveryCost: 1, shoulderLoad: "low",    durations: [10, 15, 20], equipment: "Band, light dumbbells", cue: "Range first. If it pinches, shorten the range, don't push through.", home: false },
@@ -6672,16 +6681,20 @@ function Today({ data, setData, coach, setSheet }) {
                 )}
 
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Anything after the class</div>
+                {/* "mobility" was in this list twice — two identical chips, sharing
+                    one stored value, so tapping either lit both. One chip now, and
+                    it keeps the id it always had so anything already logged still
+                    matches; only what it is CALLED has changed. */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
-                  {["strength", "mobility", "mobility", "shoulder work", "cardio"].map((x) => {
-                    const on = (log?.extras || []).includes(x);
+                  {EXTRA_TAGS.map((t) => {
+                    const on = (log?.extras || []).includes(t.id);
                     return (
-                      <button key={x} onClick={() => write({ extras: on ? log.extras.filter((y) => y !== x) : [...(log?.extras || []), x] })}
+                      <button key={t.id} onClick={() => write({ extras: on ? log.extras.filter((y) => y !== t.id) : [...(log?.extras || []), t.id] })}
                         className="tap" style={{
                         padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12, fontWeight: 500,
                         border: `1.5px solid ${on ? C.signal : C.line}`,
                         background: on ? C.signal : "transparent", color: on ? C.chalk : C.muted,
-                      }}>{x}</button>
+                      }}>{t.label}</button>
                     );
                   })}
                 </div>
@@ -9114,6 +9127,29 @@ Avoid anything close to these: ${(Object.values(data.notes || {}).slice(-12).map
 /* Typing is friction, and friction is why people stop. This uses the browser's
    own speech recognition where it exists; where it doesn't, the phone keyboard
    has a microphone key that does the same job into any text box. */
+/* ---- WHY DICTATION NEEDS A MERGE RATHER THAN A CONCATENATION ----------
+   Desktop Chrome hands back each new chunk of speech once: "I can't", then
+   "live", then "without". Chrome on Android hands back the WHOLE phrase again
+   every time it hears another word: "I can't", "I can't live", "I can't live
+   without" — and marks each one final. Appending those gives exactly what she
+   saw: "I can't I can't live I can't live without".
+
+   So each incoming segment is merged rather than added. If it is a longer
+   version of what we already have, it replaces it; if we already end with it,
+   it is dropped; otherwise it is genuinely new and gets appended. That is
+   correct on both kinds of browser, which matters because she uses one and
+   this was written on the other. */
+const mergeHeard = (soFar, next) => {
+  const a = String(soFar || "").trim();
+  const b = String(next || "").trim();
+  if (!a) return b;
+  if (!b) return a;
+  const la = a.toLowerCase(), lb = b.toLowerCase();
+  if (lb.startsWith(la)) return b;      /* the same phrase, grown */
+  if (la.endsWith(lb)) return a;        /* already have these words */
+  return a + " " + b;
+};
+
 function useDictation(onText) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -9140,16 +9176,13 @@ function useDictation(onText) {
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-GB";
-    let settled = "";
-    r.onstart = () => { settled = ""; setProblem(null); };
+    r.onstart = () => setProblem(null);
     r.onresult = (e) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const txt = e.results[i][0].transcript;
-        if (e.results[i].isFinal) settled += txt + " ";
-        else interim += txt;
-      }
-      cb.current((settled + interim).trim());
+      /* Rebuilt from the whole list every time, never accumulated between
+         events — so a browser that repeats itself cannot double anything. */
+      let out = "";
+      for (let i = 0; i < e.results.length; i++) out = mergeHeard(out, e.results[i][0].transcript);
+      cb.current(out);
     };
     r.onend = () => setListening(false);
     r.onerror = (e) => {
