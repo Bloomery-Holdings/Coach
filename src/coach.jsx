@@ -1871,6 +1871,14 @@ const KEY = "coach:data";
    to save, so a transient failure cannot destroy what is still on the device. */
 let storeReadFailed = false;
 const didStoreReadFail = () => storeReadFailed;
+/* A copy of this file opened straight off the disk. Browsers refuse local
+   storage on a file:// page, so the read throws and there is nothing wrong
+   with her data — the file simply has nowhere to put anything. Worth saying
+   plainly rather than showing a rescue screen for a problem she does not have. */
+const openedFromDisk = () => {
+  try { return typeof location !== "undefined" && location.protocol === "file:"; }
+  catch (e) { return false; }
+};
 const BLANK = {
   settings: {
     name: "", age: "", height: "", weeklyTarget: 4, gymDate: "", monthTheme: "", primaryGoal: "",
@@ -11042,6 +11050,7 @@ class ErrorBoundary extends React.Component {
     const { err, raw, copied, armed, snap } = this.state;
     const msg = String((err && err.message) || err || "unknown");
     const found = readStore(raw);
+    const onDisk = openedFromDisk();
     const days = found.state === "readable" ? found.days : null;
     const box = {
       background: C.card, borderRadius: 18, padding: 20, marginBottom: 14,
@@ -11052,12 +11061,20 @@ class ErrorBoundary extends React.Component {
                     padding: "28px 18px 40px", fontFamily: "'Hanken Grotesk',system-ui,sans-serif" }}>
         <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <div className="disp" style={{ fontSize: 26, marginBottom: 6 }}>
-            {found.state === "junk"
+            {onDisk
+              ? "This copy cannot save anything."
+              : found.state === "junk"
               ? "One thing is in the way."
               : "The app hit an error opening."}
           </div>
           <div style={{ fontSize: 15, color: C.muted, marginBottom: 20, lineHeight: 1.5 }}>
-            {found.state === "junk"
+            {onDisk
+              ? <>You have opened the single-file copy straight from a folder on this
+                  computer. Browsers do not allow a page opened that way to save anything,
+                  so this copy can show you the app but cannot keep a thing you type into
+                  it — and it was never holding your training. That lives in the installed
+                  app, at its own web address, and is untouched by this.</>
+              : found.state === "junk"
               ? <>There is nothing of yours on this device to lose — the store is holding a leftover
                   from an interrupted write rather than any data. Clear it{snap ? " or put back a saved copy" : ""} and
                   the app opens. It is one tap below.</>
