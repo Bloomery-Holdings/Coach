@@ -769,10 +769,20 @@ const phaseForWeek = (wk, program) => {
    trains — whatever the calendar says. Skip a day and the next kind simply
    waits for her. `trains` is her rhythm, passed in; without it we fall back to
    the old weekday map so blocks written before this still read correctly. */
-const blockFor = (date, program, trains) => {
+const blockFor = (date, program, trains, plan) => {
   const wk = programWeekOf(date, program);
   const ph = phaseForWeek(wk, program);
   if (!ph) return null;
+
+  /* ---- WHAT SHE HAS SAID ABOUT THIS PARTICULAR DAY -------------------
+     "Maybe I know that a certain day will be a meeting, so I switch it and
+     say that day I will not exercise, and I move the plan to a different
+     day." 9 August. The pattern below derives a day's kind from the block;
+     this is her saying otherwise about one date, and it wins outright. */
+  if (plan && plan[date]) {
+    const chosenId = plan[date];
+    return { id: chosenId, week: wk, phase: ph, chosen: true, ...(BLOCKS[chosenId] || BLOCKS.rest) };
+  }
 
   const seq = (ph.sequence && ph.sequence.length) ? ph.sequence : null;
   if (!seq || typeof trains !== "function") {
@@ -1136,6 +1146,22 @@ const REVIEW_SHAPE = {
   interpretation: "what her numbers actually did this month, in plain language, naming what is real and what is noise",
   profile: "0 to 6 entries, each { claim, kind, evidence: [{ date, quote }] } — only things you can point at",
   keptGoals: "the ids of every open goal you have kept in view",
+  /* Her amendment to rule 10, 9 August: the block is delivered by classes from
+     her own library and nothing else — but if something she has SAID she wants
+     to be able to do needs a muscle or a range no class in that library
+     reaches, the coach may write her a short set of exercises for it, treated
+     exactly like the battery: named, explained, with a video to find.
+
+     Deliberately narrow. It must serve a goal she stated, it must say why the
+     library cannot cover it, and it is an addition to the month, never a
+     replacement for a class. Anything that fails those is dropped. */
+  prescription: "0 to 6 written exercises, ONLY where a goal she stated needs something no class in her library reaches. Each { label, goalIds: [every goal this one serves], targets, sets, reps, freq, how, why }. Integrate across ALL her goals first: never give the same movement twice under two different goal headings — give it once and list both goals.",
+  /* Her question, 9 August: "how long should I take to achieve it?" A real
+     answer, and one that must never read as a plan. Rule 6 is absolute — the
+     app designs one month and never further — so this is an ESTIMATE of how
+     long this kind of change takes at this frequency, plus what should be
+     visible within the month that IS designed. Wording is checked. */
+  horizons: "one entry per open goal, each { goalId, weeks: a realistic estimate of how long this takes at the frequency you have set, firstSigns: what she should notice first and roughly when, thisMonth: what should measurably move within the four weeks you are designing }",
 };
 
 const REVIEW_KINDS = ["pilates", "core", "strength", "move", "cardio", "rest"];
@@ -1184,10 +1210,67 @@ const validateReview = (parsed, ctx) => {
     && p.evidence.every((e) => e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)));
   const rejected = claims.length - usable.length;
 
+  /* Rule 10 as she amended it. A written exercise is allowed only when it
+     serves a goal she actually set and says what the library could not do.
+     Everything else is dropped silently — a prescription nobody asked for is
+     how an app that follows filmed classes turns into a spreadsheet. */
+  const rx = Array.isArray(parsed.prescription) ? parsed.prescription : [];
+  const goalIds = (ctx.openGoals || []).map((g) => g.id);
+  /* one exercise, every goal it serves. Her instruction: "it should integrate
+     all the goals in order not to give me the same exercise for two different
+     goals." So the same movement filed twice is merged rather than repeated. */
+  const seenLabel = new Set();
+  const usableRx = rx.map((x) => {
+    if (!x) return null;
+    const gs = (Array.isArray(x.goalIds) ? x.goalIds : [x.goalId]).filter((g) => goalIds.includes(g));
+    if (!gs.length) return null;
+    if (typeof x.label !== "string" || x.label.trim().length < 3 || x.label.length > 60) return null;
+    if (typeof x.how !== "string" || x.how.trim().length <= 20) return null;
+    if (typeof x.why !== "string" || x.why.trim().length <= 10) return null;
+    const key = x.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (seenLabel.has(key)) return null;
+    seenLabel.add(key);
+    return { ...x, goalIds: Array.from(new Set(gs)) };
+  }).filter(Boolean).slice(0, 6);
+  const rejectedRx = rx.length - usableRx.length;
+
+  /* how long a goal takes. An estimate, never a plan — the guard refuses
+     anything that reads as a schedule beyond the one month being designed. */
+  const hz = Array.isArray(parsed.horizons) ? parsed.horizons : [];
+  const usableHz = hz.filter((h) => h && goalIds.includes(h.goalId)
+    && (Number(h.weeks) > 0 || typeof h.weeks === "string")
+    && typeof h.thisMonth === "string" && h.thisMonth.trim().length > 5)
+    .map((h) => ({
+      goalId: h.goalId,
+      weeks: String(h.weeks).slice(0, 30),
+      firstSigns: String(h.firstSigns || "").slice(0, 300),
+      thisMonth: String(h.thisMonth).trim().slice(0, 300),
+      setOn: ctx.today || "",
+    }));
+
   return {
     ok: errors.length === 0,
     errors,
     rejectedClaims: rejected,
+    rejectedRx,
+    horizons: usableHz,
+    prescription: usableRx.map((x) => ({
+      id: "rx" + Math.random().toString(36).slice(2, 9),
+      label: x.label.trim(),
+      goalIds: x.goalIds,
+      goalId: x.goalIds[0],   /* kept so anything reading the old shape still works */
+      targets: String(x.targets || "").slice(0, 120),
+      sets: String(x.sets || "").slice(0, 40),
+      reps: String(x.reps || "").slice(0, 40),
+      /* Her instruction: because she alternates classes and may not see the
+         same one for a fortnight, this work cannot ride on the rotation. If
+         the model does not say otherwise, it is after every session she does. */
+      freq: String(x.freq || "after every session you train").slice(0, 60),
+      how: x.how.trim(),
+      why: x.why.trim(),
+      mins: 3,
+      fromReview: true,
+    })),
     block: errors.length ? null : {
       name: parsed.name.trim(), line: parsed.line.trim(), week: parsed.week,
       reasoning: parsed.reasoning.trim(),
@@ -1202,6 +1285,438 @@ const validateReview = (parsed, ctx) => {
     })),
   };
 };
+
+/* ---- WHAT THE REVIEW ACTUALLY READS ---------------------------------
+   Rule 8: every battery measurement individually, every mobility test, every
+   body region, every calculation, all of WHOOP, the record, her stated goals,
+   and everything she wrote. Never two or three criteria.
+
+   Assembled as plain text rather than JSON because the model reads prose
+   better than it reads braces, and because she can read it herself — the
+   sheet shows her exactly what was sent before it sends it. Nothing about
+   this month is a black box, including the part that talks to a model.
+
+   Everything is wrapped: a missing key must degrade a section, never throw
+   away the whole read. */
+const rvSafe = (fn, fallback = "") => { try { const v = fn(); return v === undefined || v === null ? fallback : v; } catch (e) { return fallback; } };
+
+const reviewPayload = (data, coach) => {
+  const L = [];
+  const S = (title, body) => { const b = String(body || "").trim(); L.push(`\n### ${title}\n${b || "(nothing recorded)"}`); };
+  const d = data || {}, c = coach || {};
+  const t = c.t || today();
+  const s = d.settings || {};
+
+  /* how far back to read: the live block if there is one, otherwise 35 days */
+  const from = rvSafe(() => {
+    const ph = c.livePhase;
+    if (ph && c.blockCalendar && c.blockCalendar.from) return c.blockCalendar.from;
+    return addDays(t, -35);
+  }, addDays(t, -35));
+  const span = rvSafe(() => Math.max(1, Math.round((parse(t) - parse(from)) / 86400000)), 35);
+
+  L.push(`# EVERYTHING, ${from} TO ${t} (${span} days)`);
+
+  S("WHO SHE IS", rvSafe(() => [
+    s.name ? `Name: ${s.name}` : null,
+    s.age ? `Age: ${s.age}` : null,
+    s.height ? `Height: ${s.height}` : null,
+    s.shoulderInjury ? "Right shoulder is rehabilitating and is a live constraint." : "No injury flag set.",
+    `She wants to train about ${s.weeklyTarget || "?"} times a week.`,
+    s.primaryGoal ? `What she said she is here for: ${s.primaryGoal}` : null,
+    `WHOOP ${s.whoopConnected ? `connected, export asked for on ${DAY_FULL[Number(s.whoopDay) || 6]}` : "not connected"}.`,
+  ].filter(Boolean).join("\n")));
+
+  S("WHAT SHE SAID SHE WANTS TO BE ABLE TO DO", rvSafe(() =>
+    (d.goals || []).map((g) => {
+      const sc = (g.scores || []);
+      const line = sc.length
+        ? sc.slice(-8).map((x) => `${x.date} ${x.value}/10${x.note ? ` — she wrote: "${x.note}"` : ""}`).join("; ")
+        : "never scored";
+      return `[${g.id}] "${g.text}" (${g.done ? "marked done" : "open"}) — ${line}`;
+    }).join("\n")));
+
+  S("THE BLOCK THAT JUST RAN", rvSafe(() => {
+    const br = c.blockReview;
+    if (!br) return "No block has completed yet — this is the calibration month.";
+    return [
+      `${br.name}, ${br.weeks} weeks.`,
+      `${br.sessions} sessions, ${br.consistency}% of what was scheduled.`,
+      `${br.realUp} measures genuinely up past their error threshold, ${br.realDown} genuinely down.`,
+      br.setsMet !== undefined ? `${br.setsMet} of 7 body regions hit their sets.` : null,
+      br.evidence ? ["strong", "weak", "flags"].map((k) =>
+        (br.evidence[k] || []).map((it) => `${k}: ${it.text}`).join("\n")).filter(Boolean).join("\n") : null,
+    ].filter(Boolean).join("\n");
+  }));
+
+  S("THE SHAPE THE WEEK HAS HAD", rvSafe(() => {
+    const ph = c.livePhase;
+    if (!ph || !ph.week) return "no shape set";
+    const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return ph.week.map((k, i) => `${DOW[i]}: ${k}`).join("\n")
+      + (ph.line ? `\nWhat it was for: ${ph.line}` : "");
+  }));
+
+  S("EVERY DAY OF IT", rvSafe(() => {
+    const out = [];
+    for (let dt = from; dt <= t; dt = addDays(dt, 1)) {
+      const l = (d.logs || {})[dt];
+      const m = (d.morning || {})[dt];
+      const moved = dayAndMonth(dt);
+      const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][parse(dt).getDay()];
+      const bits = [];
+      if (l && l.completed) {
+        bits.push(`${l.type || "session"}${l.minutes ? ` ${l.minutes}min` : ""}`);
+        if (l.rpe) bits.push(`effort ${l.rpe}/10`);
+        if (l.sets !== undefined && l.sets !== "") bits.push(`${l.sets} sets`);
+        if (l.during) bits.push(`felt ${l.during}/5 during`);
+        if (l.energyAfter) bits.push(`${l.energyAfter}/5 after`);
+        if (l.shoulder) bits.push(`shoulder comfort ${l.shoulder}/5`);
+        (l.extras || []).forEach((x) => bits.push(`plus ${x}`));
+        (l.extraSessions || []).forEach((x) => bits.push(`plus ${x.type} ${x.minutes}min${x.note ? ` ("${x.note}")` : ""}`));
+      } else if (l && l.state === "moved") { bits.push("moved, did not train"); }
+      else { bits.push("nothing logged"); }
+      if ((d.dayPlan || {})[dt]) bits.push(`she had set this day to ${d.dayPlan[dt]}`);
+      if (l && l.why) bits.push(`why: ${l.why.reason || "?"}${l.why.words ? ` — she wrote: "${l.why.words}"` : ""}`);
+      if (l && l.sessionNote) bits.push(`her note: "${l.sessionNote}"`);
+      if (l && l.did) bits.push(`she wrote: "${l.did}"`);
+      if (m) {
+        const mb = [];
+        if (m.recovery) mb.push(`recovery ${m.recovery}%`);
+        if (m.sleep) mb.push(`slept ${m.sleep}h`);
+        if (m.hrv) mb.push(`HRV ${m.hrv}`);
+        if (m.rhr) mb.push(`RHR ${m.rhr}`);
+        if (m.strain) mb.push(`strain ${m.strain}`);
+        if (m.shoulderAM) mb.push(`shoulder woke at ${m.shoulderAM}/5`);
+        if (m.mood) mb.push(`mood ${m.mood}`);
+        if (mb.length) bits.push(`[morning: ${mb.join(", ")}]`);
+      }
+      out.push(`${dt} ${wd} — ${bits.join("; ")}`);
+    }
+    return out.join("\n");
+  }));
+
+  S("EVERY WEEKLY BATTERY, EVERY MEASUREMENT", rvSafe(() => {
+    const wk = d.weekly || {};
+    const keys = Object.keys(wk).sort();
+    if (!keys.length) return "she has not logged a battery yet";
+    return keys.map((k) => {
+      const e = wk[k] || {};
+      const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+      return `Week of ${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
+    }).join("\n");
+  }));
+
+  S("EVERY MONTHLY BENCHMARK, EVERY MEASUREMENT", rvSafe(() => {
+    const mo = d.monthly || {};
+    const keys = Object.keys(mo).sort();
+    if (!keys.length) return "she has not logged a benchmark yet";
+    return keys.map((k) => {
+      const e = mo[k] || {};
+      const vals = (d.fields?.monthly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+      return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
+    }).join("\n");
+  }));
+
+  S("EVERY MOBILITY TEST, LEFT AND RIGHT WHERE IT APPLIES", rvSafe(() => {
+    const mb = d.mobility || {};
+    const keys = Object.keys(mb).sort();
+    if (!keys.length) return "no mobility battery logged yet";
+    return keys.map((k) => {
+      const e = mb[k] || {};
+      const vals = (d.mobTests || []).map((tst) => {
+        if (tst.bilateral) {
+          const l = e[tst.id + "_l"], r = e[tst.id + "_r"];
+          if (l === undefined && r === undefined) return null;
+          return `${tst.label}: left ${l ?? "—"}, right ${r ?? "—"}${tst.unit ? " " + tst.unit : ""}`;
+        }
+        const v = e[tst.id];
+        return v === undefined || v === "" ? null : `${tst.label}: ${v}${tst.unit ? " " + tst.unit : ""}`;
+      }).filter(Boolean).join(", ");
+      return `Week of ${k} — ${vals || "empty"}`;
+    }).join("\n");
+  }));
+
+  S("EVERY CALCULATION THE APP MAKES, AND WHAT IT MEANS", rvSafe(() =>
+    (c.allMetrics || []).map((m) =>
+      `${m.label}: ${m.display ?? "—"}${m.sub ? ` (${m.sub})` : ""}\n  how it is worked out: ${m.how || "—"}${m.need ? `\n  missing: ${m.need}` : ""}`
+    ).join("\n")));
+
+  S("HOW THE WORK LANDED ACROSS HER BODY", rvSafe(() =>
+    (c.sets7 || []).map((r) => `${r.label}: ${r.sets} sets in 7 days${r.target ? ` against a target of ${r.target}` : ""}`).join("\n")));
+
+  /* ---- WHAT MAKES IT ONE COACH RATHER THAN TWELVE ---------------------
+     Her question, 9 August: "how will the coach know my learning curve and my
+     progression if he only sees my previous month? It will be as if I have a
+     different coach each month."
+
+     Correct, and the answer cannot be "send everything forever" — three years
+     of days is a payload nobody can afford and no model reads well. So the
+     history travels COMPRESSED rather than raw, in three forms, and each one
+     is lossless in the way that matters:
+
+       the long arc   every measure she has ever taken, as first / best /
+                      latest, so progression is stated rather than left to be
+                      inferred from a wall of numbers
+       the blocks     every block she has ever trained, why it was designed
+                      that way, and what happened in it
+       the reads      what every previous monthly read concluded
+
+     The day-by-day detail stays windowed to the block, because that is the
+     part that genuinely stops mattering. The judgements do not. */
+  S("THE LONG ARC — EVERY MEASURE SHE HAS EVER TAKEN, FIRST TO LATEST", rvSafe(() => {
+    const arc = (store, defs, label) => {
+      const keys = Object.keys(store || {}).sort();
+      if (!keys.length) return [];
+      return (defs || []).map((f) => {
+        const pts = keys.map((k) => ({ k, v: Number((store[k] || {})[f.id]) }))
+          .filter((x) => !isNaN(x.v) && (store[x.k][f.id] !== "" && store[x.k][f.id] !== undefined));
+        if (!pts.length) return null;
+        const first = pts[0], last = pts[pts.length - 1];
+        const up = f.lower ? Math.min(...pts.map((x) => x.v)) : Math.max(...pts.map((x) => x.v));
+        const bestAt = pts.find((x) => x.v === up);
+        const move = last.v - first.v;
+        return `${f.label} (${label}): first ${first.v}${f.unit ? " " + f.unit : ""} on ${first.k}, best ${up} on ${bestAt ? bestAt.k : "?"}, latest ${last.v} on ${last.k} — ${pts.length} reading${pts.length === 1 ? "" : "s"}, ${move === 0 ? "level" : (move > 0 ? "+" : "") + Math.round(move * 100) / 100} across the whole record`;
+      }).filter(Boolean);
+    };
+    const out = [
+      ...arc(d.weekly, d.fields?.weekly, "weekly"),
+      ...arc(d.monthly, d.fields?.monthly, "monthly"),
+    ];
+    const mobDefs = (d.mobTests || []).flatMap((x) => x.bilateral
+      ? [{ id: x.id + "_l", label: x.label + " (left)", unit: x.unit }, { id: x.id + "_r", label: x.label + " (right)", unit: x.unit }]
+      : [{ id: x.id, label: x.label, unit: x.unit }]);
+    out.push(...arc(d.mobility, mobDefs, "mobility"));
+    if (!out.length) return "nothing measured more than once yet — there is no arc to read";
+    return out.join("\n");
+  }));
+
+  S("EVERY BLOCK SHE HAS EVER TRAINED, AND WHY IT WAS BUILT THAT WAY", rvSafe(() => {
+    const phases = (d.program?.phases || []);
+    if (!phases.length) return "no blocks yet";
+    const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return phases.map((ph, i) => {
+      const done = Object.keys(d.logs || {}).filter((k) => (d.logs[k] || {}).completed).length;
+      return [
+        `Block ${i + 1}: "${ph.name}" — ${ph.weeks} weeks, ${ph.status || "?"}${ph.calibrate ? " (calibration — nothing was designed)" : ""}`,
+        ph.line ? `  what it was for: ${ph.line}` : null,
+        ph.week ? `  shape: ${ph.week.map((k, j) => `${DOW[j]} ${k}`).join(", ")}` : null,
+        (ph.basis || []).length ? `  why it was designed that way: ${(ph.basis || []).join(" ")}` : null,
+      ].filter(Boolean).join("\n");
+    }).join("\n");
+  }));
+
+  S("WHAT EVERY PREVIOUS READ CONCLUDED — YOUR OWN EARLIER JUDGEMENTS", rvSafe(() => {
+    const rs = (d.reviews || []).filter((r) => r && r.ok);
+    if (!rs.length) return "this is the first read. There is nothing you have said before to be consistent with, or to correct.";
+    return rs.map((r) => [
+      `--- ${r.date}${r.block ? ` — you designed "${r.block.name}"${r.applied ? " and she started it" : " and she did NOT start it"}` : " — a reading, no block"}`,
+      r.interpretation ? `  what you said her numbers were doing: ${String(r.interpretation).slice(0, 900)}` : null,
+      r.reasoning ? `  your reasoning at the time: ${String(r.reasoning).slice(0, 1200)}` : null,
+      (r.profile || []).length ? `  what you concluded about her: ${(r.profile || []).map((p) => p.claim).join("; ")}` : null,
+    ].filter(Boolean).join("\n")).join("\n");
+  }));
+
+  S("THE RECORD — EVERYTHING SHE HAS TOLD THE COACH", rvSafe(() =>
+    (d.issues || []).slice(-40).map((i) => {
+      const tried = (i.tried || []).map((x) => `${x.date}: ${x.what}${x.worked ? ` (${x.worked})` : ""}`).join("; ");
+      return `${i.date} — ${i.text} [${i.status || "open"}]${tried ? `\n  tried: ${tried}` : ""}`;
+    }).join("\n")));
+
+  S("WHAT THE COACH ALREADY BELIEVES ABOUT HER", rvSafe(() =>
+    (d.profile || []).filter((p) => p.status !== "retired").map((p) =>
+      `${p.claim} [${p.kind}, ${p.confidence || "noted"}${p.hers ? ", HER OWN WORDS — outranks anything inferred" : ""}]`
+      + (p.evidence || []).slice(0, 4).map((e) => `\n  ${e.date}: "${e.quote || e.ref || ""}"`).join("")
+    ).join("\n")));
+
+  S("EVERYTHING SHE HAS WRITTEN", rvSafe(() => {
+    const out = [];
+    (d.journal || []).slice(-40).forEach((j) => out.push(`${j.date} journal: "${j.text}"`));
+    Object.keys(d.notes || {}).sort().slice(-40).forEach((k) => {
+      const n = d.notes[k];
+      if (n && n.text) out.push(`${k} note: "${n.text}"`);
+    });
+    return out.join("\n");
+  }));
+
+  S("CONVERSATIONS", rvSafe(() =>
+    (d.chats || []).slice(-6).map((ch) =>
+      `--- ${ch.date || ""}\n` + (ch.msgs || []).slice(-14).map((m) =>
+        `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || "").slice(0, 600)}`).join("\n")
+    ).join("\n")));
+
+  /* THE CLOSED WORLD. The block can only ever be delivered by what is in
+     here, so the model has to see not just the names but what each class
+     actually reaches — otherwise "no class covers this" is a guess. */
+  S("HER LIBRARY — THE ONLY CLASSES THAT MAY BE PRESCRIBED", rvSafe(() =>
+    (d.library || []).map((w) => [
+      `${w.name}${w.addon ? " (add-on, not a whole session)" : ""} — ${w.goal || "?"}, ${(w.durations || []).join("/") || "?"} min, intensity ${w.intensity ?? "?"}, recovery cost ${w.recoveryCost ?? "?"}, shoulder load ${w.shoulderLoad || "?"}`,
+      w.body ? `  reaches: ${Object.entries(w.body).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}/3`).join(", ")}` : null,
+      w.equipment ? `  needs: ${w.equipment}` : null,
+      w.structure ? `  how it runs: ${w.structure}` : null,
+      w.resistance ? `  loads: ${w.resistance}` : null,
+      w.felt ? `  she wrote about it: "${w.felt}"` : null,
+    ].filter(Boolean).join("\n")).join("\n")));
+
+  S("WHERE HER LIBRARY IS THIN — computed, not guessed", rvSafe(() => {
+    const lib = d.library || [];
+    if (!lib.length) return "no library";
+    const REG = ["legs", "back", "chest", "shoulders", "arms", "core", "heart"];
+    const best = {};
+    REG.forEach((r) => { best[r] = Math.max(0, ...lib.map((w) => Number(w.body?.[r]) || 0)); });
+    const thin = REG.filter((r) => best[r] <= 1);
+    return `Highest reach any single class has, per region: ${REG.map((r) => `${r} ${best[r]}/3`).join(", ")}.`
+      + (thin.length ? `\nNothing in her library reaches ${thin.join(" or ")} hard. If a goal she stated needs one of those, no class will deliver it.` : "\nEvery region is reachable by at least one class.");
+  }));
+
+  S("WRITTEN EXERCISES SHE ALREADY HAS", rvSafe(() =>
+    (d.drills || []).map((x) => `${x.label}${x.fromReview ? " (you prescribed this)" : ""} — ${x.targets || ""}${x.sets ? ` · ${x.sets} x ${x.reps || "?"}${x.freq ? `, ${x.freq}` : ""}` : ""}`).join("\n")));
+
+  return L.join("\n");
+};
+
+/* The two prompts. Kept apart because they ask for different things and rule 7
+   is absolute: during calibration the coach designs nothing at all. */
+const reviewSystem = (mode) => {
+  const voice = `You are her coach. Direct, warm, specific, unsentimental. You explain your reasoning rather than issue instructions. You never shame her, never mention streaks or points, never bargain and never invoke what she will lose. One missed session is invisible. A change is only real past its measurement error; below that the word is "holding", never "declining". If a number is missing you say so rather than inventing it. You are not a therapist and do not pretend to be.
+
+She is 51, holding muscle through her fifties, with a right shoulder that is rehabilitating. She follows filmed classes — never prescribe written sets and reps. The single thing you are optimising is the probability she is still training in twelve months. Where that conflicts with a better training outcome, adherence wins.`;
+
+  if (mode === "read") {
+    return `${voice}
+
+This is her CALIBRATION month. You have not got a month of her own data yet, so YOU DESIGN NOTHING. Do not propose a block, do not name days, do not prescribe. Your job is to read what exists, say honestly what it does and does not yet show, and name precisely what is still missing and why each missing thing matters.
+
+Return ONLY a JSON object, no prose around it, no code fence:
+{
+  "interpretation": "what her numbers actually say so far, in plain language, naming what is real and what is still too thin to read",
+  "reasoning": "3 to 5 short paragraphs addressed to her, second person",
+  "missing": ["each thing still not logged, and one line on why it matters"],
+  "profile": [ { "claim": "one plain sentence about her", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "her own words or what she did" } ] } ]
+}
+Every profile claim must point at dated evidence in what you were given. A claim you cannot point at is an assertion — leave it out.`;
+  }
+
+  return `${voice}
+
+THE LIBRARY IS A CLOSED WORLD. She follows filmed classes. The block you design says what KIND each day is; the app then picks the actual class from HER library, which is listed below in full. You may never invent a class, never name one that is not in that list, and never replace a class with a written sets-and-reps session. If a kind of day cannot be delivered by anything she owns, choose a different kind.
+
+THE ONE EXCEPTION, AND IT IS NARROW. If something she has SAID she wants to be able to do needs a muscle or a range that no class in her library reaches, you may also write her a short set of exercises for it — named, with sets, reps, how often, and how to do it, the same way her battery tests are written. Use it only when the library genuinely cannot deliver it, say which goal it serves and what the library could not do, and keep it to a handful. It is an ADDITION to the month, done alongside her classes, never instead of one. If her library already covers it, do not prescribe anything — say which class covers it.
+
+SHE DOES NOT REPEAT CLASSES, SHE ALTERNATES. The same class may not come round for a fortnight, so anything that depends on the class rotation to reach a particular muscle will not be trained often enough to change anything. Work written for a goal must therefore be prescribed to happen AFTER EVERY SESSION SHE TRAINS, independently of what that session was. It is a few minutes attached to every training day, not a class.
+
+INTEGRATE ACROSS ALL HER GOALS BEFORE YOU WRITE ANYTHING. Look at every open goal together and find the movements that serve more than one. Never give her the same movement twice under two different goal headings — give it once and name every goal it serves. The whole set, across all goals, must be short enough to actually do after a session she has just finished.
+
+HOW LONG IT TAKES. She asked how long a goal should take. Give a realistic estimate for each open goal at the frequency you have set, what she should notice first and roughly when, and what should measurably move inside the four weeks you are designing. Be honest — say months when it is months. THIS IS AN ESTIMATE OF HOW LONG THIS KIND OF CHANGE TAKES, NOT A PLAN. You are designing one month and nothing beyond it. Never write a week-by-week schedule past the block, never describe phases beyond it, and never imply anything is already decided for month two.
+
+Her block has finished. Read EVERYTHING below — every battery measurement individually, every mobility test, every body region, every calculation, all of WHOOP, the record, her stated goals, and everything she wrote — and design the next four weeks from it.
+
+What she has said she wants to be able to do OUTRANKS the numbers. A capability she chose is more durable motivation than anything the app can compute, so no open goal may quietly disappear from the month you build. Her shoulder is a live constraint and cannot be designed over. Design ONE month. Never further.
+
+YOU ARE THE SAME COACH SHE HAD LAST MONTH AND THE MONTH BEFORE. You are given the long arc of every measure she has ever taken, every block she has ever trained and why it was built that way, and what you concluded in every previous read. Use them. Read her progression across the whole record, not just this month — a figure that moved this month against a figure that has been climbing for a year mean different things. Where you said something before, either build on it or say plainly that you were wrong and why. Where a block you designed did not work, say so. She must never feel she has a new coach every month who has forgotten her.
+
+You are also given the block the app's own rules produced. Those rules are the floor and they are defensible. You may refine, reorder or overrule them — but say which you did and why.
+
+Return ONLY a JSON object, no prose around it, no code fence:
+{
+  "name": "a short name for the block, four words at most",
+  "line": "one or two sentences to her, second person, saying what this month is for",
+  "week": ["seven entries, one per day starting Sunday, each one of: pilates, core, strength, move, cardio, rest"],
+  "reasoning": "3 to 6 short paragraphs: what you read, what changed, what you decided and why",
+  "interpretation": "what her numbers actually did this month, plain language, naming what is real and what is noise",
+  "profile": [ { "claim": "...", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "..." } ] } ],
+  "keptGoals": ["the id of every open goal you have kept in view"]
+}
+Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.`;
+};
+
+/* Pull the object out of whatever came back. A model asked for bare JSON
+   usually returns bare JSON, and occasionally wraps it. Both are fine; a
+   third thing is a failure and is reported as one rather than guessed at. */
+const parseReview = (text) => {
+  const s = String(text || "").trim();
+  const tryIt = (x) => { try { return JSON.parse(x); } catch (e) { return null; } };
+  let out = tryIt(s);
+  if (out) return out;
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) { out = tryIt(fence[1].trim()); if (out) return out; }
+  const a = s.indexOf("{"), b = s.lastIndexOf("}");
+  if (a !== -1 && b > a) { out = tryIt(s.slice(a, b + 1)); if (out) return out; }
+  return null;
+};
+
+/* The whole thing, end to end. Returns a record — never throws at the caller,
+   because a failed read still has to be shown to her honestly (rule 23). */
+const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
+  const stamp = coach?.t || today();
+  const base = { id: newId(), date: stamp, mode, ok: false, errors: [], applied: false };
+  let payload = "";
+  try { payload = reviewPayload(data, coach); } catch (e) {
+    return { ...base, errors: ["I could not assemble your month to read it. Nothing has been changed."] };
+  }
+  const user = mode === "read" ? payload
+    : `${payload}\n\n### THE BLOCK THE APP'S OWN RULES PRODUCED\n${ruleBlock ? [
+        `Name: ${ruleBlock.name}`,
+        `Week: ${(ruleBlock.week || []).join(", ")}`,
+        `Why: ${(ruleBlock.basis || []).join(" ")}`,
+      ].join("\n") : "(none — the rules had nothing to go on)"}`;
+
+  let raw = "";
+  try {
+    raw = await askModel({
+      system: reviewSystem(mode),
+      messages: [{ role: "user", content: user }],
+      apiKey: data?.settings?.apiKey,
+      maxTokens: 4000,
+    });
+  } catch (e) {
+    const why = String(e && e.message) === "no-key"
+      ? "There is no API key in Settings, so I cannot do the full read. Everything the app calculates on its own is still there."
+      : "I could not reach the model just now. Nothing has been changed, and the app's own reading of your month is still below.";
+    return { ...base, errors: [why], chars: payload.length };
+  }
+
+  const parsed = parseReview(raw);
+  if (!parsed) return { ...base, errors: ["What came back was not readable. Nothing has been changed."], raw, chars: payload.length };
+
+  if (mode === "read") {
+    const claims = Array.isArray(parsed.profile) ? parsed.profile : [];
+    const usable = claims.filter((p) => p && typeof p.claim === "string" && p.claim.trim().length > 5
+      && Array.isArray(p.evidence) && p.evidence.length
+      && p.evidence.every((e) => e && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))));
+    return {
+      ...base, ok: true, chars: payload.length, raw,
+      interpretation: String(parsed.interpretation || "").trim(),
+      reasoning: String(parsed.reasoning || "").trim(),
+      missing: Array.isArray(parsed.missing) ? parsed.missing.map(String).slice(0, 12) : [],
+      profile: usable.map((p) => ({
+        id: newId(), claim: p.claim.trim(),
+        kind: ["preference", "barrier", "motivator", "response", "limit", "routine"].includes(p.kind) ? p.kind : "response",
+        evidence: p.evidence.map((e) => ({ date: e.date, source: "said", quote: String(e.quote || "").slice(0, 200) })),
+        status: "active", hers: false, fromReview: true,
+      })),
+      rejectedClaims: claims.length - usable.length,
+    };
+  }
+
+  const verdict = validateReview(parsed, {
+    today: stamp,
+    openGoals: (data.goals || []).filter((g) => !g.done),
+    shoulderFrozen: coach?.shoulderFrozen,
+    currentStrengthDays: (coach?.livePhase?.week || []).filter((x) => x === "strength").length,
+  });
+  return {
+    ...base, ok: verdict.ok, errors: verdict.errors, raw, chars: payload.length,
+    block: verdict.block, interpretation: verdict.block ? verdict.block.interpretation : "",
+    reasoning: verdict.block ? verdict.block.reasoning : "",
+    profile: verdict.profile, rejectedClaims: verdict.rejectedClaims,
+    prescription: verdict.prescription, rejectedRx: verdict.rejectedRx, horizons: verdict.horizons,
+    ruleBlock: ruleBlock || null,
+  };
+};
+
 const smallerDoor = (rungs, declinedId) => {
   if (!declinedId) return rungs[0] || null;
   const i = rungs.findIndex((r) => r.id === declinedId);
@@ -1767,55 +2282,55 @@ const bestEntryFor = (f, stores) => {
 --------------------------------------------------------------------------- */
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
-  { id: "squat",     cap: "lower",    label: "Squat",            role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true,
+  { id: "squat",     cap: "lower",    label: "Squat",            role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     rungs: ["Bodyweight squat", "Goblet squat", "Split squat L/R"], rung: 0 ,
-    how: "Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. As many as you can with that depth held — stop the moment the depth goes, not when you are tired.",
+    how: "Sixty seconds. Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. Count only the reps that reach that depth — when the depth goes, stop counting even if the clock is still running.",
     why: "Legs are the biggest muscles you own and the first to go in your fifties. This is the one number on the whole battery most closely tied to still getting off the floor unaided in twenty years." },
   { id: "wallsit",   cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Back flat to a wall, knees and hips at ninety degrees, thighs parallel to the floor, hands off your legs. Time it from the moment you are in position to the moment your hips start to rise.",
     why: "Endurance in the quads rather than peak strength — the thing that gives out on stairs and long descents. It also loads the knee joint with almost no shear, so it is safe to push hard on." },
-  { id: "splitsq",   cap: "lower",    label: "Split squat L/R",  role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
-    how: "One foot forward, one back, feet about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
+  { id: "splitsq",   cap: "lower",    label: "Split squat L/R",  role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false ,
+    how: "Thirty seconds a side. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
     why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
   { id: "goblet",    cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. Log the weight and the reps you got with it.",
+    how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. As many as you can with that weight — no clock here, because the weight is what stops you rather than the time, and putting a clock on it would turn a strength test into a fitness test.",
     why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
-  { id: "pushup",    cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true,
+  { id: "pushup",    cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
-    how: "Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used.",
+    how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
     why: "Upper-body pressing strength and trunk stiffness in one. Because it is your own bodyweight, it also quietly tracks any change in body composition." },
   { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true, bilateral: true ,
-    how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. Log the weight and the reps for each arm.",
+    how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. As many as you can with that weight, each arm counted separately. No clock: the weight is the limit, not the minute.",
     why: "Overhead pressing is the movement your right shoulder is most sensitive to, which is exactly why it is measured rather than avoided. The reps are capped by the shoulder, not the arm — if the right side lags, that is the reading." },
   { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false, bilateral: true ,
-    how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. Log the weight and the reps per side.",
+    how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. As many as you can with that weight, per side. No clock — the weight decides when you stop.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
-  { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
-    how: "Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
+  { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
     why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
 
   /* ---- PULL ---- */
   { id: "cablerow",  cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true ,
-    how: "Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. Log the weight and the reps.",
+    how: "Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. As many as you can with that weight. No clock: with a real load on it, the load is the test.",
     why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
-  { id: "bandrow",   cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true ,
-    how: "Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band each time or the number means nothing.",
+  { id: "bandrow",   cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
+    how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band every time or the number means nothing.",
     why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
   { id: "latpull",   cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. Log the weight and the reps.",
+    how: "Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. As many as you can with that weight, no clock.",
     why: "Overhead pulling. It uses the shoulder in the opposite direction to a press, so together the two say more about the joint than either alone." },
   { id: "facepull",  cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears.",
+    how: "Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears. As many as you can with that weight, no clock.",
     why: "The upper back and the outside rotators of the shoulder. This is the single most useful movement for a shoulder that has been irritable, which is why it is measured and not just prescribed." },
 
   /* ---- CORE ---- */
   { id: "plank",     cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Forearms and toes, elbows under your shoulders, hips level with your shoulders. Time it until your hips drop or lift — the moment your body stops being a line, the clock stops.",
     why: "Trunk endurance. Not glamorous, but it is what lets everything else transmit force, and it is the reading most sensitive to a week off." },
-  { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true ,
-    how: "Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
+  { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
+    how: "Sixty seconds. Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
     why: "Trunk control while something is moving, which is much closer to real life than a static hold. It also loads the shoulder, so it is watched alongside pressing." },
   { id: "sideplank", cap: "core",     label: "Side plank L/R",   role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
     how: "On one forearm, body in a straight line, hips stacked. Time each side separately.",
@@ -1823,8 +2338,8 @@ const SEED_WEEKLY = [
   { id: "crunch",    cap: "core",     label: "Crunches 30s",     role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
     how: "Knees bent, feet flat, hands across your chest. Curl your shoulders off the floor and back down for thirty seconds. Count full repetitions only.",
     why: "A rate rather than a maximum, which makes it far less dependent on how motivated you feel on the day." },
-  { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
-    how: "On your back, arms up, knees over hips. Lower one arm and the opposite leg towards the floor without letting your lower back arch, then swap. Count each pair as one.",
+  { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. On your back, arms up, knees over hips. Lower one arm and the opposite leg towards the floor without letting your lower back arch, then swap. Count each pair as one, and stop counting the moment your back lifts.",
     why: "Trunk control with the back protected. It is the safest core measure of the set, and the one to use on a day the back is complaining." },
 
   /* ---- CARDIO ---- */
@@ -1861,8 +2376,8 @@ const SEED_WEEKLY = [
   { id: "tandem",    cap: "balance",  label: "Tandem stance",    role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Heel directly in front of toe, both feet in a line, arms folded. Time it until you have to step.",
     why: "A narrower base than standing normally but easier than one leg — useful while single-leg is still short." },
-  { id: "legreach",  cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false, bilateral: true ,
-    how: "Stand on one leg and reach the other foot as far forward as you can, tap lightly, and come back without putting weight on it. Count each side.",
+  { id: "legreach",  cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
+    how: "Thirty seconds a side. Stand on one leg and reach the other foot as far forward as you can, tap lightly, and come back without putting weight on it.",
     why: "Balance while moving rather than balance while still. Closer to what actually goes wrong on a kerb." },
 
   /* ---- HOW THE WEEK FELT ---- */
@@ -1941,6 +2456,8 @@ input, textarea { font-size: 16px; }
    3. DATES
    ==========================================================================*/
 const DAYNAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/* spelled out, for anywhere the coach says the day rather than labels it */
+const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const stepBtn = {
   width: 34, height: 34, borderRadius: 9, cursor: "pointer", fontSize: 16,
   border: "1.5px solid #F0E4E7", background: "transparent", color: "#8A7885",
@@ -2027,7 +2544,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 39";
+const BUILD = "9 August 2026 · 49";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2091,6 +2608,10 @@ const BLANK = {
   settings: {
     name: "", age: "", height: "", weeklyTarget: 4, gymDate: "", monthTheme: "", primaryGoal: "",
     shoulderInjury: false, whoopConnected: false,
+    /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
+       chose because it is the start of her week. A fixed cue rather than a
+       rolling gap: the whole point is that it lands on the same day. */
+    whoopDay: 6,
     /* Off by default. Only useful if she is actually experiencing these, and
        it is not the app's business to assume she is. */
     trackSymptoms: false,
@@ -2114,6 +2635,10 @@ const BLANK = {
   /* Things she wants to be able to do, in her words. Each one becomes a real
      input to the monthly design rather than a note she wrote once. */
   goals: [],
+  /* What she has said about a PARTICULAR date: a meeting, a day she cannot
+     train, a session she has moved. Keyed by date, hers, and it outranks the
+     pattern the block would otherwise derive. */
+  dayPlan: {},
   /* Everything she has told the coach that isn't a number. Never deleted. */
   issues: [],
   /* Every conversation, kept. The coach reads them before it answers. */
@@ -2124,6 +2649,10 @@ const BLANK = {
   profile: [],
   /* Mobility battery, keyed by week start, same shape as the strength one. */
   mobility: {},
+  /* Every monthly deep read she has ever run, working or failed. Never
+     deleted (rule 20) — a read that failed is exactly what you want the next
+     time one fails, and a month she did not start is still evidence. */
+  reviews: [],
 };
 
 /* ---------------------------------------------------------------------------
@@ -2143,7 +2672,15 @@ const fillFromSeed = (list, seed, keys) => {
     if (!src) return f;
     let out = f, changed = false;
     keys.forEach((k) => {
-      if ((out[k] === undefined || out[k] === null || out[k] === "") && src[k] !== undefined) {
+      if (src[k] === undefined) return;
+      /* Hers, permanently: she typed in this box, so the app is finished
+         with it (rule 20). */
+      if (f[k + "Edited"]) return;
+      const empty = out[k] === undefined || out[k] === null || out[k] === "";
+      /* Otherwise this is the app's own text, and a corrected protocol has to
+         be able to reach a battery she copied out of the seed months ago -
+         otherwise every fix lands in a template nobody reads. */
+      if (empty || out[k] !== src[k]) {
         if (!changed) { out = { ...out }; changed = true; }
         out[k] = src[k];
       }
@@ -2161,14 +2698,16 @@ async function loadData() {
         ...BLANK, ...d,
         settings: { ...BLANK.settings, ...(d.settings || {}) },
         fields: {
-          weekly: d.fields?.weekly?.length ? fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why"]) : SEED_WEEKLY,
-          monthly: d.fields?.monthly?.length ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why"]) : SEED_MONTHLY,
+          weekly: d.fields?.weekly?.length ? fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit"]) : SEED_WEEKLY,
+          monthly: d.fields?.monthly?.length ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit"]) : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
         goals: Array.isArray(d.goals) ? d.goals : [],
+        dayPlan: d.dayPlan && typeof d.dayPlan === "object" ? d.dayPlan : {},
         issues: Array.isArray(d.issues) ? d.issues : [],
         chats: Array.isArray(d.chats) ? d.chats : [],
         profile: Array.isArray(d.profile) ? d.profile : [],
+        reviews: Array.isArray(d.reviews) ? d.reviews : [],
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
           ? fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why"]) : SEED_MOBILITY,
@@ -2459,7 +2998,12 @@ function useCoach(data, day) {
     const schedule = scheduleOf(settings);
     const schedMode = scheduleMode(schedule);
     const schedCtx = { schedule, logs, dayName, addDays, weekStart, done: (d) => !!logs[d]?.completed };
+    /* A day she has moved is not a missed day. If she has said a date is a
+       rest day it stops being scheduled; if she has moved a session onto a
+       date it becomes one. Her word outranks the rhythm (rules 9 and 12). */
+    const dayPlan = data.dayPlan || {};
     const isScheduled = (d) => {
+      if (dayPlan[d]) return dayPlan[d] !== "rest";
       try { return !!schedMode.trains(d, schedCtx); } catch (e) { return true; }
     };
     /* Some rhythms cannot call a single day "missed" — "four times a week, my
@@ -2616,7 +3160,7 @@ function useCoach(data, day) {
     /* The programme owns the week's shape now: it says which days train and
        which rest, and it says what kind of session each training day is. */
     const program = data.program?.phases?.length ? data.program : SEED_PROGRAM;
-    const block = blockFor(t, program, isScheduled);
+    const block = blockFor(t, program, isScheduled, dayPlan);
     const programWeek = programWeekOf(t, program);
     const programPhase = phaseForWeek(programWeek, program);
     const programPhases = phaseRanges(program);
@@ -2902,19 +3446,47 @@ function useCoach(data, day) {
 
     /* ten minutes of work, chosen by what the tests say is short — plus
        anything her stated goals need */
+    /* ---- WHY THE GOAL WORK KEPT NOT HAPPENING --------------------------
+       Her instruction, 9 August: "I do not repeat classes, I alternate. So
+       maybe the same class will come after two weeks. So I will wait two
+       weeks to exercise these muscles... if I don't focus on them regularly
+       there will be nothing to achieve."
+
+       She was describing a real hole. This list used to be built mobility
+       first — the two weakest tests and every asymmetry — and only THEN her
+       goals, against an eleven-minute ceiling. Mobility routinely filled the
+       ceiling, so the work attached to a goal she had actually stated was
+       silently dropped on most days. Rule 9 says her stated goals outrank the
+       numbers; the order of a for-loop said the opposite.
+
+       Now the goal work is reserved. It goes in first, every training day,
+       whatever the class was — because the class rotation is exactly what she
+       cannot rely on to reach a given muscle. Mobility fills whatever is
+       left, and the ceiling lifts to make room rather than pushing goal work
+       out. If nothing else happens today, the thing she said she wanted still
+       happens. */
     const dailyDrills = (() => {
-      const ids = [];
-      mobWeakest.forEach((r) => (r.drills || []).forEach((d) => { if (!ids.includes(d)) ids.push(d); }));
-      mobAsym.forEach((r) => (r.drills || []).forEach((d) => { if (!ids.includes(d)) ids.push(d); }));
-      openGoals.forEach((g) => (g.drills || []).forEach((d) => { if (!ids.includes(d)) ids.push(d); }));
+      const goalIds = [];
+      openGoals.forEach((g) => (g.drills || []).forEach((d) => { if (!goalIds.includes(d)) goalIds.push(d); }));
+      const mobIds = [];
+      mobWeakest.forEach((r) => (r.drills || []).forEach((d) => { if (!goalIds.includes(d) && !mobIds.includes(d)) mobIds.push(d); }));
+      mobAsym.forEach((r) => (r.drills || []).forEach((d) => { if (!goalIds.includes(d) && !mobIds.includes(d)) mobIds.push(d); }));
+
       const out = [];
-      let mins = 0;
-      for (const id of ids) {
+      let mins = 0, goalMins = 0;
+      /* reserved: her goals go in whatever they cost */
+      for (const id of goalIds) {
         const d = drillById(id, drills);
-        if (!d || mins + d.mins > 11) continue;
-        out.push(d); mins += d.mins;
+        if (!d) continue;
+        out.push({ ...d, forGoal: true }); mins += d.mins || 0; goalMins += d.mins || 0;
       }
-      return { list: out, mins };
+      /* mobility fills the rest of the ten minutes, never displaces the above */
+      for (const id of mobIds) {
+        const d = drillById(id, drills);
+        if (!d || mins + (d.mins || 0) > 11) continue;
+        out.push(d); mins += d.mins || 0;
+      }
+      return { list: out, mins, goalMins, goalCount: out.filter((x) => x.forGoal).length };
     })();
 
     /* the weekly "how's it going?" on each goal */
@@ -3022,6 +3594,9 @@ function useCoach(data, day) {
     const firstEver = trainingDays.length ? trainingDays.sort()[0] : null;
     const weeksTraining = firstEver
       ? Math.floor((parse(t) - parse(firstEver)) / 86400000 / 7) : 0;
+    /* the week she is IN, counted from one — for anything shown to her rather
+       than used in a formula */
+    const weekOfTraining = firstEver ? weeksTraining + 1 : 0;
     const habitStrength = (() => {
       if (!firstEver || weeksTraining < 1) return null;
       /* 91 days is the habit-formation research figure for exercise — how long
@@ -3340,9 +3915,43 @@ function useCoach(data, day) {
     /* the whole quarter, so she can see where today sits in it */
     const programDays = (from, count) => Array.from({ length: count }, (_, i) => {
       const d = addDays(from, i);
-      const b = blockFor(d, program, isScheduled);
+      const b = blockFor(d, program, isScheduled, dayPlan);
       return { date: d, block: b, done: !!logs[d]?.completed, type: logs[d]?.type || null };
     });
+
+    /* ---- THE MONTH, VISIBLE AND FORWARD --------------------------------
+       "I cannot even go forward in the days to see what I have tomorrow. I
+       cannot be blinded to the days forward like this." 9 August.
+
+       The live block only - rule 6 says nothing beyond it is written, and a
+       calendar running into a month that has not been designed would be
+       exactly the false promise that rule exists to prevent. */
+    const calendarFor = (phase) => {
+      if (!phase) return { days: [], from: null, to: null, phase: null };
+      const from = addDays(program?.start || SEED_PROGRAM.start, 7 * (phase.from || 0));
+      const count = Math.max(1, Number(phase.weeks) || 1) * 7;
+      const days = Array.from({ length: count }, (_, i) => {
+        const d = addDays(from, i);
+        const b = blockFor(d, program, isScheduled, dayPlan);
+        const l = logs[d] || null;
+        return {
+          date: d,
+          id: b?.id || "rest",
+          label: b?.label || "Rest",
+          color: b?.color || C.muted,
+          moved: !!dayPlan[d],              /* she said so about this date */
+          past: d < t, today: d === t, future: d > t,
+          done: !!l?.completed,
+          rest: !!l?.rest,
+          type: l?.type || null,
+        };
+      });
+      return { days, from, to: addDays(from, count - 1), phase };
+    };
+    /* Backwards is history and there is no reason to hide it; forwards stops
+       at the live block, because rule 6 means there is nothing after it yet. */
+    const liveIndex = programPhases.findIndex((ph) => ph.id === (livePhase && livePhase.id));
+    const blockCalendar = calendarFor(livePhase);
 
     /* ---- the coach sets the day, not you --------------------------------
        Measuring rides on the first training day of the week: you're already
@@ -3378,6 +3987,25 @@ function useCoach(data, day) {
       ? Math.round((parse(t) - parse(weeklyAssessDay)) / 86400000) : 0;
     const monthlyLate = monthlyDue && t > monthlyAssessDay
       ? Math.round((parse(t) - parse(monthlyAssessDay)) / 86400000) : 0;
+
+    /* Was a battery filled in today, or in the last couple of days? A reading
+       is worth saying while it is still the thing she just did. */
+    const batteryRead = (() => {
+      const wEntry = weekly[ws], mEntry = monthly[mk];
+      if (!wEntry && !mEntry) return null;
+      const filledWeeks = Object.keys(weekly).sort();
+      const filledMonths = Object.keys(monthly).sort();
+      const isFirst = filledWeeks.length <= 1 && filledMonths.length <= 1;
+      /* only while it is fresh: the week it was taken */
+      const fresh = !!wEntry || !!mEntry;
+      if (!fresh) return null;
+      return {
+        first: isFirst,
+        weeks: filledWeeks.length,
+        months: filledMonths.length,
+        hasMonthly: !!mEntry,
+      };
+    })();
 
     const nudges = [];
     if (monthlyToday) nudges.push({ admin: true, tone: "push", text: "Benchmark day. The battery is today's session — thirty minutes under load, body composition included. Stretch afterwards if you have it in you." });
@@ -3884,7 +4512,7 @@ function useCoach(data, day) {
       let run = 0, started = null;
       for (let i = 200; i >= 0; i--) {
         const d = addDays(t, -i);
-        if (blockFor(d, program, isScheduled)?.id === "rest") continue;
+        if (blockFor(d, program, isScheduled, dayPlan)?.id === "rest") continue;
         if (logs[d]?.completed) { if (!started) started = d; run++; }
         else if (run > 0) { runs.push({ len: run, from: started }); run = 0; started = null; }
       }
@@ -3927,7 +4555,7 @@ function useCoach(data, day) {
         const ph = programPhases.find((x) => wk >= x.from && wk <= x.to);
         if (!ph) continue;
         const inBlock = Math.min(4, wk - ph.from);
-        if (blockFor(d, program, isScheduled)?.id === "rest") continue;
+        if (blockFor(d, program, isScheduled, dayPlan)?.id === "rest") continue;
         byWeek[inBlock].sched++;
         if (logs[d]?.completed) byWeek[inBlock].done++;
       }
@@ -4182,8 +4810,12 @@ function useCoach(data, day) {
           : timingSpread < 45 ? C.moss : timingSpread < 75 ? C.ink : C.ochre,
         plain: "How much your bedtime and wake time drift from night to night.",
         how: "Circular spread of your sleep-onset and wake times across 28 days, averaged. Circular so that 23:50 and 00:10 count as twenty minutes apart, not twenty-three hours.",
-        meaning: `You sleep about nine hours, which is plenty. Whether you sleep them at the same time turns out to matter more: across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night.` : ""} Pulling that under an hour is worth more to you than an extra session.`,
-        need: timingSpread === null ? "Re-import your WHOOP export — the app now keeps bed and wake times, which earlier imports discarded." : null }),
+        meaning: `How long you sleep matters less than whether you sleep it at the same time. Across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night. Pulling that under an hour is worth more than an extra session.` : "Once your WHOOP history is in, this says how much your own timing drifts."}`,
+        need: timingSpread === null
+          ? (Object.values(morning || {}).some((x) => x && (x.asleep !== undefined || x.sleepPerf !== undefined))
+              ? "Re-import your WHOOP export — the app now keeps bed and wake times, which earlier imports discarded."
+              : "Needs your WHOOP export. It carries the bed and wake times this is built from.")
+          : null }),
 
       M({ group: "day", id: "illness", label: "Early warning", scope: "temperature, breathing, oxygen",
         display: tempBase === null && respBase === null ? "—" : illnessFlags.length ? String(illnessFlags.length) : "clear",
@@ -4516,13 +5148,14 @@ function useCoach(data, day) {
            `weeksHit` meant ten months of unbroken training with a target set
            one session too high displayed "—  just started" — the exact
            opposite of the one thing this metric exists to say. */
-        display: weeksTraining ? `${weeksTraining}w` : "—",
-        sub: weeksTraining >= 14 ? "past the median dropout" : weeksTraining ? "building" : "just started",
+        display: weekOfTraining ? `${weekOfTraining}w` : "—",
+        sub: weeksTraining >= 14 ? "past the median dropout"
+          : weeksTraining >= 1 ? "building" : weekOfTraining ? "week one" : "not started",
         color: weeksTraining >= 14 ? C.moss : C.ink,
         plain: "How many weeks you have been training, against when most people quit.",
-        how: "Weeks since your first logged session. Not weeks that hit a target — still being here is the thing being measured.",
+        how: "Which week you are in, counted from your first logged session — so the day you start you are in week one. Not weeks that hit a target: still being here is the thing being measured.",
         meaning: "In a large study of people beginning resistance training, the median dropout came at 14 weeks and only 18% were still going at six months. The over-50s were the group most likely to keep going — 24% against 15% for the under-40s. Every week past that mark is the most meaningful thing this app measures, and no other number captures it.",
-        need: weeksTraining ? null : "Starts at your first logged session." }),
+        need: weekOfTraining ? null : "Starts at your first logged session." }),
 
       M({ group: "year", id: "ledger", label: "The ledger", scope: "everything, ever",
         display: totalSessions ? String(totalSessions) : "0",
@@ -4632,7 +5265,30 @@ function useCoach(data, day) {
     const lastImport = morningKeys.length ? morningKeys[morningKeys.length - 1] : null;
     const importGap = lastImport
       ? Math.round((parse(t) - parse(lastImport)) / 86400000) : null;
-    const importDue = importGap === null || importGap >= 7;
+    /* "Let's fix a day of the week where Needs You is to upload the WHOOP.
+        Saturday, which is very convenient because it's the beginning of a new
+        week." 9 August.
+
+        A rolling seven-day gap put the ask on a different weekday every time,
+        which is the opposite of a habit. It is now a weekday she set - and the
+        cue literature is the reason: a stable cue is what turns a task into a
+        routine rather than a decision. Between her days it says nothing at
+        all; on the day, and after it if it has not happened, it asks. */
+    const whoopDay = Number.isInteger(Number(settings.whoopDay)) ? Number(settings.whoopDay) : 6; /* 6 = Saturday */
+    const lastWhoopDay = (() => {
+      for (let i = 0; i <= 6; i++) { const d = addDays(t, -i); if (parse(d).getDay() === whoopDay) return d; }
+      return addDays(t, -7);
+    })();
+    const importedSince = !!lastImport && lastImport >= lastWhoopDay;
+    /* it becomes due on her day and stays due until it is done */
+    const importDue = !importedSince;
+    const isWhoopDay = parse(t).getDay() === whoopDay;
+    const whoopDaysLate = importedSince ? 0
+      : Math.round((parse(t) - parse(lastWhoopDay)) / 86400000);
+    const nextWhoopDay = (() => {
+      for (let i = 0; i <= 7; i++) { const d = addDays(t, i); if (parse(d).getDay() === whoopDay) return d; }
+      return addDays(t, 7);
+    })();
 
     /* ---- end-of-block review, and the next block ----------------------
        At the end of each block the coach reads what actually happened and
@@ -4864,6 +5520,29 @@ function useCoach(data, day) {
     };
     const proposal = reviewDue ? proposeNext() : null;
 
+    /* ---- THE MONTHLY DEEP READ, AS SOMETHING SHE STARTS ----------------
+       Her decision, 9 August: the review is a tap she presses rather than
+       something that happens to her. "So it will be something that is done by
+       me to make sure that it gets done."
+
+       Two modes, because rule 7 does not bend. During the calibration month
+       the read designs nothing at all — it reads what exists, says what it
+       cannot yet see, and names what is missing. After a block has run it
+       reads the month and designs the next one, with the rule-based block as
+       its floor.
+
+       Every read is kept forever, whether it worked or not (rule 20). A read
+       that failed is exactly what you want the next time it fails. */
+    const reviews = Array.isArray(data.reviews) ? data.reviews : [];
+    const lastReview = reviews.length ? reviews[reviews.length - 1] : null;
+    const deepMode = calibrating ? "read" : "design";
+    /* the read is worth doing when the block is over, or when a calibration
+       month has enough in it to say something. Never a nag: it is one row. */
+    const daysLogged = Object.keys(data.logs || {}).filter((k) => (data.logs[k] || {}).completed).length;
+    const deepDue = reviewDue || (calibrating && daysLogged >= 8);
+    const deepReadToday = !!(lastReview && lastReview.date === t);
+    const readableProposal = () => { try { return proposeNext(); } catch (e) { return null; } };
+
 
 
     /* ---- CALIBRATION MONTH --------------------------------------------
@@ -4957,9 +5636,13 @@ function useCoach(data, day) {
           : monthlyLate
           ? `The month's benchmark is ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late. Without two of these there is nothing to compare.`
           : "This month's benchmark is still open. It is the one that lets me see change rather than noise.");
-      add("whoop", "week", "WHOOP imported this week", !settings.whoopConnected || (importGap !== null && importGap < 8),
-        "One export backfills everything — recovery, sleep, heart rate, strain. Recovery and the shoulder score can be typed by hand; nothing else can, so a stale import quietly ages every other signal.",
-        "Your WHOOP export is getting stale. One file backfills recovery, sleep, heart rate and strain in one go.");
+      add("whoop", "week",
+        whoopDaysLate > 1 ? `WHOOP export — ${whoopDaysLate} days since ${DAY_FULL[whoopDay]}` : `WHOOP export — it's ${DAY_FULL[whoopDay]}`,
+        !settings.whoopConnected || importedSince,
+        `One export backfills everything — recovery, sleep, heart rate, strain. You set ${DAY_FULL[whoopDay]} as the day, so this only asks from then until it is done, and says nothing the rest of the week. Recovery and the shoulder score can be typed by hand; nothing else can.`,
+        whoopDaysLate > 1
+          ? `It's ${whoopDaysLate} days since ${DAY_FULL[whoopDay]} and the export hasn't come in. One file, and everything since the last one backfills at once.`
+          : `It's ${DAY_FULL[whoopDay]} — WHOOP day. One file backfills the whole week: recovery, sleep, heart rate and strain.`);
 
       /* ---- rows that used to be cards of their own ---------------------
          Eight separate cards said these things, each with its instruction
@@ -4969,6 +5652,23 @@ function useCoach(data, day) {
       add("mobility", "week", "Mobility check", !mobDue,
         "Seven tests, about ten minutes. The scores choose the ten minutes of drills you do after each session, so a stale battery means the drills are aimed at where you were, not where you are.",
         "The mobility battery is due. It is about ten minutes, and it is what chooses your drills for the week.");
+      /* ---- the one she starts herself ---------------------------------
+         Rule 11: actionable where it sits. The row is the door — it opens the
+         read, shows her exactly what is about to be sent, and does nothing
+         until she taps. It is never a nag: it is done the moment she has run
+         one today, and it says plainly which of the two things it will do. */
+      if (deepDue)
+        add("deepread", "month",
+          calibrating
+            ? "Ask the coach to read where you are"
+            : "Ask the coach to read the month and design the next one",
+          deepReadToday,
+          calibrating
+            ? "This sends everything you have logged so far — every measurement, every morning, every calculation, the record, your goals and everything you have written — and asks for an honest reading of what it does and does not yet show, plus exactly what is still missing. It will not design you a month: there is not enough here yet, and a month designed from a fortnight is a guess wearing a plan's clothes."
+            : "This is the big one. It sends the whole block — every battery measurement individually, every mobility test, every body region, every calculation, all of your WHOOP, the record, your goals and everything you wrote — and asks for next month, with its reasoning shown. Nothing it returns becomes your month until you have read it and started it. It costs a few cents and takes about half a minute.",
+          calibrating
+            ? "When you are ready, I can read everything you have logged so far and tell you honestly what it shows and what is still missing."
+            : "Your block is done. Whenever you want, I will read the whole month properly and draw up the next one — and you can argue with any of it.");
       add("backup", "block", "A copy off this device", !backupDueRow,
         "Everything lives in this browser, on this device. Another device is a separate copy that never syncs. One tap sends a file you can drop into Drive.",
         "Take a copy of your data off this device. One tap, and it is the difference between a lost phone costing you nothing or everything.");
@@ -5114,12 +5814,27 @@ function useCoach(data, day) {
       raise("day", "warm", "Shoulder was back to baseline this morning after training. That's a green light: the load you used was right, and it can go up a step next time.");
 
 
-    if (importGap === null && settings.whoopConnected)
-      raise("week", "push", "Import your WHOOP export and about a third of what I can tell you switches on — recovery bands against your own median, resting heart rate trend, sleep regularity, and how much a hard day costs you.");
-    else if (importGap !== null && importGap >= 14)
-      raise("week", "firm", `Your WHOOP data stops ${importGap} days ago. Everything I say about recovery, sleep and adaptation is running on stale numbers until you import again — it takes two minutes and one export covers the whole gap.`);
-    else if (importGap !== null && importGap >= 7)
-      raise("week", "push", `WHOOP import is due — last data is from ${importGap} days ago. One export backfills the lot, so a weekly habit loses nothing.`);
+    /* The WHOOP ask lives on her day now. Between her days the coach says
+       nothing about it at all — an ask that arrives on a different weekday
+       every time is a decision each time, and decisions are what run out. */
+    if (settings.whoopConnected && importGap === null && isWhoopDay)
+      raise("week", "push", `It's ${DAY_FULL[whoopDay]} — WHOOP day. Import the export and about a third of what I can tell you switches on: recovery bands against your own median, resting heart rate trend, sleep regularity, and how much a hard day costs you.`);
+    else if (settings.whoopConnected && importGap === null && whoopDaysLate > 1)
+      raise("week", "push", `${whoopDaysLate} days since ${DAY_FULL[whoopDay]} and there's still no WHOOP data. It is the one thing I cannot work out for myself, and about a third of what I can tell you is waiting on it.`);
+    else if (settings.whoopConnected && importGap !== null && whoopDaysLate >= 8)
+      raise("week", "firm", `Your WHOOP data stops ${importGap} days ago — ${whoopDaysLate} days past ${DAY_FULL[whoopDay]}. Everything I say about recovery, sleep and adaptation is running on stale numbers until you import again. Two minutes, and one export covers the whole gap.`);
+    else if (settings.whoopConnected && importGap !== null && !importedSince && isWhoopDay)
+      raise("week", "push", `${DAY_FULL[whoopDay]}, so it's WHOOP day. One file backfills the whole week — recovery, sleep, heart rate and strain — and a weekly habit loses nothing.`);
+    else if (settings.whoopConnected && importGap !== null && !importedSince && whoopDaysLate > 1)
+      raise("week", "push", `The export hasn't come in since ${DAY_FULL[whoopDay]} — ${whoopDaysLate} days. One file backfills the lot.`);
+
+    /* The coach says it before she thinks to look. Rule 3: it does not wait.
+       Below mood and lapse, above everything routine — a finished block is the
+       loudest thing in the month, but never louder than how she is. */
+    if (deepDue && !deepReadToday && !calibrating)
+      raise("month", "push", `Your block is done. Whenever you are ready, I will read the whole month properly — every measurement, every morning, the record, your goals, everything you wrote — and draw up the next four weeks. You start it, and you can argue with any of it.`, { lead: 3 });
+    else if (deepDue && !deepReadToday && calibrating)
+      raise("month", "warm", `There is enough logged now that I can read it back to you honestly — what it shows, what it does not yet show, and what is still missing. I will not design you a month from it; it is too early for that and I would only be guessing.`, { lead: 3 });
 
     if (reviewDue && proposal)
       raise("month", "push", `Your ${blockReview.name} block is done — ${blockReview.sessions} sessions, ${consistency}% consistency. I've read the month and drawn up the next one: ${proposal.name.toLowerCase()}. Look it over and change anything you don't like.`);
@@ -5179,6 +5894,39 @@ function useCoach(data, day) {
 
     if (mobDue && mobDaysAgo !== null && mobDaysAgo >= 10)
       raise("week", "push", `${mobDaysAgo} days since your mobility tests. They set what your daily ten minutes should be, so when they go stale the drills stop being aimed at anything.`, true);
+    /* ---- WHAT THE BATTERY SAID -------------------------------------
+       The half hour she just spent is the biggest single thing she does all
+       month, and the coach used to say nothing about it. It leads (3) - below
+       her mood (1) and below a lapse (2), because a feeling and a break both
+       outrank a number, but above everything else.
+
+       On a FIRST battery it is deliberately careful: one sitting cannot show
+       a direction, and saying otherwise would be inventing a trend from a
+       single point (rules 16 and 23). What one sitting CAN say is the things
+       that are comparisons WITHIN it - one side against the other, one
+       region against another - so that is what it says. */
+    if (batteryRead) {
+      if (batteryRead.first) {
+        const bits = [];
+        if (worstGap && worstGap.gap >= 10)
+          bits.push(`your ${worstGap.label.toLowerCase()} is ${worstGap.gap}% apart between sides, the ${worstGap.weak} being the shorter`);
+        if (mobWeakest.length)
+          bits.push(`${mobWeakest[0].label.toLowerCase()} is the shortest thing on the mobility side`);
+        if (setsShort.length)
+          bits.push(`${setsShort[0].label.toLowerCase()} has had the least work`);
+        raise("month", "warm",
+          `That is your baseline in — ${batteryRead.hasMonthly ? "the full battery and the body composition" : "the weekly battery"}. Every number in this app now has something to be measured against, which it did not have an hour ago. I am not going to tell you any of it is good or bad: one sitting has no direction in it, and I would be inventing a trend from a single point. ${bits.length ? `What I can read from one sitting is the comparisons inside it — ${bits.join(", and ")}. That is what your ten minutes is now aimed at.` : "Next month's set is the one that starts telling us something."}`,
+          { lead: 3 });
+      } else {
+        const moved = realUp.length + realDown.length;
+        raise("month", "warm",
+          moved
+            ? `Battery read. ${realUp.length ? `${realUp.length} measure${realUp.length === 1 ? "" : "s"} genuinely up` : ""}${realUp.length && realDown.length ? " and " : ""}${realDown.length ? `${realDown.length} down` : ""} — genuinely meaning past the measurement error, not just a different number. ${realUp.length ? `Biggest move: ${realUp[0].label.toLowerCase()}.` : ""} Everything else is holding, which is not the same as nothing happening.`
+            : "Battery read. Nothing has moved beyond the measurement error this time, which means holding rather than declining — repeat a physical test twice in one morning and you get two different numbers, so anything smaller than that threshold is jitter and I will not call it progress or a loss.",
+          { lead: 3 });
+      }
+    }
+
     if (mobAsym.length)
       raise("month", "push", `Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart between sides. Asymmetry is worth more attention than either side's absolute number — the tight side is doing less and something else is compensating. Work the restricted side twice for every once on the free side until it closes.`);
     if (mobWeakest.length && mobScore !== null && mobScore < 60)
@@ -5358,7 +6106,7 @@ function useCoach(data, day) {
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
-      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, allClasses, programWeek, programPhase, programDays, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
   }, [data, day]);
 }
@@ -6396,17 +7144,29 @@ function DrillsCard({ coach, setSheet }) {
         <span className="mono" style={{ fontSize: 10, color: C.muted }}>{coach.dailyDrills.mins} min</span>
       </div>
       <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 12 }}>
-        After whatever else you do today. These are chosen by what your mobility tests say is short —
-        they change as the scores change.
+        {coach.dailyDrills.goalCount
+          ? `After whatever else you do today — every training day, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one is" : coach.dailyDrills.goalCount + " are"} for what you said you want to be able to do, and ${coach.dailyDrills.goalCount === 1 ? "it happens" : "they happen"} regardless of what came round in the rotation. The rest are chosen by what your mobility tests say is short.`
+          : "After whatever else you do today. These are chosen by what your mobility tests say is short — they change as the scores change."}
       </div>
       {coach.dailyDrills.list.map((d, i) => (
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{d.label}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink }}>{d.label}</span>
             <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>{d.mins}m</span>
           </div>
+          {(d.sets || d.reps || d.freq) && (
+            <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
+              {[d.sets && d.reps ? `${d.sets} x ${d.reps}` : d.sets || d.reps, d.freq].filter(Boolean).join(" · ")}
+            </div>
+          )}
           <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 4 }}>{d.how}</div>
           <div style={{ fontSize: 11, color: C.moss, marginTop: 4 }}>{d.targets}</div>
+          {d.fromReview && (
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>
+              Written for one of your goals — nothing in your library reaches it.
+            </div>
+          )}
+          <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
         </div>
       ))}
     </Card>
@@ -6969,7 +7729,7 @@ function Today({ data, setData, coach, setSheet }) {
                   : restDay ? "Rest day" : "Your class"}
               </Eyebrow>
               {isToday && coach.block && (
-                <button onClick={() => setSheet({ kind: "program" })} className="tap" style={{
+                <button onClick={() => setSheet({ kind: "month" })} className="tap" style={{
                   border: "none", background: "transparent", cursor: "pointer", padding: 0,
                   fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
                   fontFamily: "'IBM Plex Mono', monospace", color: coach.block.color,
@@ -8657,6 +9417,8 @@ function Settings({ data, setData, setSheet }) {
     mobility: { ...prev.mobility, ...(incoming.mobility || {}) },
     notes:    { ...prev.notes,    ...(incoming.notes || {}) },
     plan:     { ...prev.plan,     ...(incoming.plan || {}) },
+    /* keyed by date, so a restore adds days it has and keeps days it does not */
+    dayPlan:  { ...(prev.dayPlan || {}), ...(incoming.dayPlan || {}) },
     journal: [...(prev.journal || []), ...((incoming.journal || []).filter(
       (j) => !(prev.journal || []).some((p) => p.date === j.date && p.text === j.text)))],
     issues: mergeById(prev.issues, incoming.issues),
@@ -8904,6 +9666,31 @@ function Settings({ data, setData, setSheet }) {
             </button>
           </div>
         ))}
+
+        {/* Her WHOOP day. A fixed weekday rather than a rolling gap, because
+            the point of a cue is that it is always the same one. */}
+        {s.whoopConnected && (
+          <div style={{ padding: "12px 0 2px", borderTop: `1px solid ${C.line}` }}>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>WHOOP day</div>
+            <div style={{ fontSize: 11, color: C.muted, margin: "2px 0 9px", lineHeight: 1.4 }}>
+              The one day a week the app asks for your export. It says nothing about it the
+              rest of the week, and keeps asking from that day until the file is in.
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {DAYNAMES.map((d, i) => {
+                const on = (Number.isInteger(Number(s.whoopDay)) ? Number(s.whoopDay) : 6) === i;
+                return (
+                  <button key={d} onClick={() => set("whoopDay", i)} className="tap mono"
+                    aria-label={`WHOOP day ${DAY_FULL[i]}`}
+                    style={{ flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer",
+                      fontSize: 11.5, fontWeight: on ? 700 : 500, fontFamily: "inherit",
+                      border: `1.5px solid ${on ? C.signal : C.line}`,
+                      background: on ? C.signal : "transparent", color: on ? C.chalk : C.muted }}>{d}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
             </Fold>
 
       <Fold title="Your data" note="backups, export and reset">
@@ -9160,11 +9947,16 @@ function FieldEditor({ which, data, setData, close }) {
                     9 August. Everything the app tells her about a measure is
                     hers to rewrite - rule 12 - including a measure she adds
                     herself, which starts with nothing written about it. */}
+                {/* `howEdited` marks this as HERS. Once it is set the app never
+                    rewrites this text again, even when the protocol in the
+                    seed changes - and until it is set, a corrected protocol
+                    reaches her instead of sitting in a template she will
+                    never see. */}
                 <Note label="How it's done" value={f.how}
-                  onChange={(v) => patch(f.id, { how: v })}
+                  onChange={(v) => patch(f.id, { how: v, howEdited: true })}
                   hint="The protocol, precise enough that the number means the same thing next month." />
                 <Note label="Why it's measured" value={f.why}
-                  onChange={(v) => patch(f.id, { why: v })} />
+                  onChange={(v) => patch(f.id, { why: v, whyEdited: true })} />
                 <Field label="Video link" unit="" type="text" value={f.video || ""}
                   onChange={(v) => patch(f.id, { video: v.trim() })} />
                 <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-6px 0 14px" }}>
@@ -9183,7 +9975,8 @@ function FieldEditor({ which, data, setData, close }) {
                   ))}
                 </div>
                 {(f.type === "number" || f.type === "weightreps" || f.type === "time") &&
-                  <Field label="Unit" unit="" type="text" value={f.unit} onChange={(v) => patch(f.id, { unit: v })} />}
+                  <Field label="Unit" unit="" type="text" value={f.unit}
+                    onChange={(v) => patch(f.id, { unit: v, unitEdited: true })} />}
 
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Capability</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
@@ -9922,7 +10715,7 @@ function WhoopImport({ data, setData, close }) {
       if (!found.days.size) {
         setReport({ error: seen.length
           ? `Read ${seen.length} file${seen.length > 1 ? "s" : ""} — ${seen.join(", ")} — but found no WHOOP data in ${matched.length ? "them" : "any of them"}. If you picked the .zip rather than the CSVs inside it, unzip it first and choose the files from the folder. Or use the paste route below, which always works.`
-          : "No files came through. On iPhone that usually means the picker was cancelled, or the zip hasn't been unzipped yet." });
+          : "No files came through. That usually means the picker was cancelled, or the zip has not been extracted yet — nothing can be picked out of a zip while it is still zipped." });
       } else {
         setReport({ days: found.days.size, workouts: found.workouts,
           fields: fieldsSeen.size, files: matched.length,
@@ -9947,7 +10740,7 @@ function WhoopImport({ data, setData, close }) {
         {[["1", "Ask WHOOP for your data",
            "Open the WHOOP app. Tap your profile picture, then Settings, then Account, then Data Export. Choose Create Export."],
           ["2", "Wait for the email, then unzip it",
-           "WHOOP emails a .zip file, usually within a few minutes. Save it to your phone and open it — on iPhone, tap it in Files and it unzips into a folder of its own."],
+           "WHOOP emails a .zip file, usually within a few minutes. Save it to your phone, then unzip it — a zip has to be opened out before anything can pick files from inside it."],
           ["3", "Come back here and pick the files",
            "Tap the button below and select these three: physiological_cycles.csv, sleeps.csv and workouts.csv. You can select all three at once. Anything else in the folder is ignored."],
         ].map(([n, title, body]) => (
@@ -10008,6 +10801,12 @@ function WhoopImport({ data, setData, close }) {
         <div style={{ fontSize: 12.5, lineHeight: 1.65, color: C.muted }}>
           It does work on a phone, but the zip has to be unzipped first — you can't pick files
           out of a zip.
+          <br /><br />
+          <strong style={{ color: C.ink, fontWeight: 600 }}>On Android:</strong> open the email and
+          save the zip — it lands in Downloads. Open your Files app, find it there and tap it; Android
+          shows an <em>Extract</em> option, which makes a folder next to the zip. Come back here, tap
+          the picker, go to that folder, and long-press the first CSV to start selecting, then tap the
+          other two.
           <br /><br />
           <strong style={{ color: C.ink, fontWeight: 600 }}>On iPhone:</strong> save the emailed zip
           to Files. Tap it once and it expands into a folder beside it. Open that folder, then come
@@ -10814,6 +11613,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
       case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true, "whoop");
       case "mobility": return chip("open", () => setSheet({ kind: "mobility" }), true, "mobility");
       case "backup":   return <BackupNowButton data={data} label="back up" compact />;
+      case "deepread": return chip(coach.calibrating ? "read it" : "read my month", () => setSheet({ kind: "review" }), true, "deepread");
       /* these two open the folded row below rather than a sheet, so she
          answers in the same place the record already lives */
       case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true, "issue");
@@ -11110,7 +11910,10 @@ function MonthPlanCard({ data, setData, coach, setSheet }) {
                 seed: `About ${ph.name} — ` })}>Argue with it</Btn>
             </div>
             <div style={{ flex: 1 }}>
-              <Btn kind="ghost" onClick={() => setSheet({ kind: "program" })}>Change it</Btn>
+              <Btn kind="ghost" onClick={() => setSheet({ kind: "month" })}>See the whole month</Btn>
+              <div style={{ marginTop: 7 }}>
+                <Btn kind="quiet" onClick={() => setSheet({ kind: "program" })}>Change the block itself</Btn>
+              </div>
             </div>
           </div>
         </div>
@@ -11309,6 +12112,209 @@ function MobilityEditor({ data, setData, coach, close }) {
     </>
   );
 }
+/* ---------------------------------------------------------------------------
+   THE MONTH IN FRONT OF HER
+   "I cannot even go forward in the days to see what I have tomorrow. It has to
+   be in the structure of the app that I can see the whole plan. I can change a
+   day - maybe I know a certain day will be a meeting, so I say that day I will
+   not exercise, and I move the plan to a different day. It needs to be
+   flexible and visible." 9 August.
+
+   The live block only. Rule 6: nothing beyond it is designed, and drawing a
+   calendar into an undesigned month would be the false promise that rule
+   exists to stop.
+
+   Two actions per day, and they are different things. CHANGE THIS DAY sets
+   what the day is. MOVE IT sets this day to rest and puts its kind on another
+   day - one tap for the thing she actually described.
+--------------------------------------------------------------------------- */
+function BlockCalendar({ data, setData, coach, setSheet }) {
+  const [picked, setPicked] = useState(null);   /* the date she has opened */
+  const [moving, setMoving] = useState(false);  /* choosing where it goes */
+  /* which block is on screen. 0 is the live one; negative is further back. */
+  const [back, setBack] = useState(0);
+  const phases = coach.programPhases || [];
+  const liveAt = coach.liveIndex >= 0 ? coach.liveIndex : phases.length - 1;
+  const at = Math.max(0, Math.min(phases.length - 1, liveAt + back));
+  const cal = (back === 0 ? coach.blockCalendar : coach.calendarFor(phases[at])) || { days: [] };
+  const canBack = at > 0;
+  const canForward = at < liveAt;
+
+  const setDayPlan = (date, id) => setData((d) => {
+    const plan = { ...(d.dayPlan || {}) };
+    if (id === null) delete plan[date]; else plan[date] = id;
+    return { ...d, dayPlan: plan };
+  });
+  const move = (fromDate, fromId, toDate) => setData((d) => {
+    const plan = { ...(d.dayPlan || {}) };
+    plan[fromDate] = "rest";
+    plan[toDate] = fromId;
+    return { ...d, dayPlan: plan };
+  });
+
+  if (!cal.days.length) {
+    return (
+      <div>
+        <Eyebrow color={C.signal}>This month</Eyebrow>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+          There is no live block to draw yet. Set a start date in your programme and the month appears here.
+        </div>
+      </div>
+    );
+  }
+
+  const day = picked ? cal.days.find((x) => x.date === picked) : null;
+  const weeks = [];
+  for (let i = 0; i < cal.days.length; i += 7) weeks.push(cal.days.slice(i, i + 7));
+
+  return (
+    <div>
+      <Eyebrow color={C.signal}>{back === 0 ? "This month" : "An earlier month"}</Eyebrow>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "2px 0 6px" }}>
+        <button onClick={() => { if (canBack) { setBack((b) => b - 1); setPicked(null); setMoving(false); } }}
+          disabled={!canBack} className="tap" aria-label="the month before" style={{
+            width: 30, height: 32, flexShrink: 0, borderRadius: 10,
+            cursor: canBack ? "pointer" : "default", opacity: canBack ? 1 : 0.3,
+            border: `1px solid ${C.line}`, background: "transparent", color: C.muted,
+            fontSize: 15, lineHeight: 1, fontFamily: "inherit", padding: 0 }}>‹</button>
+        <h1 className="disp" style={{ flex: 1, fontSize: 22, fontWeight: 800, lineHeight: 1.15, margin: 0 }}>
+          {(cal.phase && cal.phase.name) || "Your block"}
+        </h1>
+        <button onClick={() => { if (canForward) { setBack((b) => b + 1); setPicked(null); setMoving(false); } }}
+          disabled={!canForward} className="tap" aria-label="the month after" style={{
+            width: 30, height: 32, flexShrink: 0, borderRadius: 10,
+            cursor: canForward ? "pointer" : "default", opacity: canForward ? 1 : 0.3,
+            border: `1px solid ${C.line}`, background: "transparent", color: C.muted,
+            fontSize: 15, lineHeight: 1, fontFamily: "inherit", padding: 0 }}>›</button>
+      </div>
+      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
+        {dayAndMonth(cal.from)} to {dayAndMonth(cal.to)}.
+        {back === 0
+          ? " Tap any day to change what it is, or to move it to another day. Nothing past this block is drawn, because nothing past it is designed yet."
+          : " A month that has already run. You can look at any of it; the days themselves stay as they happened."}
+      </div>
+
+      {weeks.map((wk, wi) => (
+        <div key={wi} style={{ marginBottom: 8 }}>
+          <div className="mono" style={{ fontSize: 9, letterSpacing: "0.11em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 5 }}>week {wi + 1}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+            {wk.map((d) => {
+              const on = picked === d.date;
+              const rest = d.id === "rest";
+              return (
+                <button key={d.date} onClick={() => { setPicked(on ? null : d.date); setMoving(false); }}
+                  className="tap" aria-label={`${d.date} ${d.label}`} style={{
+                    borderRadius: 10, padding: "7px 2px", cursor: "pointer", fontFamily: "inherit",
+                    background: on ? C.signal : d.done ? C.mint : rest ? "transparent" : C.chalk,
+                    border: d.today ? `1.5px solid ${C.signal}`
+                      : rest ? `1px dashed ${C.line}` : `1px solid ${C.line}`,
+                    opacity: d.past && !d.done ? 0.55 : 1,
+                  }}>
+                  <div className="mono" style={{ fontSize: 8, color: on ? "#fff" : C.muted }}>
+                    {dayName(d.date)[0]}
+                  </div>
+                  <div className="mono" style={{ fontSize: 10.5, fontWeight: 600, marginTop: 1,
+                    color: on ? "#fff" : C.ink }}>{Number(d.date.slice(8))}</div>
+                  <div style={{ fontSize: 7.5, lineHeight: 1.2, fontWeight: 600, marginTop: 3,
+                    color: on ? "#fff" : rest ? C.muted : d.color }}>
+                    {rest ? "rest" : d.label.split(" ")[0].toLowerCase()}
+                  </div>
+                  {d.moved && <div style={{ fontSize: 7, marginTop: 2, color: on ? "#fff" : C.ochre }}>yours</div>}
+                  {d.done && !on && <div style={{ fontSize: 8, marginTop: 1, color: C.moss }}>✓</div>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {day && (
+        <Card style={{ marginTop: 12 }}>
+          <Eyebrow color={C.signal}>{prettyDate(day.date)}</Eyebrow>
+          <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginBottom: 4 }}>
+            {day.done ? `Done — ${day.type || "session logged"}`
+              : day.id === "rest" ? "Rest day"
+              : `${day.label}${day.past ? " — nothing logged" : ""}`}
+          </div>
+          {day.moved && (
+            <div style={{ fontSize: 11.5, color: C.ochre, marginBottom: 8 }}>
+              You set this day yourself.{" "}
+              <button onClick={() => setDayPlan(day.date, null)} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                put it back
+              </button>
+            </div>
+          )}
+
+          {day.done ? (
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>
+              This one already happened. Changing what a past day was meant to be would rewrite
+              history rather than the plan, so it stays as it is.
+            </div>
+          ) : moving ? (
+            <>
+              <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "8px 0 9px" }}>
+                Which day takes it instead? {prettyDate(day.date)} becomes a rest day.
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {cal.days.filter((x) => !x.past && !x.done && x.date !== day.date).map((x) => (
+                  <button key={x.date} className="tap" aria-label={`move it to ${x.date}`}
+                    onClick={() => { move(day.date, day.id, x.date); setMoving(false); setPicked(x.date); }}
+                    style={{ padding: "8px 11px", borderRadius: 20, cursor: "pointer", fontSize: 11.5,
+                      fontFamily: "inherit", border: `1.5px solid ${C.line}`, background: "transparent",
+                      color: C.muted }}>
+                    {dayName(x.date)} {Number(x.date.slice(8))}
+                    {x.id !== "rest" ? ` · ${x.label.split(" ")[0].toLowerCase()}` : ""}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <Btn kind="quiet" onClick={() => setMoving(false)}>Never mind</Btn>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 8, marginTop: 8 }}>
+                What should this day be?
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                {Object.entries(coach.BLOCKS).map(([bid, b]) => {
+                  const on = day.id === bid;
+                  return (
+                    <button key={bid} className="tap" onClick={() => setDayPlan(day.date, bid)}
+                      aria-label={`make ${day.date} ${b.label}`}
+                      style={{ padding: "9px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                        fontWeight: 600, fontFamily: "inherit",
+                        border: `1.5px solid ${on ? b.color : C.line}`,
+                        background: on ? b.color : "transparent", color: on ? "#fff" : C.muted }}>
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {day.id !== "rest" && (
+                <div style={{ marginTop: 12 }}>
+                  <Btn kind="quiet" onClick={() => setMoving(true)}>
+                    I can't train this day — move it
+                  </Btn>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
+      )}
+
+      <div style={{ marginTop: 14 }}>
+        <Btn kind="quiet" onClick={() => setSheet({ kind: "program" })}>
+          The block itself — its shape, its length, and how the next one is decided
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
 function ProgramView({ data, setData, coach, setSheet }) {
   const [editing, setEditing] = useState(null);   /* { phase, day } */
   const program = coach.program;
@@ -11716,6 +12722,395 @@ function VitalsAll({ coach, setSheet }) {
   );
 }
 
+/* ============================================================================
+   THE MONTHLY DEEP READ — THE SCREEN SHE STARTS IT FROM
+   ---------------------------------------------------------------------------
+   Her decision, 9 August: "give me a tap that I press, so the monthly
+   performance starts being calculated, the backwards one, and based on which
+   the forwards one will be calculated. So it will be something that is done by
+   me to make sure that it gets done."
+
+   So the review is hers to start, from a row in Needs you, and this is where it
+   lands. Three principles hold it together:
+
+   NOTHING IS HIDDEN. She can read the entire payload before it is sent — every
+   character of it — because rule 8 says the reasoning is visible and rule 14
+   says no figure appears as a bare number. A screen that talks to a model and
+   will not show you what it said is a black box with better manners.
+
+   NOTHING IS APPLIED UNTIL SHE APPLIES IT. The month it returns is a proposal
+   sitting on the screen. It becomes her block when she taps to start it, and
+   every day of it stays editable afterwards (rule 12).
+
+   NOTHING IS THROWN AWAY. Every read is appended to her data and kept, working
+   or failed (rules 15 and 20). A failed read is exactly what you want to have
+   the next time one fails.
+========================================================================== */
+function ReviewSheet({ data, setData, coach, setSheet, close }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [showPayload, setShowPayload] = useState(false);
+  const mode = coach.deepMode;
+  const reviews = coach.reviews || [];
+
+  /* built here rather than in the engine: it is only wanted on this screen,
+     and it is the largest string the app ever makes */
+  const payload = useMemo(() => { try { return reviewPayload(data, coach); } catch (e) { return ""; } }, [data, coach]);
+  const cents = Math.max(1, Math.round(((payload.length / 3.8) * 3 + 1200 * 15) / 10000));
+
+  const store = (rec) => setData((d) => ({ ...d, reviews: [...(Array.isArray(d.reviews) ? d.reviews : []), rec] }));
+
+  const run = async () => {
+    setBusy(true);
+    let rec;
+    try {
+      rec = await runDeepReview({
+        data, coach, mode,
+        ruleBlock: mode === "design" ? (coach.proposal || coach.readableProposal()) : null,
+      });
+    } catch (e) {
+      rec = { id: newId(), date: coach.t, mode, ok: false, applied: false,
+        errors: ["Something went wrong before I could finish reading. Nothing has been changed."] };
+    }
+    store(rec);
+    setResult(rec);
+    setBusy(false);
+  };
+
+  /* Applying it does three things and says all three: the old block closes,
+     the new one starts, and anything the coach came to believe about her joins
+     the profile where she can read and correct it. */
+  const apply = (rec) => {
+    if (!rec || !rec.block) return;
+    setData((d) => {
+      const pr = JSON.parse(JSON.stringify(d.program?.phases?.length ? d.program : SEED_PROGRAM));
+      const live = pr.phases[pr.phases.length - 1];
+      if (live) live.status = "done";
+      pr.phases.push({
+        id: "blk" + (pr.phases.length + 1),
+        name: rec.block.name, weeks: 4, status: "live",
+        line: rec.block.line, week: rec.block.week,
+        basis: [rec.block.reasoning],
+        fromReview: rec.id,
+      });
+      /* A prescribed exercise becomes a real drill, attached to the goal it
+         was written for, so it flows into the ten minutes after a session and
+         shows up under that goal rather than living in the review sheet where
+         she would never see it again. */
+      const rx = rec.prescription || [];
+      const hz = rec.horizons || [];
+      const goals = (d.goals || []).map((g) => {
+        const mine = rx.filter((x) => (x.goalIds || [x.goalId]).includes(g.id)).map((x) => x.id);
+        const h = hz.find((y) => y.goalId === g.id);
+        const next = { ...g };
+        if (mine.length) next.drills = Array.from(new Set([...(g.drills || []), ...mine]));
+        /* every estimate is kept, so she can see whether they were any good */
+        if (h) next.horizons = [...(g.horizons || []), h];
+        return next;
+      });
+      return {
+        ...d,
+        program: pr,
+        goals,
+        drills: [...(d.drills || []), ...rx],
+        profile: [...(d.profile || []), ...((rec.profile || []).map((p) => ({ ...p, firstSeen: rec.date, lastSeen: rec.date })))],
+        reviews: (d.reviews || []).map((r) => (r.id === rec.id ? { ...r, applied: true, appliedDate: coach.t } : r)),
+      };
+    });
+    setResult({ ...rec, applied: true });
+  };
+
+  const shown = result || (reviews.length ? reviews[reviews.length - 1] : null);
+
+  const Week = ({ week }) => {
+    const DOW = ["S", "M", "T", "W", "T", "F", "S"];
+    return (
+      <div style={{ display: "flex", gap: 3, marginBottom: 12 }}>
+        {(week || []).map((bid, i) => {
+          const b = BLOCKS[bid] || BLOCKS.rest;
+          return (
+            <div key={i} style={{ flex: 1, textAlign: "center" }}>
+              <div className="mono" style={{ fontSize: 9, color: C.muted, marginBottom: 3 }}>{DOW[i]}</div>
+              <div style={{ padding: "8px 2px", borderRadius: 8, fontSize: 9.5, fontWeight: 600,
+                background: bid === "rest" ? C.chalk : C.card,
+                border: `1.5px solid ${bid === "rest" ? C.line : b.color || C.line}`,
+                color: bid === "rest" ? C.muted : b.color || C.ink }}>
+                {bid === "rest" ? "rest" : (b.label || bid).split(" ")[0]}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <Eyebrow color={C.signal}>{mode === "read" ? "Where you are" : "The month, read properly"}</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 27, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 10px" }}>
+        {mode === "read" ? "Read everything I have so far" : "Read the month, design the next one"}
+      </h1>
+
+      <div style={{ fontSize: 13.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 }}>
+        {mode === "read"
+          ? "This sends everything you have logged — every measurement, every morning, every calculation, the record, your goals and everything you have written — and asks for an honest reading of what it does and does not yet show. It will not design you a month. There is not enough here yet, and a month built from a fortnight is a guess wearing a plan's clothes."
+          : "This sends the whole block. Every battery measurement one by one, every mobility test, every body region, every calculation, all of your WHOOP, the record, your goals and everything you wrote — and asks for the next four weeks, with the reasoning shown. Nothing it returns becomes your month until you start it."}
+      </div>
+
+      <Card style={{ background: C.pist, marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+          <Eyebrow color={C.signal}>What gets sent</Eyebrow>
+          <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+            {payload ? `${Math.round(payload.length / 1000)}k characters · about ${cents}c` : "nothing to read yet"}
+          </span>
+        </div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>
+          Your training data, and nothing else. It goes to Anthropic on your own key and it is not
+          stored anywhere but on this phone. You can read every character of it first.
+        </div>
+        <Btn kind="quiet" onClick={() => setShowPayload((v) => !v)}>
+          {showPayload ? "Hide it" : "Show me exactly what gets sent"}
+        </Btn>
+        {showPayload && (
+          <pre style={{ marginTop: 10, maxHeight: 320, overflow: "auto", background: C.chalk,
+            borderRadius: 10, padding: 12, fontSize: 10.5, lineHeight: 1.45, whiteSpace: "pre-wrap",
+            fontFamily: "'IBM Plex Mono', monospace", color: C.muted }}>{payload}</pre>
+        )}
+      </Card>
+
+      {coach.deepReadToday && !result && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 12 }}>
+          You already ran one today. Running it again is fine — it costs a few cents and the old one
+          is kept — but nothing will have changed since this morning.
+        </div>
+      )}
+
+      <Btn kind="signal" onClick={run} style={{ opacity: busy ? 0.6 : 1 }}>
+        {busy ? "Reading everything…" : mode === "read" ? "Read where I am" : "Read the month and design the next one"}
+      </Btn>
+      {busy && (
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
+          This takes about half a minute. Leave the screen open.
+        </div>
+      )}
+
+      {shown && !busy && (
+        <div style={{ marginTop: 18 }}>
+          {!shown.ok && (
+            <Card style={{ background: C.card, marginBottom: 12, borderLeft: `3px solid ${C.clay}` }}>
+              <Eyebrow color={C.clay}>It did not go through</Eyebrow>
+              {(shown.errors || []).map((e, i) => (
+                <div key={i} style={{ fontSize: 13, lineHeight: 1.55, color: C.ink, marginTop: 4 }}>{e}</div>
+              ))}
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+                Nothing has been changed and nothing is lost. Everything the app works out on its own
+                is still there, and you can try again whenever you like.
+              </div>
+            </Card>
+          )}
+
+          {shown.ok && shown.interpretation && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow>What your numbers actually did</Eyebrow>
+              <div style={{ fontSize: 13.5, lineHeight: 1.65, color: C.ink, whiteSpace: "pre-wrap" }}>
+                {shown.interpretation}
+              </div>
+            </Card>
+          )}
+
+          {shown.ok && shown.block && (
+            <Card style={{ marginBottom: 12, background: C.mint }}>
+              <Eyebrow color={C.moss}>The month it drew up</Eyebrow>
+              <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, margin: "2px 0 4px" }}>{shown.block.name}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, marginBottom: 12 }}>{shown.block.line}</div>
+              <Week week={shown.block.week} />
+              {shown.applied ? (
+                <div style={{ fontSize: 12.5, color: C.moss, fontWeight: 600 }}>
+                  Started. Every day of it is editable from the month view.
+                </div>
+              ) : (
+                <div>
+                  <Btn kind="signal" onClick={() => apply(shown)}>Start this block</Btn>
+                  <div style={{ marginTop: 8 }}>
+                    <Btn kind="quiet" onClick={() => setSheet({ kind: "chat", about: "the month you just designed",
+                      seed: "Talk me through the month you just designed — and what would change it?" })}>
+                      Argue with it first
+                    </Btn>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
+                    Start it and every day stays editable, exactly like this one. Leave it and nothing changes.
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {shown.ok && (shown.prescription || []).length > 0 && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow color={C.ochre}>Written for you, because no class covers it</Eyebrow>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
+                These are done alongside your classes, never instead of one. Each is here because
+                something you said you want to be able to do needs a muscle or a range nothing in your
+                library reaches. They attach to that goal when you start the block, and they join your
+                ten minutes after a session.
+              </div>
+              {shown.prescription.map((x, i) => {
+                const g = (data.goals || []).find((y) => y.id === x.goalId);
+                return (
+                  <div key={x.id || i} style={{ paddingTop: i ? 12 : 0, marginTop: i ? 12 : 0,
+                    borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{x.label}</div>
+                    <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
+                      {[x.sets && x.reps ? `${x.sets} x ${x.reps}` : x.sets || x.reps, x.freq].filter(Boolean).join(" · ")}
+                    </div>
+                    {x.targets && (
+                      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>{x.targets}</div>
+                    )}
+                    {(() => {
+                      const gs = (x.goalIds || [x.goalId]).map((id) => (data.goals || []).find((y) => y.id === id))
+                        .filter(Boolean);
+                      if (!gs.length) return null;
+                      return (
+                        <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, fontStyle: "italic" }}>
+                          {gs.length > 1 ? "serves both: " : "for "}
+                          {gs.map((y) => `"${y.text}"`).join(" and ")}
+                        </div>
+                      );
+                    })()}
+                    <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 6 }}>{x.why}</div>
+                    <div style={{ marginTop: 8 }}><HowTo f={x} /></div>
+                  </div>
+                );
+              })}
+              {shown.rejectedRx > 0 && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, fontStyle: "italic" }}>
+                  {shown.rejectedRx} other exercise{shown.rejectedRx === 1 ? " was" : "s were"} dropped for not
+                  serving a goal you actually set, or for not saying what your library could not do.
+                </div>
+              )}
+            </Card>
+          )}
+
+          {shown.ok && (shown.horizons || []).length > 0 && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow>How long each of these takes</Eyebrow>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
+                An estimate of how long this kind of change takes at the frequency above — not a plan.
+                The plan is still one month, and the next one gets designed from what this one produces.
+              </div>
+              {shown.horizons.map((h, i) => {
+                const g = (data.goals || []).find((y) => y.id === h.goalId);
+                if (!g) return null;
+                return (
+                  <div key={h.goalId} style={{ paddingTop: i ? 12 : 0, marginTop: i ? 12 : 0,
+                    borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.4 }}>{g.text}</div>
+                    <div className="mono" style={{ fontSize: 11, color: C.ochre, marginTop: 4 }}>
+                      roughly {h.weeks}{/^\d+$/.test(String(h.weeks)) ? " weeks" : ""}
+                    </div>
+                    {h.firstSigns && (
+                      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 5 }}>
+                        First sign: {h.firstSigns}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginTop: 5,
+                      paddingLeft: 10, borderLeft: `2px solid ${C.moss}` }}>
+                      In these four weeks: {h.thisMonth}
+                    </div>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+
+          {shown.ok && shown.reasoning && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow>Why it landed that way</Eyebrow>
+              <div style={{ fontSize: 13.5, lineHeight: 1.65, color: C.ink, whiteSpace: "pre-wrap" }}>
+                {shown.reasoning}
+              </div>
+            </Card>
+          )}
+
+          {shown.ok && (shown.missing || []).length > 0 && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow color={C.ochre}>What is still missing, and why it matters</Eyebrow>
+              {shown.missing.map((m, i) => (
+                <div key={i} style={{ fontSize: 13, lineHeight: 1.55, color: C.ink, paddingLeft: 10,
+                  borderLeft: `2px solid ${C.ochre}`, marginTop: 6 }}>{m}</div>
+              ))}
+            </Card>
+          )}
+
+          {shown.ok && (shown.profile || []).length > 0 && (
+            <Card style={{ marginBottom: 12 }}>
+              <Eyebrow>What it came to believe about you</Eyebrow>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+                Each one has to point at something dated that you actually said or did — anything it
+                could not point at was dropped before it got here. These join your profile when you
+                start the block, and you can correct or delete any of them.
+              </div>
+              {shown.profile.map((p, i) => (
+                <div key={i} style={{ paddingTop: i ? 10 : 0, marginTop: i ? 10 : 0,
+                  borderTop: i ? `1px solid ${C.line}` : "none" }}>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.ink }}>{p.claim}</div>
+                  {(p.evidence || []).slice(0, 3).map((e, j) => (
+                    <div key={j} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>
+                      {dayAndMonth(e.date)}: "{e.quote}"
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {shown.rejectedClaims > 0 && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, fontStyle: "italic" }}>
+                  {shown.rejectedClaims} other thing{shown.rejectedClaims === 1 ? " was" : "s were"} dropped for
+                  having nothing dated to point at.
+                </div>
+              )}
+            </Card>
+          )}
+
+          {shown.ok && shown.ruleBlock && shown.block && (
+            <Fold title="What the app's own rules had proposed"
+              note="the floor the model was working from">
+              <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted }}>
+                <strong style={{ color: C.ink }}>{shown.ruleBlock.name}</strong> — {(shown.ruleBlock.week || []).join(", ")}
+              </div>
+              {(shown.ruleBlock.basis || []).map((b, i) => (
+                <div key={i} style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 6,
+                  paddingLeft: 10, borderLeft: `2px solid ${C.line}` }}>{b}</div>
+              ))}
+            </Fold>
+          )}
+        </div>
+      )}
+
+      {reviews.length > 1 && (
+        <div style={{ marginTop: 16 }}>
+          <Fold title="Every read you have run" note={`${reviews.length}, kept forever`}>
+            {reviews.slice().reverse().map((r) => (
+              <button key={r.id} onClick={() => { setResult(r); setShowPayload(false); }} className="tap"
+                aria-label={`open the read from ${r.date}`}
+                style={{ display: "block", width: "100%", textAlign: "left", border: "none",
+                  background: "transparent", cursor: "pointer", padding: "9px 0", fontFamily: "inherit",
+                  borderTop: `1px solid ${C.line}` }}>
+                <div style={{ fontSize: 13, color: C.ink }}>{dayAndMonth(r.date)}</div>
+                <div style={{ fontSize: 11.5, color: r.ok ? C.muted : C.clay }}>
+                  {r.ok ? (r.block ? `${r.block.name}${r.applied ? " — started" : " — not started"}` : "a reading, no block") : "did not go through"}
+                </div>
+              </button>
+            ))}
+          </Fold>
+        </div>
+      )}
+
+      <div style={{ marginTop: 20 }}>
+        <Btn kind="quiet" onClick={close}>Close</Btn>
+      </div>
+    </div>
+  );
+}
+
 function Briefing({ coach, setSheet, close }) {
   const SECTIONS = [
     ["day", "Today", "What needs deciding in the next few hours."],
@@ -11777,15 +13172,57 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   const context = () => {
-    const recent = coach.weekDays.map((d) => {
+    /* ---- WHY THE COACH KEPT FORGETTING WHAT SHE HAD JUST DONE ----------
+       Her report, 9 August: "it saw only me last day... it started talking
+       about the previous two days but missed the first day, which was the
+       first session of the week with all its data."
+
+       She was right, and the cause was worse than she could see. This list
+       was built from `coach.weekDays`, which is the CALENDAR week — Sunday
+       to Saturday. So it carried the days from the last Sunday forward,
+       INCLUDING days that have not happened yet, and excluded everything
+       before that Sunday. On a Sunday the window is today and six empty
+       future days: the coach opens the week with no memory of training at
+       all. On a Monday it has one day. Every Sunday, her recent history
+       silently reset to nothing.
+
+       A rolling fortnight instead. It cannot fall on the wrong side of a
+       week boundary, it always contains the session she is thinking of, and
+       it never contains a day that has not happened.
+
+       And it carries the whole session rather than the headline — effort,
+       sets, how it felt during and after, and that morning's recovery and
+       sleep. She said "the first session of the week WITH ALL ITS DATA";
+       half of that data was never being sent for any day at all. */
+    const recentDays = Array.from({ length: 14 }, (_, i) => addDays(coach.t, -(13 - i)));
+    const recent = recentDays.map((d) => {
       const l = data.logs[d];
-      if (!l) return null;
+      const mg = (data.morning || {})[d] || {};
+      const am = [
+        mg.recovery ? `recovery ${mg.recovery}%` : null,
+        mg.sleep ? `slept ${mg.sleep}h` : null,
+        mg.shoulderAM ? `shoulder woke ${mg.shoulderAM}/5` : null,
+      ].filter(Boolean).join(", ");
+      if (!l && !am) return null;
+      if (!l) return `${d}: nothing logged [morning: ${am}]`;
       const more = (l.extraSessions || []).map((x) => `${x.type} ${x.minutes}min${x.note ? ` [note: ${x.note}]` : ""}`).join(" + ");
       const extras = ((l.extras || []).length ? " + " + l.extras.join(", ") : "") + (more ? " + " + more : "");
       const did = l.did ? ` — she wrote: "${l.did}"` : "";
       const sn = l.sessionNote ? ` [note on the main session: ${l.sessionNote}]` : "";
-      return `${d}: ${l.completed ? (l.type || "session") + (l.minutes ? " " + l.minutes + "min" : "") + extras : "rest"}${l.shoulder ? ", shoulder comfort " + l.shoulder + "/5" : ""}${sn}${did}`;
-    }).filter(Boolean).join("; ") || "nothing logged this week yet";
+      /* the numbers that make a session a session rather than a name */
+      const detail = [
+        l.rpe ? `effort ${l.rpe}/10` : null,
+        (l.sets !== undefined && l.sets !== "") ? `${l.sets} working sets` : null,
+        l.during ? `felt ${l.during}/5 during` : null,
+        l.energyAfter ? `${l.energyAfter}/5 after` : null,
+        l.shoulder ? `shoulder comfort ${l.shoulder}/5` : null,
+        l.loads ? `lifted ${l.loads}` : null,
+      ].filter(Boolean).join(", ");
+      const head = l.completed
+        ? (l.type || "session") + (l.minutes ? " " + l.minutes + "min" : "") + extras
+        : "rest";
+      return `${d}: ${head}${detail ? " — " + detail : ""}${am ? ` [morning: ${am}]` : ""}${sn}${did}`;
+    }).filter(Boolean).join("\n  ") || "nothing logged in the last fortnight";
 
     const lastBattery = data.weekly[Object.keys(data.weekly).sort().pop()] || null;
     const battery = lastBattery
@@ -11825,6 +13262,18 @@ Where she is right now:
 ${coach.calibrating ? `- THIS IS THE CALIBRATION BLOCK. You are NOT designing training yet — there is no month of her data to design from. Your job is to make sure nothing goes unlogged and to explain why each input matters. Today's logging is ${coach.capture.pct}% complete${coach.capture.due.length ? `; still open: ${coach.capture.due.map((r) => r.label).join(", ")}` : ""}.` : ""}
 - What you are already raising with her unprompted (do not contradict these, build on them):
 ${(coach.agenda || []).slice(0, 8).map((a) => `  * [${a.scope}] ${a.text}`).join("\n") || "  nothing today"}
+- WHAT SHE HAS TOLD YOU ABOUT HERSELF (her own words — these outrank anything you worked out yourself):
+${(coach.profile || []).filter((x) => x.hers && x.status !== "retired").length
+  ? (coach.profile || []).filter((x) => x.hers && x.status !== "retired").map((x) => `  * "${x.claim}"`).join("\n")
+  : "  * nothing yet"}
+- WHAT YOU HAVE COME TO BELIEVE, AND HOW SURE (act on the believed ones; note the rest and leave them alone):
+${(coach.profileBelieved || []).length
+  ? (coach.profileBelieved || []).map((x) => `  * ${x.claim} (${x.confidence})`).join("\n")
+  : "  * nothing believed yet"}
+- DAYS SHE HAS MOVED HERSELF (she said so about this exact date; never argue with it):
+${Object.keys(coach.dayPlan || {}).length
+  ? Object.entries(coach.dayPlan).sort().slice(-10).map(([d2, k2]) => `  * ${d2}: ${k2 === "rest" ? "she cannot train" : k2}`).join("\n")
+  : "  * none"}
 - WHAT THE APP HAS LEARNED ABOUT HER (computed from 12 weeks of what actually happened — use this to
   tailor how you approach her, not just what you prescribe):
   Baseline completion of scheduled days: ${coach.learned.base ?? "—"}%
@@ -11886,7 +13335,9 @@ ${coach.allMetrics.map((v) => `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.
 - BODY WORK she books herself (never prescribed by you, but it changes what the next session can be):
 ${coach.bodywork.count28 ? `  ${coach.bodywork.count28} sessions in 28 days. ${coach.bodywork.reactive ? `RECENT: ${coach.bodywork.reactive.label} — tissue still settling, keep today light.` : ""}${coach.bodywork.support ? `RECENT: ${coach.bodywork.support.label} — she should tolerate more today.` : ""}${coach.bodywork.guided ? `RECENT: physiotherapy — their loading plan outranks yours.` : ""}` : "  none logged"}
 ${about ? `- She tapped "${about}" and came here to ask about it. Answer that first.` : ""}
-- Recent days: ${recent}
+- THE LAST FOURTEEN DAYS, oldest first — every session with everything recorded about it. This is the
+  window, not the calendar week: if she mentions something she did recently, it is in here.
+  ${recent}
 - Last battery: ${battery}
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
@@ -12364,6 +13815,8 @@ function CoachApp() {
             <VitalDetail id={sheet.id} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "edit-mobility" ? (
             <MobilityEditor data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+          ) : sheet.kind === "month" ? (
+            <BlockCalendar data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "goals" ? (
             /* the goals card is on Today behind a folded row; it needed a door
                of its own so anything that names a goal can open it */
@@ -12374,6 +13827,8 @@ function CoachApp() {
             <VitalsAll coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "mobility" ? (
             <MobilitySheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+          ) : sheet.kind === "review" ? (
+            <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "briefing" ? (
             <Briefing coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "chat" ? (
