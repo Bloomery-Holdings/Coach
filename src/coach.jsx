@@ -2282,14 +2282,20 @@ const bestEntryFor = (f, stores) => {
 --------------------------------------------------------------------------- */
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
-  { id: "squat",     cap: "lower",    label: "Squat",            role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
-    rungs: ["Bodyweight squat", "Goblet squat", "Split squat L/R"], rung: 0 ,
+  { id: "squat",     cap: "lower",    label: "Bodyweight squat", role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
+    /* The ladder that put goblet squat and split squat on this card a second
+       time, as chips, while both already had rows of their own. A rung ladder
+       only works while the unit stays the same; kg x reps and per-side reps
+       are not rungs of a reps-in-60s test. Emptied rather than deleted —
+       fillFromSeed skips a key the seed does not define, so a missing line
+       would leave the ladder on her device forever. */
+    rungs: [], rung: 0 ,
     how: "Sixty seconds. Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. Count only the reps that reach that depth — when the depth goes, stop counting even if the clock is still running.",
     why: "Legs are the biggest muscles you own and the first to go in your fifties. This is the one number on the whole battery most closely tied to still getting off the floor unaided in twenty years." },
   { id: "wallsit",   cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Back flat to a wall, knees and hips at ninety degrees, thighs parallel to the floor, hands off your legs. Time it from the moment you are in position to the moment your hips start to rise.",
     why: "Endurance in the quads rather than peak strength — the thing that gives out on stairs and long descents. It also loads the knee joint with almost no shear, so it is safe to push hard on." },
-  { id: "splitsq",   cap: "lower",    label: "Split squat L/R",  role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false ,
+  { id: "splitsq",   cap: "lower",    label: "Split squat",      role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
     how: "Thirty seconds a side. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
     why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
   { id: "goblet",    cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
@@ -2301,10 +2307,10 @@ const SEED_WEEKLY = [
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
     how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
     why: "Upper-body pressing strength and trunk stiffness in one. Because it is your own bodyweight, it also quietly tracks any change in body composition." },
-  { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true, bilateral: true ,
+  { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true ,
     how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. As many as you can with that weight, each arm counted separately. No clock: the weight is the limit, not the minute.",
     why: "Overhead pressing is the movement your right shoulder is most sensitive to, which is exactly why it is measured rather than avoided. The reps are capped by the shoulder, not the arm — if the right side lags, that is the reading." },
-  { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false, bilateral: true ,
+  { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. As many as you can with that weight, per side. No clock — the weight decides when you stop.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
   { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
@@ -2332,10 +2338,10 @@ const SEED_WEEKLY = [
   { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
     why: "Trunk control while something is moving, which is much closer to real life than a static hold. It also loads the shoulder, so it is watched alongside pressing." },
-  { id: "sideplank", cap: "core",     label: "Side plank L/R",   role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
+  { id: "sideplank", cap: "core",     label: "Side plank",       role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
     how: "On one forearm, body in a straight line, hips stacked. Time each side separately.",
     why: "The side of the trunk, the part a plank misses entirely. The difference between your two sides is the number worth watching." },
-  { id: "crunch",    cap: "core",     label: "Crunches 30s",     role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
+  { id: "crunch",    cap: "core",     label: "Crunches",         role: "rotating", type: "number", unit: "reps in 30s", better: "up", inWeekly: false ,
     how: "Knees bent, feet flat, hands across your chest. Curl your shoulders off the floor and back down for thirty seconds. Count full repetitions only.",
     why: "A rate rather than a maximum, which makes it far less dependent on how motivated you feel on the day." },
   { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
@@ -2343,30 +2349,22 @@ const SEED_WEEKLY = [
     why: "Trunk control with the back protected. It is the safest core measure of the set, and the one to use on a day the back is complaining." },
 
   /* ---- CARDIO ---- */
-  { id: "elliptical",cap: "cardio",   label: "Elliptical 1 km",  role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true ,
-    how: "One kilometre at a resistance you keep the same every time. Log the time in minutes and seconds.",
-    why: "Aerobic fitness with no impact. Lower is better here — and because the resistance is fixed, the time is a clean read on the heart and lungs." },
-  { id: "burpees",   cap: "cardio",   label: "Burpees 60s",      role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true ,
+  /* One kilometre, ONE machine. There used to be two rows here, elliptical and
+     treadmill, and she was only ever going to do one of them — so the other sat
+     blank forever and dragged every completeness figure down with it. */
+  { id: "burpees",   cap: "cardio",   label: "Burpees",          role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Squat, hands down, feet back, chest to floor, feet in, stand and jump. Count full repetitions.",
     why: "The hardest sixty seconds in the battery, and the one that most reflects everything at once. Scale it by stepping the feet back rather than jumping." },
-  { id: "treadmill", cap: "cardio",   label: "Treadmill 1 km",   role: "rotating", type: "time",   unit: "mm:ss", better: "down", inWeekly: false ,
-    how: "One kilometre, same incline every time. Walking counts — log the time.",
-    why: "The same aerobic reading as the elliptical, for anywhere with a treadmill instead." },
+  { id: "treadmill", cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true ,
+    how: "One kilometre. Walking counts. Same machine, same incline or resistance, every single time — rename this row if you switch, because a kilometre on a treadmill and a kilometre on an elliptical are two different tests and comparing them tells you nothing.",
+    why: "Aerobic fitness. Lower is better, and because the settings are fixed the time is a clean read on the heart and lungs." },
 
-  /* ---- MOBILITY ---- */
-  { id: "reach",     cap: "mobility", label: "Forward reach",    role: "anchor",   type: "rung",   unit: "",     better: "up", inWeekly: true,
-    rungs: ["Ankles", "Toes", "Palms flat"], rung: 0 ,
-    how: "Stand, feet together, knees straight but not locked, fold forward. Log the furthest you can hold without bending the knees.",
-    why: "Length through the hamstrings, calves and lower back together. The one most people notice first, and the one that responds fastest to consistent work." },
-  { id: "shoulderflex", cap: "mobility", label: "Shoulder flexion", role: "rotating", type: "number", unit: "cm gap", better: "down", inWeekly: true ,
-    how: "Lie on your back, knees bent, lower back flat to the floor. Raise both arms overhead, elbows straight, and measure the gap from your wrists to the floor.",
-    why: "Shoulder flexion with the back locked down so it cannot cheat. Lower is better. This is the number that tells you whether the shoulder is genuinely opening up." },
-  { id: "overhead",  cap: "mobility", label: "Overhead reach",   role: "rotating", type: "scale",  unit: "1–5", max: 5, better: "up", inWeekly: false ,
-    how: "Reach both arms overhead and rate how it feels, 1 to 5, where 5 is free and easy and 1 is blocked or painful.",
-    why: "The subjective companion to the measured version. How a range feels is real information, and sometimes it moves before the centimetres do." },
-  { id: "deepsquat", cap: "mobility", label: "Deep squat hold",  role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false ,
-    how: "Squat as low as you comfortably can with your heels down, and hold. Time it until your heels lift or your back rounds.",
-    why: "Ankles, hips and lower back at once, held rather than passed through. Hip and ankle range is what the sit-to-rise test depends on." },
+  /* ---- MOBILITY: deliberately not here ----
+     Forward reach, shoulder flexion, overhead reach and the deep squat hold
+     used to sit in this battery AND in the weekly mobility battery, on
+     different scales. Same four movements, twice a week, two sets of numbers
+     that could disagree about the same body. The mobility battery keeps them,
+     because it measures two of them left and right and these never did. */
 
   /* ---- BALANCE ---- */
   { id: "balance",   cap: "balance",  label: "Single-leg stand", role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true, bilateral: true,
@@ -2544,7 +2542,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 49";
+const BUILD = "9 August 2026 · 50";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2604,6 +2602,22 @@ const openedFromDisk = () => {
   try { return typeof location !== "undefined" && location.protocol === "file:"; }
   catch (e) { return false; }
 };
+const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "elliptical"];
+const BATTERY_TIDY = 49;   /* the build that retired them; stamped so it runs once */
+
+const hasReading = (store, id) => {
+  try {
+    return Object.values(store || {}).some((e) => e && Object.keys(e).some((k) =>
+      (k === id || k.startsWith(id + "__")) && e[k] !== "" && e[k] !== undefined && e[k] !== null));
+  } catch (e) { return true; }   /* if in doubt, keep it */
+};
+
+const retireFields = (list, store, done) => {
+  if (done || !Array.isArray(list) || !list.length) return list;
+  const out = list.filter((f) => !RETIRED_WEEKLY.includes(f.id) || hasReading(store, f.id));
+  return out.length === list.length ? list : out;
+};
+
 const BLANK = {
   settings: {
     name: "", age: "", height: "", weeklyTarget: 4, gymDate: "", monthTheme: "", primaryGoal: "",
@@ -2612,6 +2626,8 @@ const BLANK = {
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
     whoopDay: 6,
+    /* which build last tidied the battery; stops the retirement running twice */
+    batteryTidy: BATTERY_TIDY,
     /* Off by default. Only useful if she is actually experiencing these, and
        it is not the app's business to assume she is. */
     trackSymptoms: false,
@@ -2665,6 +2681,27 @@ const BLANK = {
    This fills in only the fields that are ABSENT from her copy, matched by id,
    and never touches a value she has. Rule 20: nothing of hers is overwritten.
 --------------------------------------------------------------------------- */
+/* ============================================================================
+   RETIRING A TEST WITHOUT LOSING A READING
+   ---------------------------------------------------------------------------
+   Her instruction, 9 August, the night before her first battery: "there are
+   things that are redundant... a lot of things that need to be tidied up."
+
+   Five rows came out — the four mobility tests that duplicated her separate
+   mobility battery on a different scale, and one of the two 1 km cardio rows,
+   because she was only ever going to do one of them and the other sat blank
+   forever, dragging every completeness figure down with it.
+
+   But the field list on her device is HERS. Changing the seed does not touch
+   it, and must not: rule 20 says nothing is deleted without her approval, and
+   rule 12 says the list is hers to edit. So this runs ONCE, only with her
+   approval, and it REFUSES to remove any row she has ever put a number in —
+   a retired test with a reading behind it stays, because the reading is
+   history and history is permanent.
+
+   Tonight it costs nothing: she has not logged a battery yet. Tomorrow it
+   would cost her a column.
+========================================================================== */
 const fillFromSeed = (list, seed, keys) => {
   if (!Array.isArray(list) || !list.length) return list;
   return list.map((f) => {
@@ -2696,10 +2733,23 @@ async function loadData() {
       const d = JSON.parse(r);
       return {
         ...BLANK, ...d,
-        settings: { ...BLANK.settings, ...(d.settings || {}) },
+        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: BATTERY_TIDY },
+        /* `label` and `bilateral` are new to this list, and they are the
+           reason a correction could never reach her. Split squat said "L/R"
+           and gave one box; shoulder press and lateral raise, which are
+           two-arm lifts, asked for left and right. Fixing the seed did
+           nothing, because only how/why/unit were ever refreshed. Both are
+           guarded by their own *Edited flag, so anything she renames or sets
+           herself is hers permanently. */
         fields: {
-          weekly: d.fields?.weekly?.length ? fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit"]) : SEED_WEEKLY,
-          monthly: d.fields?.monthly?.length ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit"]) : SEED_MONTHLY,
+          weekly: d.fields?.weekly?.length
+            ? retireFields(
+                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs"]),
+                d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
+            : SEED_WEEKLY,
+          monthly: d.fields?.monthly?.length
+            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs"])
+            : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
         goals: Array.isArray(d.goals) ? d.goals : [],
@@ -9941,7 +9991,11 @@ function FieldEditor({ which, data, setData, close }) {
 
             {openId === f.id && (
               <div style={{ padding: "4px 6px 14px" }}>
-                <Field label="Name" unit="" type="text" value={f.label} onChange={(v) => patch(f.id, { label: v })} />
+                {/* labelEdited marks the name as HERS. Without it, adding
+                    `label` to what gets refreshed from the seed would silently
+                    undo every rename she has ever made. */}
+                <Field label="Name" unit="" type="text" value={f.label}
+                  onChange={(v) => patch(f.id, { label: v, labelEdited: true })} />
 
                 {/* "Explain to me each exercise, and maybe a small video link."
                     9 August. Everything the app tells her about a measure is
