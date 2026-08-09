@@ -2027,7 +2027,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 38";
+const BUILD = "9 August 2026 · 39";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2126,6 +2126,32 @@ const BLANK = {
   mobility: {},
 };
 
+/* ---------------------------------------------------------------------------
+   TEXT ADDED TO A SEED AFTER SHE ALREADY HAS THE LIST
+   Her battery was copied out of the seed the first time the app ran, so
+   anything written into the seed afterwards - the how-it's-done and why-it's-
+   measured added on 9 August - would never reach her: the loader keeps her
+   copy, correctly, because it is hers.
+
+   This fills in only the fields that are ABSENT from her copy, matched by id,
+   and never touches a value she has. Rule 20: nothing of hers is overwritten.
+--------------------------------------------------------------------------- */
+const fillFromSeed = (list, seed, keys) => {
+  if (!Array.isArray(list) || !list.length) return list;
+  return list.map((f) => {
+    const src = seed.find((x) => x.id === f.id);
+    if (!src) return f;
+    let out = f, changed = false;
+    keys.forEach((k) => {
+      if ((out[k] === undefined || out[k] === null || out[k] === "") && src[k] !== undefined) {
+        if (!changed) { out = { ...out }; changed = true; }
+        out[k] = src[k];
+      }
+    });
+    return out;
+  });
+};
+
 async function loadData() {
   try {
     const r = await store.get(KEY);
@@ -2135,8 +2161,8 @@ async function loadData() {
         ...BLANK, ...d,
         settings: { ...BLANK.settings, ...(d.settings || {}) },
         fields: {
-          weekly: d.fields?.weekly?.length ? d.fields.weekly : SEED_WEEKLY,
-          monthly: d.fields?.monthly?.length ? d.fields.monthly : SEED_MONTHLY,
+          weekly: d.fields?.weekly?.length ? fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why"]) : SEED_WEEKLY,
+          monthly: d.fields?.monthly?.length ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why"]) : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
         goals: Array.isArray(d.goals) ? d.goals : [],
@@ -2144,8 +2170,10 @@ async function loadData() {
         chats: Array.isArray(d.chats) ? d.chats : [],
         profile: Array.isArray(d.profile) ? d.profile : [],
         /* An older file has neither — seed them, never wipe them (rule 20). */
-        mobTests: Array.isArray(d.mobTests) && d.mobTests.length ? d.mobTests : SEED_MOBILITY,
-        drills: Array.isArray(d.drills) && d.drills.length ? d.drills : SEED_DRILLS,
+        mobTests: Array.isArray(d.mobTests) && d.mobTests.length
+          ? fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why"]) : SEED_MOBILITY,
+        drills: Array.isArray(d.drills) && d.drills.length
+          ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
         mobility: d.mobility || {},
         /* One block at a time: anything after the live block was written
            before that rule existed and would pre-empt a design the coach
