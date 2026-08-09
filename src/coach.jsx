@@ -42,8 +42,8 @@ const SEED_LIBRARY = [
   { id: "multigym", body: { legs: 3, back: 3, chest: 2, shoulders: 2, arms: 2, core: 1, heart: 1 }, home: true,   name: "Multi-Gym Strength",    goal: "strength",    intensity: 3, recoveryCost: 3, shoulderLoad: "medium", durations: [30, 45, 60], equipment: "Multi-gym station",      cue: "Full range beats heavy load." },
   { addon: true, id: "dumbbell", body: { legs: 2, back: 2, chest: 2, shoulders: 2, arms: 3, core: 1, heart: 1 }, home: true,   name: "Dumbbell Strength",     goal: "strength",    intensity: 3, recoveryCost: 3, shoulderLoad: "high",   durations: [30, 45, 60], equipment: "Dumbbells, bench",       cue: "Match left to right, rep for rep." },
   { addon: true, id: "bands", body: { legs: 2, back: 2, chest: 1, shoulders: 2, arms: 2, core: 1, heart: 1 },      name: "Resistance Band Strength", goal: "strength", intensity: 2, recoveryCost: 2, shoulderLoad: "low",    durations: [15, 20, 30], equipment: "Resistance bands",       cue: "Keep tension on the band the whole set." },
-  { id: "treadmill", body: { legs: 2, back: 0, chest: 0, shoulders: 0, arms: 0, core: 1, heart: 3 }, home: true,  name: "Treadmill Walking",     goal: "cardio",      intensity: 2, recoveryCost: 1, shoulderLoad: "low",    durations: [20, 30, 45, 60], equipment: "Treadmill",          cue: "Add incline before you add speed." },
-  { id: "elliptical", body: { legs: 2, back: 1, chest: 0, shoulders: 1, arms: 1, core: 1, heart: 3 }, home: true, name: "Elliptical Training",   goal: "cardio",      intensity: 3, recoveryCost: 2, shoulderLoad: "low",    durations: [20, 30, 45], equipment: "Elliptical",             cue: "Push and pull evenly — don't just ride it." },
+  { id: "treadmill", body: { legs: 2, back: 0, chest: 0, shoulders: 0, arms: 0, core: 1, heart: 3 }, home: true,  name: "Treadmill Walking",     goal: "cardio",      intensity: 2, recoveryCost: 1, shoulderLoad: "low",    durations: [20, 30, 45, 60], equipment: "Treadmill",          cue: "Add incline before you add speed."  },
+  { id: "elliptical", body: { legs: 2, back: 1, chest: 0, shoulders: 1, arms: 1, core: 1, heart: 3 }, home: true, name: "Elliptical Training",   goal: "cardio",      intensity: 3, recoveryCost: 2, shoulderLoad: "low",    durations: [20, 30, 45], equipment: "Elliptical",             cue: "Push and pull evenly — don't just ride it."  },
   { id: "yoga", body: { legs: 2, back: 2, chest: 1, shoulders: 2, arms: 1, core: 2, heart: 1 },       name: "Yoga",                  goal: "mobility",    intensity: 2, recoveryCost: 2, shoulderLoad: "medium", durations: [30, 45, 60], equipment: "Mat, blocks",           cue: "Stay in the pose long enough for it to change. Come out of anything that pinches the shoulder.", home: true, resistance: "Bodyweight, blocks under the hands when the shoulder needs the height", structure: "Breath work, sun salutations, standing sequence, balance poses, floor work on hips and hamstrings, savasana.", felt: "" },
   { addon: true, id: "swimming", body: { legs: 2, back: 3, chest: 2, shoulders: 3, arms: 2, core: 2, heart: 3 },   name: "Swimming",              goal: "cardio",      intensity: 4, recoveryCost: 3, shoulderLoad: "high",   durations: [20, 30, 45], equipment: "Pool",                   cue: "Long strokes, fewer of them." },
   { addon: true, id: "recwalk", body: { legs: 1, back: 0, chest: 0, shoulders: 0, arms: 0, core: 0, heart: 1 },    name: "Recovery Walk",         goal: "recovery",    intensity: 1, recoveryCost: 1, shoulderLoad: "low",    durations: [15, 20, 30, 45], equipment: "None",               cue: "Easy enough to hold a conversation the whole way." },
@@ -1726,60 +1726,128 @@ const bestEntryFor = (f, stores) => {
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
   { id: "squat",     cap: "lower",    label: "Squat",            role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true,
-    rungs: ["Bodyweight squat", "Goblet squat", "Split squat L/R"], rung: 0 },
-  { id: "wallsit",   cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true },
-  { id: "splitsq",   cap: "lower",    label: "Split squat L/R",  role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false },
-  { id: "goblet",    cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false },
+    rungs: ["Bodyweight squat", "Goblet squat", "Split squat L/R"], rung: 0 ,
+    how: "Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. As many as you can with that depth held — stop the moment the depth goes, not when you are tired.",
+    why: "Legs are the biggest muscles you own and the first to go in your fifties. This is the one number on the whole battery most closely tied to still getting off the floor unaided in twenty years." },
+  { id: "wallsit",   cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
+    how: "Back flat to a wall, knees and hips at ninety degrees, thighs parallel to the floor, hands off your legs. Time it from the moment you are in position to the moment your hips start to rise.",
+    why: "Endurance in the quads rather than peak strength — the thing that gives out on stairs and long descents. It also loads the knee joint with almost no shear, so it is safe to push hard on." },
+  { id: "splitsq",   cap: "lower",    label: "Split squat L/R",  role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
+    how: "One foot forward, one back, feet about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
+    why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
+  { id: "goblet",    cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+    how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. Log the weight and the reps you got with it.",
+    why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
   { id: "pushup",    cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true,
-    rungs: ["Knee push-up", "Floor push-up"], rung: 0 },
-  { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true, bilateral: true },
-  { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false, bilateral: true },
-  { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false },
+    rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
+    how: "Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used.",
+    why: "Upper-body pressing strength and trunk stiffness in one. Because it is your own bodyweight, it also quietly tracks any change in body composition." },
+  { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true, bilateral: true ,
+    how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. Log the weight and the reps for each arm.",
+    why: "Overhead pressing is the movement your right shoulder is most sensitive to, which is exactly why it is measured rather than avoided. The reps are capped by the shoulder, not the arm — if the right side lags, that is the reading." },
+  { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false, bilateral: true ,
+    how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. Log the weight and the reps per side.",
+    why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
+  { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
+    how: "Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
+    why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
 
   /* ---- PULL ---- */
-  { id: "cablerow",  cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true },
-  { id: "bandrow",   cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true },
-  { id: "latpull",   cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false },
-  { id: "facepull",  cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false },
+  { id: "cablerow",  cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true ,
+    how: "Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. Log the weight and the reps.",
+    why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
+  { id: "bandrow",   cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true ,
+    how: "Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band each time or the number means nothing.",
+    why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
+  { id: "latpull",   cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+    how: "Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. Log the weight and the reps.",
+    why: "Overhead pulling. It uses the shoulder in the opposite direction to a press, so together the two say more about the joint than either alone." },
+  { id: "facepull",  cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+    how: "Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears.",
+    why: "The upper back and the outside rotators of the shoulder. This is the single most useful movement for a shoulder that has been irritable, which is why it is measured and not just prescribed." },
 
   /* ---- CORE ---- */
-  { id: "plank",     cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true },
-  { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true },
-  { id: "sideplank", cap: "core",     label: "Side plank L/R",   role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true },
-  { id: "crunch",    cap: "core",     label: "Crunches 30s",     role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false },
-  { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false },
+  { id: "plank",     cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true ,
+    how: "Forearms and toes, elbows under your shoulders, hips level with your shoulders. Time it until your hips drop or lift — the moment your body stops being a line, the clock stops.",
+    why: "Trunk endurance. Not glamorous, but it is what lets everything else transmit force, and it is the reading most sensitive to a week off." },
+  { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps", better: "up", inWeekly: true ,
+    how: "Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
+    why: "Trunk control while something is moving, which is much closer to real life than a static hold. It also loads the shoulder, so it is watched alongside pressing." },
+  { id: "sideplank", cap: "core",     label: "Side plank L/R",   role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
+    how: "On one forearm, body in a straight line, hips stacked. Time each side separately.",
+    why: "The side of the trunk, the part a plank misses entirely. The difference between your two sides is the number worth watching." },
+  { id: "crunch",    cap: "core",     label: "Crunches 30s",     role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
+    how: "Knees bent, feet flat, hands across your chest. Curl your shoulders off the floor and back down for thirty seconds. Count full repetitions only.",
+    why: "A rate rather than a maximum, which makes it far less dependent on how motivated you feel on the day." },
+  { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false ,
+    how: "On your back, arms up, knees over hips. Lower one arm and the opposite leg towards the floor without letting your lower back arch, then swap. Count each pair as one.",
+    why: "Trunk control with the back protected. It is the safest core measure of the set, and the one to use on a day the back is complaining." },
 
   /* ---- CARDIO ---- */
-  { id: "elliptical",cap: "cardio",   label: "Elliptical 1 km",  role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true },
-  { id: "burpees",   cap: "cardio",   label: "Burpees 60s",      role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true },
-  { id: "treadmill", cap: "cardio",   label: "Treadmill 1 km",   role: "rotating", type: "time",   unit: "mm:ss", better: "down", inWeekly: false },
+  { id: "elliptical",cap: "cardio",   label: "Elliptical 1 km",  role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true ,
+    how: "One kilometre at a resistance you keep the same every time. Log the time in minutes and seconds.",
+    why: "Aerobic fitness with no impact. Lower is better here — and because the resistance is fixed, the time is a clean read on the heart and lungs." },
+  { id: "burpees",   cap: "cardio",   label: "Burpees 60s",      role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: true ,
+    how: "Sixty seconds. Squat, hands down, feet back, chest to floor, feet in, stand and jump. Count full repetitions.",
+    why: "The hardest sixty seconds in the battery, and the one that most reflects everything at once. Scale it by stepping the feet back rather than jumping." },
+  { id: "treadmill", cap: "cardio",   label: "Treadmill 1 km",   role: "rotating", type: "time",   unit: "mm:ss", better: "down", inWeekly: false ,
+    how: "One kilometre, same incline every time. Walking counts — log the time.",
+    why: "The same aerobic reading as the elliptical, for anywhere with a treadmill instead." },
 
   /* ---- MOBILITY ---- */
   { id: "reach",     cap: "mobility", label: "Forward reach",    role: "anchor",   type: "rung",   unit: "",     better: "up", inWeekly: true,
-    rungs: ["Ankles", "Toes", "Palms flat"], rung: 0 },
-  { id: "shoulderflex", cap: "mobility", label: "Shoulder flexion", role: "rotating", type: "number", unit: "cm gap", better: "down", inWeekly: true },
-  { id: "overhead",  cap: "mobility", label: "Overhead reach",   role: "rotating", type: "scale",  unit: "1–5", max: 5, better: "up", inWeekly: false },
-  { id: "deepsquat", cap: "mobility", label: "Deep squat hold",  role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false },
+    rungs: ["Ankles", "Toes", "Palms flat"], rung: 0 ,
+    how: "Stand, feet together, knees straight but not locked, fold forward. Log the furthest you can hold without bending the knees.",
+    why: "Length through the hamstrings, calves and lower back together. The one most people notice first, and the one that responds fastest to consistent work." },
+  { id: "shoulderflex", cap: "mobility", label: "Shoulder flexion", role: "rotating", type: "number", unit: "cm gap", better: "down", inWeekly: true ,
+    how: "Lie on your back, knees bent, lower back flat to the floor. Raise both arms overhead, elbows straight, and measure the gap from your wrists to the floor.",
+    why: "Shoulder flexion with the back locked down so it cannot cheat. Lower is better. This is the number that tells you whether the shoulder is genuinely opening up." },
+  { id: "overhead",  cap: "mobility", label: "Overhead reach",   role: "rotating", type: "scale",  unit: "1–5", max: 5, better: "up", inWeekly: false ,
+    how: "Reach both arms overhead and rate how it feels, 1 to 5, where 5 is free and easy and 1 is blocked or painful.",
+    why: "The subjective companion to the measured version. How a range feels is real information, and sometimes it moves before the centimetres do." },
+  { id: "deepsquat", cap: "mobility", label: "Deep squat hold",  role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false ,
+    how: "Squat as low as you comfortably can with your heels down, and hold. Time it until your heels lift or your back rounds.",
+    why: "Ankles, hips and lower back at once, held rather than passed through. Hip and ankle range is what the sit-to-rise test depends on." },
 
   /* ---- BALANCE ---- */
   { id: "balance",   cap: "balance",  label: "Single-leg stand", role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true, bilateral: true,
-    rungs: ["Free", "Eyes closed"], rung: 0 },
-  { id: "tandem",    cap: "balance",  label: "Tandem stance",    role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true },
-  { id: "legreach",  cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false, bilateral: true },
+    rungs: ["Free", "Eyes closed"], rung: 0 ,
+    how: "Stand on one leg, hands on hips, the other foot off the floor and not touching your standing leg. Time each side until the foot touches down. Do it eyes-closed only once eyes-open is easy.",
+    why: "Balance falls faster than strength after fifty and it responds quickly to being practised. Eyes-closed is a much harder test, which is why it is a separate rung rather than the same number." },
+  { id: "tandem",    cap: "balance",  label: "Tandem stance",    role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
+    how: "Heel directly in front of toe, both feet in a line, arms folded. Time it until you have to step.",
+    why: "A narrower base than standing normally but easier than one leg — useful while single-leg is still short." },
+  { id: "legreach",  cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps", better: "up", inWeekly: false, bilateral: true ,
+    how: "Stand on one leg and reach the other foot as far forward as you can, tap lightly, and come back without putting weight on it. Count each side.",
+    why: "Balance while moving rather than balance while still. Closer to what actually goes wrong on a kerb." },
 
   /* ---- HOW THE WEEK FELT ---- */
-  { id: "weight",     cap: "",        label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true },
-  { id: "confidence", cap: "",        label: "Confidence",       role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: "up", inWeekly: true },
-  { id: "rpe",        cap: "",        label: "Average effort",   role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: null, inWeekly: true },
-  { id: "win",        cap: "",        label: "Biggest win",      role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true },
-  { id: "challenge",  cap: "",        label: "Biggest challenge",role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true },
+  { id: "weight",     cap: "",        label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true ,
+    how: "Same scales, same time of day, ideally first thing. One reading a week, not a daily one.",
+    why: "On its own it says very little — it moves with water, food and the time of day. It is here because the body-composition percentages need it to mean anything." },
+  { id: "confidence", cap: "",        label: "Confidence",       role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: "up", inWeekly: true ,
+    how: "How confident you feel about your training right now, 1 to 10. First answer, not a considered one.",
+    why: "It is one of the five signals behind the weekly call. Low confidence means simplify — fewer variables, cleaner sessions — rather than push." },
+  { id: "rpe",        cap: "",        label: "Average effort",   role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: null, inWeekly: true ,
+    how: "Across the week as a whole, how hard did it feel, 1 to 10.",
+    why: "It is the brake on progression. A week that felt like a 9 does not get made harder however good the other numbers look." },
+  { id: "win",        cap: "",        label: "Biggest win",      role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
+    how: "Anything at all. A session you nearly skipped and did, a number that moved, a day you felt like yourself.",
+    why: "Specific, self-referenced feedback is the form of encouragement that actually sustains training. Written in your own words, it is worth more than anything the app can compute." },
+  { id: "challenge",  cap: "",        label: "Biggest challenge",role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
+    how: "What got in the way. Be blunt — this is the input that changes what next month looks like.",
+    why: "It is read at the end of the block, alongside everything else, and it is mined for patterns across the year. Nothing you write here is decoration." },
 ];
 
 const SEED_MONTHLY = [
-  { id: "muscle", cap: "", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: false },
-  { id: "fat",    cap: "", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: false },
+  { id: "muscle", cap: "", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: false ,
+    how: "Same scales, same conditions as your weight. Log the percentage the scales report.",
+    why: "Maintaining muscle through your fifties is the whole point of the training. It moves slowly, so only a change beyond the measurement error counts as a change at all." },
+  { id: "fat",    cap: "", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: false ,
+    how: "Same scales, same conditions, same time of day.",
+    why: "Read alongside muscle rather than on its own. Consumer scales are not accurate in absolute terms, but they are reasonably consistent, which is what makes the direction usable." },
 ];
 
 const newId = () => "f" + Math.random().toString(36).slice(2, 9);
@@ -1917,7 +1985,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 35";
+const BUILD = "9 August 2026 · 37";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5374,6 +5442,49 @@ const Note = ({ label, value, onChange, hint }) => (
   </div>
 );
 
+/* ---------------------------------------------------------------------------
+   HER WORDS ARE NEVER FINISHED
+   "I hate the fact that anything I save, I cannot access it again — sometimes
+   it has spelling mistakes, or afterwards I see something I want to add."
+   9 August. Anything she wrote can be opened again and corrected in place,
+   with the microphone available exactly as it was when she wrote it. Nothing
+   is versioned away: saving replaces the text, and cancelling leaves it alone.
+--------------------------------------------------------------------------- */
+function EditableText({ value, onSave, children, rows = 3, placeholder, small }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  if (editing) {
+    return (
+      <div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+          <textarea rows={rows} value={draft} onChange={(e) => setDraft(e.target.value)}
+            placeholder={placeholder || "Type here, or use the microphone"}
+            style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 }} />
+          <MicButton onText={setDraft} current={draft} />
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="tap" onClick={() => { onSave(draft); setEditing(false); }} style={{
+            padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit" }}>Save</button>
+          <button className="tap" onClick={() => setEditing(false)} style={{
+            padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+            border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+            fontFamily: "inherit" }}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      {children}
+      <button className="tap" aria-label="Edit what you wrote"
+        onClick={() => { setDraft(value || ""); setEditing(true); }} style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: small ? "3px 0 0" : "6px 0 0",
+          fontSize: small ? 10.5 : 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>edit</button>
+    </div>
+  );
+}
+
 const Tag = ({ children, tone }) => (
   <span className="mono" style={{
     fontSize: 10, letterSpacing: "0.04em", padding: "4px 9px", borderRadius: 20,
@@ -5427,10 +5538,149 @@ const NumRow = ({ label, unit, cells, pb }) => (
   </div>
 );
 
+/* ---------------------------------------------------------------------------
+   HOW EACH EXERCISE IS DONE
+   "We agreed you will explain to me each exercise in the battery, and put a
+   small image of it, and maybe a small video link." 9 August.
+
+   Three parts, and they are honest about which is which. The protocol and the
+   reason are written down and travel with the app. The picture is HERS - a
+   photo she takes once, of herself or of the machine in her gym, which is
+   worth more than a stock illustration and cannot be wrong about her setup.
+   The video is a link: seeded as a search for the exercise so it can never be
+   a dead or mistaken video, and replaceable with the exact one she likes.
+
+   Photos live in IndexedDB, not in the text store, so a few hundred kilobytes
+   of picture can never eat the space her training record needs.
+--------------------------------------------------------------------------- */
+const IMG_STORE = "pics";
+const imgOpen = () => new Promise((res, rej) => {
+  try {
+    if (typeof indexedDB === "undefined") { rej(new Error("no-idb")); return; }
+    const r = indexedDB.open("coach-images", 1);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE);
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error || new Error("idb"));
+  } catch (e) { rej(e); }
+});
+const imgPut = (key, blob) => imgOpen().then((db) => new Promise((res, rej) => {
+  const tx = db.transaction(IMG_STORE, "readwrite");
+  tx.objectStore(IMG_STORE).put(blob, key);
+  tx.oncomplete = () => res(true);
+  tx.onerror = () => rej(tx.error);
+}));
+const imgGet = (key) => imgOpen().then((db) => new Promise((res, rej) => {
+  const tx = db.transaction(IMG_STORE, "readonly");
+  const q = tx.objectStore(IMG_STORE).get(key);
+  q.onsuccess = () => res(q.result || null);
+  q.onerror = () => rej(q.error);
+}));
+const imgDel = (key) => imgOpen().then((db) => new Promise((res, rej) => {
+  const tx = db.transaction(IMG_STORE, "readwrite");
+  tx.objectStore(IMG_STORE).delete(key);
+  tx.oncomplete = () => res(true);
+  tx.onerror = () => rej(tx.error);
+}));
+
+/* A search rather than one particular video: a link chosen today could be
+   taken down tomorrow, and a wrong video is worse than none. Hers wins. */
+const videoFor = (f) => f?.video
+  || "https://www.youtube.com/results?search_query=" +
+     encodeURIComponent("how to " + String(f?.label || "").trim() + " proper form");
+
+function ExercisePhoto({ id }) {
+  const [url, setUrl] = useState(null);
+  const [state, setState] = useState("loading");   /* loading | none | have | unavailable */
+  const load = () => {
+    imgGet("ex:" + id)
+      .then((b) => {
+        if (!b) { setState("none"); return; }
+        try { setUrl(URL.createObjectURL(b)); setState("have"); } catch (e) { setState("none"); }
+      })
+      .catch(() => setState("unavailable"));
+  };
+  useEffect(() => { load(); }, [id]);
+
+  const take = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    imgPut("ex:" + id, file).then(load).catch(() => setState("unavailable"));
+  };
+
+  if (state === "unavailable") {
+    return (
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginTop: 8 }}>
+        This browser will not let the app keep pictures. Everything else here still works.
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginTop: 10 }}>
+      {state === "have" && url && (
+        <img src={url} alt="" style={{ display: "block", width: "100%", maxWidth: 260,
+          borderRadius: 12, border: `1px solid ${C.line}` }} />
+      )}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: state === "have" ? 8 : 0 }}>
+        <label className="tap" style={{ fontSize: 11.5, color: C.signal, fontWeight: 600, cursor: "pointer" }}>
+          {state === "have" ? "replace the photo" : "add a photo"}
+          <input type="file" accept="image/*" onChange={take} style={{ display: "none" }} />
+        </label>
+        {state === "have" && (
+          <button className="tap" onClick={() => imgDel("ex:" + id).then(() => { setUrl(null); setState("none"); })}
+            style={{ border: "none", background: "transparent", cursor: "pointer", padding: 0,
+              fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>remove</button>
+        )}
+      </div>
+      {state !== "have" && (
+        <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginTop: 5 }}>
+          One photo of you in position, or of the machine in your gym. It stays on this device.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HowTo({ f }) {
+  const [open, setOpen] = useState(false);
+  if (!f || (!f.how && !f.why)) return null;
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <button onClick={() => setOpen((v) => !v)} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: 0,
+        fontSize: 11.5, color: open ? C.signal : C.muted, fontWeight: 600, fontFamily: "inherit" }}>
+        {open ? "hide" : "how it's done"}
+      </button>
+      {open && (
+        <div style={{ background: C.chalk, borderRadius: 12, padding: "12px 14px", marginTop: 8 }}>
+          {f.how && <div style={{ fontSize: 12.5, lineHeight: 1.6, color: C.ink }}>{f.how}</div>}
+          {f.why && (
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: C.muted, marginTop: 9,
+              paddingTop: 9, borderTop: `1px solid ${C.line}` }}>{f.why}</div>
+          )}
+          <ExercisePhoto id={f.id} />
+          <div style={{ marginTop: 10 }}>
+            <a href={videoFor(f)} target="_blank" rel="noreferrer" style={{
+              fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
+              {f.video ? "watch it →" : "find it on video →"}
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* renders one battery exercise according to its shape */
 const AssessInput = ({ f, form, set, pb, target }) => {
-  if (f.type === "note") return <Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} />;
-  if (f.type === "scale") return <Scale label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} max={f.max || 5} pb={pb} />;
+  if (f.type === "note") return (
+    <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
+  );
+  if (f.type === "scale") return (
+    <div><Scale label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} max={f.max || 5} pb={pb} /><HowTo f={f} /></div>
+  );
 
   const rungKey = f.id + "__rung";
   const rung = form[rungKey] ?? f.rung ?? 0;
@@ -5442,6 +5692,7 @@ const AssessInput = ({ f, form, set, pb, target }) => {
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>{f.label}</div>
         <RungPicker f={f} rung={rung} onRung={(i) => { set(rungKey, i); set(f.id, i + 1); }} />
+        <HowTo f={f} />
       </div>
     );
   }
@@ -5478,6 +5729,7 @@ const AssessInput = ({ f, form, set, pb, target }) => {
         </>
       )}
       <NumRow label={ladder ? f.rungs[rung] : f.label} unit={f.unit} cells={cells} pb={pb} />
+      <HowTo f={f} />
     </div>
   );
 };
@@ -5723,6 +5975,15 @@ function MobilitySheet({ data, setData, coach, close }) {
               <div style={{ marginBottom: 12, padding: "12px 14px", background: C.chalk, borderRadius: 11 }}>
                 <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 8 }}>{m.how}</div>
                 <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted }}>{m.why}</div>
+                {/* the mobility tests already explained themselves; they get the
+                    same photo and video as the strength battery */}
+                <ExercisePhoto id={m.id} />
+                <div style={{ marginTop: 10 }}>
+                  <a href={videoFor(m)} target="_blank" rel="noreferrer" style={{
+                    fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
+                    {m.video ? "watch it →" : "find it on video →"}
+                  </a>
+                </div>
               </div>
             )}
 
@@ -5773,6 +6034,16 @@ function RecordCard({ data, setData, coach, setSheet }) {
       ? { ...i, tried: [...(i.tried || []), { date: coach.t, what: whatDone, helped }] } : i) }));
   const close = (id) => setData((d) => ({ ...d,
     issues: (d.issues || []).map((i) => i.id === id ? { ...i, status: "closed", closedOn: coach.t } : i) }));
+  /* Her words, corrected in place. The tags are recomputed from the new text,
+     because they are derived from it - leaving the old ones would file a
+     corrected entry under whatever the typo happened to look like. */
+  const editIssue = (id, text) => { const t2 = String(text || "").trim(); if (!t2) return;
+    setData((d) => ({ ...d, issues: (d.issues || []).map((i) => i.id === id
+      ? { ...i, text: t2, tags: tagIssue(t2) } : i) })); };
+  const editTried = (id, at, what) => setData((d) => ({ ...d,
+    issues: (d.issues || []).map((i) => i.id === id
+      ? { ...i, tried: (i.tried || []).map((x, k) => k === at ? { ...x, what: String(what || "").trim() } : x) }
+      : i) }));
 
   return (
     <Card>
@@ -5792,7 +6063,10 @@ function RecordCard({ data, setData, coach, setSheet }) {
         const last = (iss.tried || []).slice(-1)[0];
         return (
           <div key={iss.id} style={{ padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
-            <div style={{ fontSize: 13.5, lineHeight: 1.45, color: C.ink, fontWeight: 600 }}>{iss.text}</div>
+            <EditableText value={iss.text} onSave={(v) => editIssue(iss.id, v)} small
+              placeholder="What you noticed">
+              <div style={{ fontSize: 13.5, lineHeight: 1.45, color: C.ink, fontWeight: 600 }}>{iss.text}</div>
+            </EditableText>
             <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 4 }}>
               {iss.date}{h.occurrences >= 2 ? ` · ${h.occurrences}th time` : ""}
             </div>
@@ -5815,8 +6089,13 @@ function RecordCard({ data, setData, coach, setSheet }) {
             )}
 
             {last && (
-              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 7 }}>
-                Last tried {last.what} — {last.helped >= 4 ? "helped" : last.helped >= 3 ? "some help" : "didn't help"}
+              <div style={{ marginTop: 7 }}>
+                <EditableText value={last.what} small placeholder="What you did about it"
+                  onSave={(v) => editTried(iss.id, (iss.tried || []).length - 1, v)}>
+                  <div style={{ fontSize: 11.5, color: C.muted }}>
+                    Last tried {last.what} — {last.helped >= 4 ? "helped" : last.helped >= 3 ? "some help" : "didn't help"}
+                  </div>
+                </EditableText>
               </div>
             )}
 
@@ -5895,6 +6174,9 @@ function GoalsCard({ data, setData, coach, setSheet }) {
     g.id === id ? { ...g, scores: [...(g.scores || []), { date: coach.t, value, note: note || "" }] } : g) }));
   const setStatus = (id, status) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) =>
     g.id === id ? { ...g, status } : g) }));
+  /* A goal is a sentence in her own words - rule 9 - so it has to be correctable */
+  const editGoal = (id, text) => { const t2 = String(text || "").trim(); if (!t2) return;
+    setData((d) => ({ ...d, goals: (d.goals || []).map((g) => g.id === id ? { ...g, text: t2 } : g) })); };
 
   return (
     <Card>
@@ -5915,7 +6197,10 @@ function GoalsCard({ data, setData, coach, setSheet }) {
         const due = coach.goalCheckDue.some((x) => x.id === g.id);
         return (
           <div key={g.id} style={{ padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.4 }}>{g.text}</div>
+            <EditableText value={g.text} onSave={(v) => editGoal(g.id, v)} small
+              placeholder="What you want to be able to do">
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.4 }}>{g.text}</div>
+            </EditableText>
             {last && (
               <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>
                 Last tried: {last.value}/10{first && first !== last ? ` · started at ${first.value}` : ""}
@@ -8671,6 +8956,23 @@ function FieldEditor({ which, data, setData, close }) {
             {openId === f.id && (
               <div style={{ padding: "4px 6px 14px" }}>
                 <Field label="Name" unit="" type="text" value={f.label} onChange={(v) => patch(f.id, { label: v })} />
+
+                {/* "Explain to me each exercise, and maybe a small video link."
+                    9 August. Everything the app tells her about a measure is
+                    hers to rewrite - rule 12 - including a measure she adds
+                    herself, which starts with nothing written about it. */}
+                <Note label="How it's done" value={f.how}
+                  onChange={(v) => patch(f.id, { how: v })}
+                  hint="The protocol, precise enough that the number means the same thing next month." />
+                <Note label="Why it's measured" value={f.why}
+                  onChange={(v) => patch(f.id, { why: v })} />
+                <Field label="Video link" unit="" type="text" value={f.video || ""}
+                  onChange={(v) => patch(f.id, { video: v.trim() })} />
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-6px 0 14px" }}>
+                  Leave it empty and the link searches for the exercise instead — that can never go dead.
+                  Paste one you like and it is used from then on.
+                </div>
+
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Input type</div>
                 <div style={{ display: "flex", gap: 5, marginBottom: 12 }}>
                   {TYPES.map(([v, l]) => (
@@ -10081,6 +10383,14 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
     { id: p.id, claim: p.claim, kind: p.kind, evidence: p.evidence || [], status: "retired",
       hers: true, corrected: coach.t }] }));
 
+  /* Anything SHE wrote here is hers to correct. What the coach worked out for
+     itself is not edited - it is retired with the button below, because
+     rewriting the coach's own claim would leave its evidence pointing at a
+     sentence that was never observed. */
+  const editOwn = (id, text) => { const t2 = String(text || "").trim(); if (!t2) return;
+    setData((d) => ({ ...d, profile: (d.profile || []).map((x) => x.id === id
+      ? { ...x, claim: t2, evidence: [{ date: coach.t, source: "said", quote: t2 }] } : x) })); };
+
   const addOwn = () => {
     if (!text.trim()) return;
     setData((d) => ({ ...d, profile: [...(d.profile || []),
@@ -10122,7 +10432,14 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
             </Eyebrow>
             {rows.map((p, i) => (
               <div key={p.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
-                <div style={{ fontSize: 14, lineHeight: 1.5 }}>{p.claim}</div>
+                {p.hers ? (
+                  <EditableText value={p.claim} onSave={(v) => editOwn(p.id, v)} small
+                    placeholder="What you want me to know">
+                    <div style={{ fontSize: 14, lineHeight: 1.5 }}>{p.claim}</div>
+                  </EditableText>
+                ) : (
+                  <div style={{ fontSize: 14, lineHeight: 1.5 }}>{p.claim}</div>
+                )}
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
                   {p.hers ? "You told me this." : `${(p.evidence || []).length} time${(p.evidence || []).length === 1 ? "" : "s"}, ${p.computed ? "from what you did" : "from what you said"}`}
                   {(p.evidence || []).length > 0 && !p.hers && ` · most recently ${(p.evidence || [])[0]?.date || "—"}`}
@@ -11240,6 +11557,9 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
   const sessionId = useRef(newId());
   const [draft, setDraft] = useState(seed || "");
   const [busy, setBusy] = useState(false);
+  /* which of her own messages she is correcting, and the text of the correction */
+  const [editing, setEditing] = useState(null);
+  const [editDraft, setEditDraft] = useState("");
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
@@ -11506,7 +11826,8 @@ Two or three sentences unless she asks for more.`;
 
       <div style={{ marginBottom: 14 }}>
         {msgs.map((m, i) => (
-          <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
+          <div key={i} style={{ display: "flex", flexDirection: "column",
+            alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
             <div style={{
               maxWidth: "85%", padding: "11px 14px", borderRadius: 14, fontSize: 13.5, lineHeight: 1.55,
               whiteSpace: "pre-wrap",
@@ -11514,6 +11835,40 @@ Two or three sentences unless she asks for more.`;
               color: m.role === "user" ? C.chalk : C.ink,
               border: m.role === "user" ? "none" : `1px solid ${C.line}`,
             }}>{m.content}</div>
+            {/* Her own words, correctable after the fact. It fixes what is on
+                the record and what the coach reads next time; it does not
+                re-ask the question, so the reply above stays the reply she
+                actually got. */}
+            {m.role === "user" && (
+              editing === i ? (
+                <div style={{ width: "85%", marginTop: 6 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+                    <textarea rows={3} value={editDraft} onChange={(e) => setEditDraft(e.target.value)}
+                      style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 }} />
+                    <MicButton onText={setEditDraft} current={editDraft} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button className="tap" onClick={() => {
+                      const t2 = editDraft.trim();
+                      if (t2) { const next = msgs.map((x, k) => k === i ? { ...x, content: t2 } : x);
+                        setMsgs(next); persist(next); }
+                      setEditing(null);
+                    }} style={{ padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                      fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
+                      fontFamily: "inherit" }}>Save</button>
+                    <button className="tap" onClick={() => setEditing(null)} style={{
+                      padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                      border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                      fontFamily: "inherit" }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="tap" aria-label="Edit what you wrote"
+                  onClick={() => { setEditDraft(m.content); setEditing(i); }} style={{
+                    border: "none", background: "transparent", cursor: "pointer", padding: "3px 2px 0",
+                    fontSize: 10.5, color: C.muted, fontFamily: "inherit" }}>edit</button>
+              )
+            )}
           </div>
         ))}
         {busy && <div style={{ fontSize: 12, color: C.muted, padding: "6px 2px" }}>thinking…</div>}
