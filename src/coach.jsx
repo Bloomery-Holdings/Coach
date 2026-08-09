@@ -1849,6 +1849,9 @@ const prettyShort = (d) =>
 
 const dayName = (s) => DAY_KEYS[parse(s).getDay()];
 const prettyDate = (s) => parse(s).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+/* A day and a month, for anything far enough back that a weekday name alone
+   would be ambiguous. */
+const dayAndMonth = (s) => parse(s).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
 /* ============================================================================
    4. STORAGE
@@ -1914,7 +1917,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 August 2026 · 34";
+const BUILD = "9 August 2026 · 35";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6384,7 +6387,7 @@ function Today({ data, setData, coach, setSheet }) {
         {weekBack > 0 && (
           <div className="mono" style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
             color: C.muted, marginTop: 6, textAlign: "center" }}>
-            week of {prettyShort(spineDays[0])}
+            week of {dayAndMonth(spineDays[0])}
           </div>
         )}
         {/* The strip is seven days. Anything older than that had nowhere to go
@@ -10297,7 +10300,11 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
       /* these two open the folded row below rather than a sheet, so she
          answers in the same place the record already lives */
       case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true, "issue");
-      case "goal":     return chip("score it", () => openQuiet && openQuiet("goals"), true, "goal");
+      /* "The score tab doesn't open to log the activity score" - 8 August.
+         It DID open - the folded row further down the page - but nothing on
+         screen moved, so from where she was standing nothing happened. Rule
+         11: the row is answered where it is asked. */
+      case "goal":     return chip(doing === "goal" ? "close" : "score it", () => act("goal"), doing !== "goal", "goal");
       default:         return null;
     }
   };
@@ -10349,6 +10356,49 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
         <Note label="A line about how it went" value={log?.sessionNote}
           onChange={(v) => write({ sessionNote: v })} />
       );
+      case "goal": {
+        const dueGoals = coach.goalCheckDue || [];
+        if (!dueGoals.length) return null;
+        const scoreGoal = (id, value) => setData((d) => ({ ...d,
+          goals: (d.goals || []).map((g) => g.id === id
+            ? { ...g, scores: [...(g.scores || []), { date: coach.t, value, note: "" }] }
+            : g) }));
+        return (
+          <div>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+              Try it now. How close are you, out of ten?
+            </div>
+            {dueGoals.map((g, gi) => {
+              const last = (g.scores || []).slice(-1)[0];
+              return (
+                <div key={g.id} style={{ paddingTop: gi ? 12 : 0, marginTop: gi ? 12 : 0,
+                  borderTop: gi ? `1px solid ${C.line}` : "none" }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.4 }}>{g.text}</div>
+                  {last && (
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                      Last time: {last.value}/10 on {dayAndMonth(last.date)}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
+                    {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
+                      <button key={n} className="tap" aria-label={`score ${n} for ${g.text}`}
+                        onClick={() => scoreGoal(g.id, n)}
+                        style={{ flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8,
+                          cursor: "pointer", fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
+                          border: `1.5px solid ${C.line}`, background: C.card, color: C.muted }}>{n}</button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={() => openQuiet && openQuiet("goals")} className="tap" style={{
+              border: "none", background: "transparent", cursor: "pointer", padding: "12px 0 0",
+              fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+              Add a goal, or mark one done →
+            </button>
+          </div>
+        );
+      }
       default: return null;
     }
   };
