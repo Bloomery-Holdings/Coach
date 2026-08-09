@@ -728,7 +728,7 @@ const DESIGN_RULES = [
     does: "Order the block by it — never restrict by it. A class she disliked still appears; it stops being first.",
     why: "One comment must never become a permanent rule, and a preference confirmed three times should not have to be said a fourth." },
   { id: "goals", test: "she has stated something she wants to be able to do, or a mobility test is short or asymmetric",
-    does: "Bias the block toward the regions that goal needs, and set the daily ten minutes to its drills.",
+    does: "Keep a mobility day in the block, and put the drills she has attached to the goal into the daily ten minutes.",
     why: "A capability she chose is more durable motivation than any number the app produces — and it is the part of this that answers to her rather than to the data." },
   { id: "season", test: "December to February",
     does: "Maintain. Same shape, no progression, lower expectations on purpose.",
@@ -982,6 +982,48 @@ const SEED_DRILLS = [
   { id: "getup", label: "Floor sit-and-rise practice", mins: 3, how: "Practise the movement itself, slowly, using as little support as you need — and notice which point you need it. That point is the thing to work on.", targets: "the whole pattern, and it improves with practice alone" },
 ];
 const drillById = (id, list) => (list && list.length ? list : SEED_DRILLS).find((d) => d.id === id) || null;
+
+/* ---------------------------------------------------------------------------
+   WHAT A STATED GOAL ACTUALLY NEEDS
+   Design rule `goals` has always promised to point the daily ten minutes at
+   the drills a goal needs. It could not: every goal carried an empty drill
+   list and nothing ever filled it, so the promise was words. This is the
+   missing half - and it is a SUGGESTION, labelled as one, because a sentence
+   she typed is not evidence of anything (rule 16). She picks; the app offers.
+--------------------------------------------------------------------------- */
+const GOAL_HINTS = [
+  { words: ["cross-leg", "crosslegged", "floor", "sit down", "get up", "stand up", "sit-to-rise", "sit to rise", "getting up"],
+    drills: ["getup", "deepsquat", "hipopen", "ankle"] },
+  { words: ["fold", "toes", "hamstring", "touch my toes", "palms flat", "bend down", "reach the floor"],
+    drills: ["hamstring", "calf", "catcow"] },
+  { words: ["overhead", "shelf", "reach up", "arms up", "above my head", "cupboard", "press"],
+    drills: ["shoulderpass", "latstretch", "thoracic"] },
+  { words: ["behind", "back of my", "bra", "zip", "scratch", "internal rotation"],
+    drills: ["sleeper", "doorway", "shoulderpass"] },
+  { words: ["shoulder"], drills: ["shoulderpass", "sleeper", "doorway"] },
+  { words: ["squat", "deep squat", "heels"], drills: ["deepsquat", "ankle", "calf"] },
+  { words: ["hip", "hips", "groin", "splits", "lotus"], drills: ["hipopen", "pigeon", "deepsquat"] },
+  { words: ["back", "spine", "twist", "rotate", "posture", "round"], drills: ["catcow", "thoracic", "openbook"] },
+  { words: ["ankle", "calf", "stairs", "kneel"], drills: ["ankle", "calf"] },
+  { words: ["knee", "lunge", "step up", "hike", "climb"], drills: ["deepsquat", "hipopen", "calf"] },
+  { words: ["carry", "lift", "suitcase", "shopping", "grandchild", "child"], drills: ["deepsquat", "thoracic", "hipopen"] },
+];
+const suggestDrills = (text, list) => {
+  const t = String(text || "").toLowerCase();
+  if (!t.trim()) return [];
+  const hits = [];
+  GOAL_HINTS.forEach((h) => {
+    if (h.words.some((w) => t.includes(w))) h.drills.forEach((d) => { if (!hits.includes(d)) hits.push(d); });
+  });
+  /* nothing matched: fall back to the words the drills themselves use */
+  if (!hits.length) {
+    (list && list.length ? list : SEED_DRILLS).forEach((d) => {
+      const words = `${d.label} ${d.targets || ""}`.toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 4);
+      if (words.some((w) => t.includes(w))) hits.push(d.id);
+    });
+  }
+  return hits.slice(0, 4);
+};
 const mobTestById = (id, list) => (list && list.length ? list : SEED_MOBILITY).find((m) => m.id === id) || null;
 /* ============================================================================
    THE LADDER
@@ -1985,7 +2027,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 37";
+const BUILD = "9 August 2026 · 38";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4320,7 +4362,7 @@ function useCoach(data, day) {
             })(),
         color: openGoals.length ? C.signal : C.muted,
         plain: "The things you said you want to be able to do, and how close you are.",
-        how: "Scored out of ten each week by trying it. The coach reads which body regions and drills each one needs, and builds them into the block.",
+        how: "Scored out of ten each week by trying it. Whichever drills you attach to a goal go into your daily ten minutes, and having any open goal at all keeps a mobility day in the block.",
         meaning: "This is the part of the app that answers to you rather than to the numbers. A goal here is not a wish — it changes what gets prescribed, it decides part of your daily ten minutes, and it is checked every week so you see the distance closing rather than just passing or failing. It is also, on the adherence evidence, the most durable kind of motivation there is: not a target weight but a capability, and one you chose.",
         need: openGoals.length ? null : "Add something you want to be able to do." }),
 
@@ -6161,7 +6203,10 @@ function GoalsCard({ data, setData, coach, setSheet }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const [scoring, setScoring] = useState(null);
+  const [scoreNote, setScoreNote] = useState("");
+  const [picking, setPicking] = useState(null);
   const goals = coach.openGoals;
+  const allDrills = coach.drills || [];
 
   const add = () => {
     if (!text.trim()) return;
@@ -6172,6 +6217,12 @@ function GoalsCard({ data, setData, coach, setSheet }) {
   };
   const score = (id, value, note) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) =>
     g.id === id ? { ...g, scores: [...(g.scores || []), { date: coach.t, value, note: note || "" }] } : g) }));
+  /* Which drills this goal should build. Hers to set - the app only offers. */
+  const toggleDrill = (id, drillId) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) => {
+    if (g.id !== id) return g;
+    const have = g.drills || [];
+    return { ...g, drills: have.includes(drillId) ? have.filter((x) => x !== drillId) : [...have, drillId] };
+  }) }));
   const setStatus = (id, status) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) =>
     g.id === id ? { ...g, status } : g) }));
   /* A goal is a sentence in her own words - rule 9 - so it has to be correctable */
@@ -6212,16 +6263,25 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 7 }}>
                   Try it now. How close are you, out of ten?
                 </div>
+                {/* what stopped you is the part that tells the coach what to
+                    change - and it was never askable before, so the line the
+                    coach reads back was always empty */}
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
+                  <textarea rows={2} value={scoreNote} onChange={(e) => setScoreNote(e.target.value)}
+                    placeholder="Anything to say about it? What stopped you, if something did."
+                    style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+                  <MicButton onText={setScoreNote} current={scoreNote} />
+                </div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
-                    <button key={n} className="tap" onClick={() => { score(g.id, n); setScoring(null); }}
+                    <button key={n} className="tap" onClick={() => { score(g.id, n, scoreNote.trim()); setScoreNote(""); setScoring(null); }}
                       style={{ flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8, cursor: "pointer",
                         fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
                         border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted }}>{n}</button>
                   ))}
                 </div>
                 <div style={{ marginTop: 8 }}>
-                  <Btn kind="quiet" onClick={() => setScoring(null)}>Not now</Btn>
+                  <Btn kind="quiet" onClick={() => { setScoring(null); setScoreNote(""); }}>Not now</Btn>
                 </div>
               </div>
             ) : (
@@ -6235,9 +6295,43 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                 <button className="tap" onClick={() => setStatus(g.id, "won")} style={{
                   border: "none", background: "transparent", cursor: "pointer", padding: "7px 0",
                   fontSize: 12, color: C.moss }}>I can do it</button>
+                <button className="tap" onClick={() => setPicking(picking === g.id ? null : g.id)} style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: "7px 0",
+                  fontSize: 12, color: C.muted }}>
+                  {(g.drills || []).length
+                    ? `${(g.drills || []).length} in your ten minutes`
+                    : "what should this build?"}
+                </button>
                 <button className="tap" onClick={() => setStatus(g.id, "retired")} style={{
                   border: "none", background: "transparent", cursor: "pointer", padding: "7px 0",
                   fontSize: 12, color: C.muted }}>remove</button>
+              </div>
+            )}
+
+            {picking === g.id && (
+              <div style={{ marginTop: 10, padding: "12px 14px", background: C.chalk, borderRadius: 12 }}>
+                <div style={{ fontSize: 12, lineHeight: 1.55, color: C.muted, marginBottom: 10 }}>
+                  Whatever you tick goes into your ten minutes after a session, alongside whatever
+                  your mobility scores are already asking for. The marked ones are a guess from the
+                  words you used — I have no evidence for them, so change them freely.
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {(allDrills.length ? allDrills : []).map((d) => {
+                    const on = (g.drills || []).includes(d.id);
+                    const hinted = suggestDrills(g.text, allDrills).includes(d.id);
+                    return (
+                      <button key={d.id} className="tap" onClick={() => toggleDrill(g.id, d.id)}
+                        aria-label={`${d.label} for ${g.text}`}
+                        style={{ padding: "8px 11px", borderRadius: 20, cursor: "pointer", fontSize: 11.5,
+                          fontWeight: on ? 600 : 400, fontFamily: "inherit",
+                          border: `1.5px solid ${on ? C.signal : hinted ? C.ochre : C.line}`,
+                          background: on ? C.signal : "transparent",
+                          color: on ? C.chalk : hinted ? C.ochre : C.muted }}>
+                        {d.label}{d.mins ? ` · ${d.mins}m` : ""}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -7995,6 +8089,31 @@ function Progress({ data, setData, coach, setSheet }) {
     return Math.max(floor, Math.min(n, 120));
   })();
 
+  /* One row per date anything was scored, one column per goal. connectNulls
+     joins across the dates a given goal was not tried, which is the honest
+     shape: the line runs between the readings that exist rather than
+     inventing a value for a week she did not try it. */
+  const goalSeries = (() => {
+    const goals = (data.goals || []).filter((g) => g.status !== "retired" && (g.scores || []).length >= 2);
+    if (!goals.length) return { rows: [], lines: [] };
+    const dates = [...new Set(goals.flatMap((g) => (g.scores || []).map((s2) => s2.date)))].sort();
+    const lines = goals.map((g, i) => {
+      const sc = [...(g.scores || [])].sort((a2, b2) => (a2.date < b2.date ? -1 : 1));
+      return { key: "g" + i, name: g.text, id: g.id,
+        first: sc[0].value, last: sc[sc.length - 1].value,
+        moved: sc[sc.length - 1].value - sc[0].value };
+    });
+    const rows = dates.map((d) => {
+      const row = { x: d.slice(5) };
+      goals.forEach((g, i) => {
+        const hit = (g.scores || []).filter((s2) => s2.date === d).slice(-1)[0];
+        if (hit) row["g" + i] = Number(hit.value);
+      });
+      return row;
+    });
+    return { rows, lines };
+  })();
+
   const recentDays = Array.from({ length: daysBack }, (_, i) => addDays(coach.t, -i));
   const recentWeeks = Array.from({ length: weeksBack }, (_, i) => weekStart(addDays(coach.t, -i * 7)));
   const recentMonths = Array.from({ length: monthsBack }, (_, i) => {
@@ -8272,6 +8391,58 @@ function Progress({ data, setData, coach, setSheet }) {
           />
         )}
             </Fold>
+
+      {/* ---- WHAT SHE IS CHASING, DRAWN ----------------------------------
+             "Is it going to be mapped against the graph or something?"
+             9 August. Her goals are scored out of ten with a date on every
+             entry, so the line was already there in the data and nothing drew
+             it. Its own chart rather than a chip on the battery chart, because
+             a goal is scored whenever she tries it, not on the weekly grid. */}
+      <Fold title="What you want to be able to do" note={`${goalSeries.lines.length} scored over time`}>
+        {goalSeries.lines.length ? (
+          <>
+            <Explain>
+              Every time you score one of your goals it lands here. Ten is you can do it.
+              A line that climbs slowly over months is exactly what this is for — it is the
+              change you would never notice day to day.
+            </Explain>
+            <ResponsiveContainer width="100%" height={190}>
+              <ComposedChart data={goalSeries.rows} style={chartBox} margin={{ top: 8, right: 6, bottom: 22, left: -20 }}>
+                <CartesianGrid stroke={C.line} vertical={false} />
+                <XAxis dataKey="x" {...axis} />
+                <YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} {...axis} />
+                <Tooltip contentStyle={tip} />
+                <Legend wrapperStyle={{ fontSize: 10.5, paddingTop: 6 }} />
+                {goalSeries.lines.map((g, i) => (
+                  <Line key={g.key} name={g.name} dataKey={g.key} connectNulls
+                    stroke={[C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5]} strokeWidth={2.5}
+                    dot={{ r: 4, strokeWidth: 0, fill: [C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5] }}
+                    activeDot={{ r: 6 }} />
+                ))}
+              </ComposedChart>
+            </ResponsiveContainer>
+            <div style={{ marginTop: 12 }}>
+              {goalSeries.lines.map((g) => (
+                <div key={g.key} style={{ display: "flex", justifyContent: "space-between",
+                  alignItems: "baseline", padding: "9px 0", borderTop: `1px solid ${C.chalk}` }}>
+                  <span style={{ fontSize: 13, color: C.ink, flex: 1, paddingRight: 10, lineHeight: 1.4 }}>{g.name}</span>
+                  <span className="mono" style={{ fontSize: 11.5, color: g.moved > 0 ? C.moss : g.moved < 0 ? C.muted : C.muted, whiteSpace: "nowrap" }}>
+                    {g.first}/10 → {g.last}/10{g.moved > 0 ? ` · +${g.moved}` : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <Blank
+            text={(coach.openGoals || []).length
+              ? "Score a goal twice and the line starts. Until then there is one point, which is not a direction."
+              : "Nothing to draw yet. Add something you want to be able to do, score it by trying it, and it gets a line here."}
+            action={(coach.openGoals || []).length ? "Score one now" : "Add a goal"}
+            onAction={() => setSheet({ kind: "goals" })}
+          />
+        )}
+      </Fold>
 
       <Fold title="Personal bests" note="your best result in each measure">
         {Object.keys(coach.pbs).length ? (
@@ -10559,6 +10730,7 @@ const InfoTitle = ({ children, why, open, onToggle }) => (
 function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
   const [open, setOpen] = useState(null);    /* the "why does this matter" text */
   const [doing, setDoing] = useState(null);  /* the control for answering it */
+  const [goalNotes, setGoalNotes] = useState({});  /* a line to go with a goal's score */
   const due = (coach.capture?.dueHere || coach.capture?.due || []);
   const failed = didStoreWriteFail();
 
@@ -10676,10 +10848,14 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
       case "goal": {
         const dueGoals = coach.goalCheckDue || [];
         if (!dueGoals.length) return null;
-        const scoreGoal = (id, value) => setData((d) => ({ ...d,
-          goals: (d.goals || []).map((g) => g.id === id
-            ? { ...g, scores: [...(g.scores || []), { date: coach.t, value, note: "" }] }
-            : g) }));
+        const scoreGoal = (id, value) => {
+          const note = String(goalNotes[id] || "").trim();
+          setData((d) => ({ ...d,
+            goals: (d.goals || []).map((g) => g.id === id
+              ? { ...g, scores: [...(g.scores || []), { date: coach.t, value, note }] }
+              : g) }));
+          setGoalNotes((n) => ({ ...n, [id]: "" }));
+        };
         return (
           <div>
             <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
@@ -10696,6 +10872,14 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                       Last time: {last.value}/10 on {dayAndMonth(last.date)}
                     </div>
                   )}
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 }}>
+                    <textarea rows={2} value={goalNotes[g.id] || ""}
+                      onChange={(e) => setGoalNotes((n) => ({ ...n, [g.id]: e.target.value }))}
+                      placeholder="Anything to say about it? What stopped you, if something did."
+                      style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
+                    <MicButton onText={(v) => setGoalNotes((n) => ({ ...n, [g.id]: v }))}
+                      current={goalNotes[g.id] || ""} />
+                  </div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
                     {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
                       <button key={n} className="tap" aria-label={`score ${n} for ${g.text}`}
@@ -11650,7 +11834,7 @@ ${coach.issues.filter((i) => i.status === "closed").slice(-6).map((i) => `  * cl
   have written it down and will ask her about it in a couple of days. If it matches something in the
   record, say so with the date and what worked before.
 - WHAT SHE WANTS TO BE ABLE TO DO (her own goals — these outrank what the numbers would prefer):
-${coach.openGoals.length ? coach.openGoals.map((g) => `  * "${g.text}"${(g.scores || []).length ? ` — last scored ${g.scores.slice(-1)[0].value}/10${g.scores.length > 1 ? `, started at ${g.scores[0].value}` : ""}${g.scores.slice(-1)[0].note ? `. She said: "${g.scores.slice(-1)[0].note}"` : ""}` : " — not scored yet"}`).join("\n") : "  none set"}
+${coach.openGoals.length ? coach.openGoals.map((g) => `  * "${g.text}"${(g.scores || []).length ? ` — last scored ${g.scores.slice(-1)[0].value}/10${g.scores.length > 1 ? `, started at ${g.scores[0].value}` : ""}${g.scores.slice(-1)[0].note ? `. She said: "${g.scores.slice(-1)[0].note}"` : ""}` : " — not scored yet"}${(g.drills || []).length ? `. Building it with: ${g.drills.map((d) => (drillById(d, coach.drills) || {}).label).filter(Boolean).join(", ")}` : ". Nothing attached to it yet — worth asking her what she thinks would move it."}`).join("\n") : "  none set"}
   If she describes something she cannot do, work out what it actually requires — which joints, which
   ranges, which regions — explain it plainly, and tell her it is worth adding to this list so it
   reaches the monthly design instead of being said once and lost.
@@ -12152,6 +12336,10 @@ function CoachApp() {
             <VitalDetail id={sheet.id} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "edit-mobility" ? (
             <MobilityEditor data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+          ) : sheet.kind === "goals" ? (
+            /* the goals card is on Today behind a folded row; it needed a door
+               of its own so anything that names a goal can open it */
+            <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "profile" ? (
             <ProfileSheet data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "vitals" ? (
