@@ -2932,7 +2932,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 77";
+const BUILD = "10 August 2026 · 78";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -8601,32 +8601,35 @@ function DrillsCard({ coach, setSheet, data, setData }) {
       drillNotes: { ...(((d.logs || {})[coach.t] || {}).drillNotes || {}), [id]: v } } } }));
   return (
     <Card style={{ background: C.mint }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
-        <Eyebrow color={C.moss}>Your ten minutes</Eyebrow>
-        <span className="mono" style={{ fontSize: 10, color: coach.dailyDrills.over ? C.clay : C.muted }}>
+      {/* HER INSTRUCTION, 10 August: "I don't see why you have the explanation
+          of my exercises on the landing page. You have like two paragraphs, I
+          can't even read them because they're very small, and I don't need
+          them to be there. You can put them in the info button as we do with
+          everything else." Three blocks of prose, all of it true, none of it
+          needed while she is standing there about to do the work. All of it
+          now lives behind the circled i, which is where the app's explanations
+          have belonged since 8 August. */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <InfoNote inherit why={[
+            coach.dailyDrills.goalCount
+              ? `After every session you train — this one and every other one, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one builds" : coach.dailyDrills.goalCount + " build"} the muscles your goals need, whether or not a class happens to reach them, because a class that comes round once a fortnight builds nothing. ${coach.dailyDrills.goalMins} of the ten minutes go there. The rest is chosen by whatever your mobility tests say is short.`
+              : "After every session you train. These are chosen by what your mobility tests say is short — they change as the scores change. Set a goal and the first few minutes become work for that instead.",
+            coach.dailyDrills.suggestedCount > 0
+              ? "Some of these were chosen from the words of your goals so you have something to do today rather than waiting for the first monthly read. Change any of them from the goal itself."
+              : "",
+            (coach.dailyDrills.uncovered || []).length > 0
+              ? `Nothing here is building "${coach.dailyDrills.uncovered[0].text}"${coach.dailyDrills.uncovered.length > 1 ? ` and ${coach.dailyDrills.uncovered.length - 1} other${coach.dailyDrills.uncovered.length > 2 ? "s" : ""}` : ""} yet. The next monthly read writes the work for it — or pick the drills yourself from the goal.`
+              : "",
+          ].filter(Boolean).join("\n\n")}>
+            <Eyebrow color={C.moss}>Your ten minutes</Eyebrow>
+          </InfoNote>
+        </span>
+        <span className="mono" style={{ fontSize: 10, flexShrink: 0,
+          color: coach.dailyDrills.over ? C.clay : C.muted }}>
           {coach.dailyDrills.mins} min{coach.dailyDrills.over ? ` · over your ${coach.dailyDrills.budget}` : ""}
         </span>
       </div>
-      <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 12 }}>
-        {coach.dailyDrills.goalCount
-          ? `After every session you train — this one and every other one, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one builds" : coach.dailyDrills.goalCount + " build"} the muscles your goals need, whether or not a class happens to reach them, because a class that comes round once a fortnight builds nothing. ${coach.dailyDrills.goalMins} of the ten minutes go there. The rest is chosen by whatever your mobility tests say is short.`
-          : "After every session you train. These are chosen by what your mobility tests say is short — they change as the scores change. Set a goal and the first few minutes become work for that instead."}
-      </div>
-      {coach.dailyDrills.suggestedCount > 0 && (
-        <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 12,
-          padding: "9px 11px", background: C.card, borderRadius: 9 }}>
-          Some of these were chosen from the words of your goals so you have something to do today
-          rather than waiting for the first monthly read. Change any of them from the goal itself.
-        </div>
-      )}
-      {(coach.dailyDrills.uncovered || []).length > 0 && (
-        <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 12,
-          padding: "9px 11px", background: C.card, borderRadius: 9 }}>
-          Nothing here is building "{coach.dailyDrills.uncovered[0].text}"{coach.dailyDrills.uncovered.length > 1
-            ? ` and ${coach.dailyDrills.uncovered.length - 1} other${coach.dailyDrills.uncovered.length > 2 ? "s" : ""}` : ""} yet.
-          The next monthly read writes the work for it — or pick the drills yourself from the goal.
-        </div>
-      )}
       {/* A CLOCK ON THE WORK ITSELF.
           Her instruction, 10 August: the timer has to be beside the thing she
           is doing. It went into the battery and not here — and this is the
@@ -17092,7 +17095,23 @@ function BodyWork({ data, setData, coach, setSheet }) {
   const [mins, setMins] = useState("10");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  /* HER INSTRUCTION, 10 August: "You want me to ask the coach to design ten
+     lists at once — how would I manoeuvre within them? I'm not against him
+     designing them at once. I'm against that they will be shown one after the
+     other. There should be tabs for different body parts. So if I want a list
+     of ten minutes for the shoulders and a list for the legs, I will see only
+     these two lists on the page, and the rest of the lists will only show for
+     the next session day. And I want you to add with them also the ten
+     minutes I do for the things I want to do. So this tab will be any
+     additional list of exercises that I want the coach to design for a
+     specific reason."
+
+     So: a row of chips across the top, one per body area plus her goal ten
+     minutes, and only ever ONE DAY'S list on the page for each. The other
+     nine of every ten stay folded away until their day comes round. */
+  const [pick, setPick] = useState("all");
   const progs = data.bodywork || [];
+  const hasTen = (coach.dailyDrills?.list || []).length > 0;
 
   const build = async () => {
     const want = area.trim();
@@ -17122,22 +17141,55 @@ function BodyWork({ data, setData, coach, setSheet }) {
   return (
     <div>
       <Eyebrow color={C.signal}>Body work</Eyebrow>
-      <h1 className="disp" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" }}>
-        Ten lists, one body area
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 6px" }}>
+        Today's lists
       </h1>
-      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, marginBottom: 18 }}>
-        Written work you do after a session, aimed at one part of you that needs attention. Ten
-        different lists, one per training day, all after the same thing but with different exercises,
-        different tools and different angles — so the big muscles, the small ones, the tendons and
-        the ligaments all get reached rather than the same three movements ten times. Add as many
-        body areas as you want; each keeps its own ten.
+      <div style={{ marginBottom: 16 }}>
+        <InfoNote inherit small why={`Written work you do after a session, aimed at one part of you that needs attention. Each body area gets ten different lists — one per training day, all after the same thing but with different exercises, different tools and different angles, so the big muscles, the small ones, the tendons and the ligaments all get reached rather than the same three movements ten times.
+
+Only the list for today shows. The other nine come round on the days after it, and when all ten are done the coach reads what you wrote against them and builds the next ten.
+
+Add as many body areas as you want. Each keeps its own ten, and the chips above switch between them.`}>
+          <span style={{ fontSize: 12.5, color: C.muted }}>what this is</span>
+        </InfoNote>
       </div>
 
-      {progs.map((prog) => (
-        <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
-          coach={coach} setSheet={setSheet} />
-      ))}
+      {(progs.length > 0 || hasTen) && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {[
+            ["all", progs.length + (hasTen ? 1 : 0) > 1 ? "Today, all of it" : "Today"],
+            ...(hasTen ? [["goals", "The things you want to do"]] : []),
+            ...progs.map((pg) => [pg.id, pg.area]),
+            ["new", "+ another area"],
+          ].map(([id, label]) => (
+            <button key={id} onClick={() => setPick(id)} className="tap" style={{
+              padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 11.5,
+              fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
+              border: `1.5px solid ${pick === id ? C.signal : C.line}`,
+              background: pick === id ? C.signal : "transparent",
+              color: pick === id ? C.chalk : C.muted,
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
 
+      {/* Her ten minutes for the things she wants to be able to do lives here
+          too now, alongside the body areas — same kind of work, same place to
+          find it. It stays on Today as well; she asked for it in both. */}
+      {(pick === "all" || pick === "goals") && hasTen && (
+        <div style={{ marginBottom: 14 }}>
+          <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} />
+        </div>
+      )}
+
+      {progs
+        .filter((prog) => pick === "all" || pick === prog.id)
+        .map((prog) => (
+          <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
+            coach={coach} setSheet={setSheet} />
+        ))}
+
+      {(pick === "new" || (!progs.length && !hasTen)) && (
       <Card style={{ background: C.pist }}>
         <Eyebrow color={C.signal}>{progs.length ? "Another body area" : "Ask your coach for a set"}</Eyebrow>
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "4px 0 12px" }}>
@@ -17160,6 +17212,7 @@ function BodyWork({ data, setData, coach, setSheet }) {
           or delete afterwards, and nothing here is ever thrown away when a new round is designed.
         </div>
       </Card>
+      )}
     </div>
   );
 }
