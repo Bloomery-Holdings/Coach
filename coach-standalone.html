@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 88";
+const BUILD = "10 August 2026 · 90";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7541,6 +7541,23 @@ const Tag = ({ children, tone }) => (React.createElement("span", { className: "m
         border: `1px solid ${tone === "warn" ? C.clay : C.line}`,
         color: tone === "warn" ? C.clay : C.muted, whiteSpace: "nowrap",
     } }, children));
+/* THE EDIT DOOR, MADE VISIBLE.
+   ---------------------------------------------------------------------------
+   Her report, 10 August, over four screenshots of rows that each carried a
+   small grey text link: "no editing options at all." The link was there and
+   it worked — and from where she stood it did not exist. An affordance she
+   cannot see is not an affordance (rule 11). Build 89 gave the field editor
+   a bordered chip that says "edit" and she found it at once, so that chip is
+   now THE edit door, one shape everywhere: battery rows, mobility tests,
+   body-work exercises, and the ten-minutes drills (which until now had no
+   door at all). Conformity was her word: the same signal everywhere. */
+const EditChip = ({ open, onClick, label }) => (React.createElement("button", { onClick: onClick, className: "tap", "aria-label": label || "Edit this", style: {
+        border: `1px solid ${open ? C.signal : C.line}`, borderRadius: 8,
+        background: open ? C.signal : "transparent",
+        color: open ? C.chalk : C.signal, cursor: "pointer",
+        padding: "5px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+        flexShrink: 0
+    } }, open ? "close" : "edit"));
 /* ============================================================================
    A CHART
    ---------------------------------------------------------------------------
@@ -8735,7 +8752,9 @@ function DrillsCard({ coach, setSheet, data, setData }) {
             })(),
             setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v), history: noteHistory(data, "drill", d.id, coach.t), seeAll: setSheet ? () => setSheet({ kind: "written" }) : undefined })),
             React.createElement("div", { style: { marginTop: 6 } },
-                React.createElement(HowTo, { f: d })))))));
+                React.createElement(HowTo, { f: d })),
+            setSheet && (React.createElement("div", { style: { marginTop: 10 } },
+                React.createElement(EditChip, { label: `Edit ${d.label}`, onClick: () => setSheet({ kind: "edit-mobility", focus: d.id }) }))))))));
 }
 function MoodCard({ log, write, setSheet, coach }) {
     const moods = [
@@ -10585,28 +10604,50 @@ function VersionRow() {
 }
 /* -------------------------------------------------------- FIELD EDITOR ---- */
 function FieldEditor({ which, data, setData, close, focus }) {
-    const [list, setList] = useState(data.fields[which]);
-    /* Opened from the "edit" beside a row, it lands on THAT exercise already
-       open. Her instruction, 10 August: "I need an edit button next to each
-       exercise. I can edit the exercise itself, I can edit how it's measured,
-       or I can delete it altogether." */
+    /* ---- WHY THE MONTHLY EDITOR SHOWED HER TWO ROWS -----------------------
+       HER REPORT, 10 August: "It does not even show me all the benchmark
+       exercises — it is showing me only two fields."
+  
+       Storage-true, screen-false. The monthly LIST holds only what the monthly
+       asks for ON TOP of the weekly — muscle and body fat — because the
+       benchmark sitting is the weekly list plus those two. Correct data,
+       useless editor: from where she stands the benchmark is twenty-nine rows
+       and this screen owned two of them. The monthly editor now shows the
+       whole benchmark; each edit is written back to the list the row actually
+       lives in, and nothing changes shape underneath (rule 20). */
+    const both = which === "monthly";
+    const [mo, setMo] = useState(data.fields.monthly);
+    const [wk, setWk] = useState(data.fields.weekly);
+    const list = both ? [...mo, ...wk] : wk;
+    const setFor = (id) => (mo.some((f) => f.id === id) ? setMo : setWk);
     const [openId, setOpenId] = useState(focus || null);
-    const patch = (id, p) => setList((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
-    const move = (i, dir) => setList((l) => {
-        const n = [...l], j = i + dir;
-        if (j < 0 || j >= n.length)
+    const patch = (id, p) => setFor(id)((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
+    /* reorder stays within the list a row lives in — the benchmark's shape is
+       "monthly extras first, then the weekly", and crossing that line would
+       silently move a row between batteries */
+    const move = (i, dir) => {
+        const f = list[i];
+        setFor(f.id)((l) => {
+            const k = l.findIndex((x) => x.id === f.id), j = k + dir;
+            if (k < 0 || j < 0 || j >= l.length)
+                return l;
+            const n = [...l];
+            [n[k], n[j]] = [n[j], n[k]];
             return n;
-        [n[i], n[j]] = [n[j], n[i]];
-        return n;
-    });
-    const remove = (id) => setList((l) => l.filter((f) => f.id !== id));
+        });
+    };
+    const remove = (id) => setFor(id)((l) => l.filter((f) => f.id !== id));
     const add = () => {
         const f = { id: newId(), label: "New measure", unit: "reps", type: "number", better: "up",
-            cap: "", role: "rotating", inWeekly: true, rungs: [] };
-        setList((l) => [...l, f]);
+            cap: "", role: "rotating", inWeekly: !both, rungs: [] };
+        (both ? setMo : setWk)((l) => [...l, f]);
         setOpenId(f.id);
     };
-    const save = () => { setData({ ...data, fields: { ...data.fields, [which]: list } }); close(); };
+    const save = () => {
+        setData((d) => ({ ...d, fields: { ...d.fields,
+                ...(both ? { monthly: mo, weekly: wk } : { weekly: wk }) } }));
+        close();
+    };
     const TYPES = [["number", "Number"], ["weightreps", "Weight x reps"], ["time", "Time"], ["rung", "Ladder only"], ["scale", "Scale"], ["note", "Note"]];
     const BETTER = [["up", "Higher is better"], ["down", "Lower is better"], [null, "Neither"]];
     return (React.createElement(React.Fragment, null,
@@ -10630,8 +10671,15 @@ function FieldEditor({ which, data, setData, close, focus }) {
                         React.createElement("div", { className: "mono", style: { fontSize: 10, color: C.muted, marginTop: 1 } },
                             f.cap ? f.cap + " · " : "",
                             f.role === "anchor" ? "anchor" : "rotating",
-                            f.inWeekly !== false ? " · weekly" : " · monthly",
+                            f.inWeekly !== false ? " · weekly" : " · monthly only",
                             ((_a = f.rungs) === null || _a === void 0 ? void 0 : _a.length) > 1 ? ` · ${f.rungs.length} rungs` : "")),
+                    React.createElement("button", { onClick: () => setOpenId(openId === f.id ? null : f.id), className: "tap", style: {
+                            border: `1px solid ${openId === f.id ? C.signal : C.line}`, borderRadius: 8,
+                            background: openId === f.id ? C.signal : "transparent",
+                            color: openId === f.id ? C.chalk : C.signal, cursor: "pointer",
+                            padding: "5px 10px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+                            flexShrink: 0
+                        } }, openId === f.id ? "close" : "edit"),
                     React.createElement("button", { onClick: () => remove(f.id), className: "tap", style: {
                             border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
                         } }, "\u00D7")),
@@ -12580,10 +12628,13 @@ function QuietRows({ rows, open, setOpen }) {
 }
 function MobilityEditor({ data, setData, coach, close, focus }) {
     var _a, _b;
-    const [tab, setTab] = useState("tests");
-    const [openId, setOpenId] = useState(focus || null);
     const tests = ((_a = data.mobTests) === null || _a === void 0 ? void 0 : _a.length) ? data.mobTests : coach.mobTests;
     const drills = ((_b = data.drills) === null || _b === void 0 ? void 0 : _b.length) ? data.drills : coach.drills;
+    /* Opened from a drill's edit chip it lands on THAT drill — not on a list
+       of tests the drill is not in. She should never arrive on the wrong tab
+       and conclude the thing she came to edit does not exist (rule 11). */
+    const [tab, setTab] = useState(focus && drills.some((x) => x.id === focus) ? "drills" : "tests");
+    const [openId, setOpenId] = useState(focus || null);
     const setTests = (fn) => setData((d) => { var _a; return ({ ...d, mobTests: fn(((_a = d.mobTests) === null || _a === void 0 ? void 0 : _a.length) ? d.mobTests : tests) }); });
     const setDrills = (fn) => setData((d) => { var _a; return ({ ...d, drills: fn(((_a = d.drills) === null || _a === void 0 ? void 0 : _a.length) ? d.drills : drills) }); });
     const patchTest = (id, props) => setTests((l) => l.map((m) => (m.id === id ? { ...m, ...props } : m)));
@@ -12666,6 +12717,12 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
                         } }, dr.label));
                 })))) : (React.createElement(React.Fragment, null,
                 React.createElement(Field, { label: "Minutes", unit: "", value: item.mins, onChange: (v) => patchDrill(item.id, { mins: Number(v) || 1 }) }),
+                React.createElement("div", { style: { display: "flex", gap: 8 } },
+                    React.createElement("span", { style: { flex: 1 } },
+                        React.createElement(Field, { label: "Sets", unit: "", type: "text", value: item.sets || "", onChange: (v) => patchDrill(item.id, { sets: v }) })),
+                    React.createElement("span", { style: { flex: 1 } },
+                        React.createElement(Field, { label: "Reps", unit: "", type: "text", value: item.reps || "", onChange: (v) => patchDrill(item.id, { reps: v }) }))),
+                React.createElement(Field, { label: "How often", unit: "e.g. daily, 3x/week", type: "text", value: item.freq || "", onChange: (v) => patchDrill(item.id, { freq: v }) }),
                 React.createElement(Field, { label: "What it targets", unit: "", type: "text", value: item.targets || "", onChange: (v) => patchDrill(item.id, { targets: v }) }),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "How to do it"),
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
@@ -14148,10 +14205,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                         textTransform: "uppercase", color: C.ochre, marginBottom: 2 } }, "only here")),
                 React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), history: noteHistory(data, which, f.id, key), ask: (txt) => setSheet({ kind: "chat", about: f.label,
                         seed: `About ${f.label}: ${txt}` }), seeAll: () => setSheet({ kind: "written" }), pb: f.better === "up" ? coach.pbs[f.id] : null }),
-                React.createElement("button", { onClick: () => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id }), className: "tap", style: {
-                        border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 8px",
-                        fontSize: 11, color: C.muted, fontFamily: "inherit"
-                    } }, "edit or remove this exercise")));
+                React.createElement("div", { style: { padding: "2px 0 10px" } },
+                    React.createElement(EditChip, { label: `Edit ${f.label}`, onClick: () => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id }) }))));
             const cards = [];
             if (started && left.length) {
                 /* ---- WHERE BODY COMPOSITION WENT ------------------------------
@@ -14232,10 +14287,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             mobTests.map((m) => (React.createElement("div", { key: m.id },
                 React.createElement(MobRow, { m: m, e: mob[m.id] || {}, put: putMob, history: noteHistory(data, "mobility", m.id, coach.ws), ask: (txt) => setSheet({ kind: "chat", about: m.label,
                         seed: `About ${m.label}: ${txt}` }), seeAll: () => setSheet({ kind: "written" }) }),
-                React.createElement("button", { onClick: () => setSheet({ kind: "edit-mobility", focus: m.id }), className: "tap", style: {
-                        border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
-                        fontSize: 11, color: C.muted, fontFamily: "inherit"
-                    } }, "edit or remove this test")))))),
+                React.createElement("div", { style: { padding: "0 0 12px" } },
+                    React.createElement(EditChip, { label: `Edit ${m.label}`, onClick: () => setSheet({ kind: "edit-mobility", focus: m.id }) }))))))),
         React.createElement("div", { style: { marginTop: 14 } },
             isCurrent && (() => {
                 var _a;
@@ -14950,10 +15003,8 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                     bwSay(x) || "—"))))))),
         React.createElement(ExerciseNote, { value: notes[noteId], onChange: putNote, history: noteHistory(data, "drill", noteId, today), ask: (txt) => setSheet({ kind: "chat", about: ex.name,
                 seed: `About ${ex.name} in my ${prog.area} work: ${txt}` }), seeAll: () => setSheet({ kind: "written" }) }),
-        !editing ? (React.createElement("button", { onClick: () => setEditing(true), className: "tap", style: {
-                border: "none", background: "transparent", cursor: "pointer", padding: "4px 0 0",
-                fontSize: 11, color: C.muted, fontFamily: "inherit"
-            } }, "edit or remove this exercise")) : (React.createElement("div", { style: { marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 } },
+        !editing ? (React.createElement("div", { style: { paddingTop: 8 } },
+            React.createElement(EditChip, { label: `Edit ${ex.name}`, onClick: () => setEditing(true) }))) : (React.createElement("div", { style: { marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 } },
             React.createElement(Field, { label: "Name", unit: "", type: "text", value: ex.name, onChange: (v) => patch({ name: v }) }),
             React.createElement(Field, { label: "What you need", unit: "", type: "text", value: ex.tool, onChange: (v) => patch({ tool: v }) }),
             React.createElement(Field, { label: "Sets and reps", unit: "", type: "text", value: ex.dose, onChange: (v) => patch({ dose: v }) }),
