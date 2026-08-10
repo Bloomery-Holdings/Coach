@@ -3141,7 +3141,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 85";
+const BUILD = "10 August 2026 · 86";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7481,6 +7481,13 @@ function AutoText({ value, onChange, rows = 2, placeholder, style, ...rest }) {
         const h = Number(el.scrollHeight) || 0;
         if (h > 0)
             el.style.height = h + "px";
+        /* a capped box scrolls inside itself past the cap, and follows the cursor
+           to the end so what she is saying right now is always the visible part */
+        if (style && style.maxHeight && el.clientHeight < el.scrollHeight) {
+            el.style.overflowY = "auto";
+            if (typeof el.selectionStart === "number" && el.selectionStart >= String(el.value || "").length - 2)
+                el.scrollTop = el.scrollHeight;
+        }
     });
     return (React.createElement("textarea", { ref: ref, rows: rows, value: value || "", placeholder: placeholder, onChange: (e) => onChange(e.target.value), style: { ...style, resize: "none", overflow: "hidden" }, ...rest }));
 }
@@ -8895,6 +8902,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     const [open, setOpen] = useState(false);
     const [choosing, setChoosing] = useState(false);
     const [clearing, setClearing] = useState(false);
+    /* a logged session is one line on Today; this opens the rest of it */
+    const [sessionDetail, setSessionDetail] = useState(false);
     const [adding, setAdding] = useState(false);
     const remaining = Math.max(0, coach.seasonTarget - coach.weekDone);
     /* On the monthly benchmark day the battery IS the session — thirty-odd
@@ -9106,7 +9115,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.signal,
                         fontWeight: 600, fontFamily: "inherit"
                     } }, "It wasn't a rest day"))),
-            (log === null || log === void 0 ? void 0 : log.type) && (React.createElement("div", { style: { marginTop: 9 } }, clearing ? (React.createElement("div", { style: { padding: "11px 13px", background: C.chalk, borderRadius: 11 } },
+            (log === null || log === void 0 ? void 0 : log.type) && (!(log === null || log === void 0 ? void 0 : log.completed) || sessionDetail) && (React.createElement("div", { style: { marginTop: 9 } }, clearing ? (React.createElement("div", { style: { padding: "11px 13px", background: C.chalk, borderRadius: 11 } },
                 React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 9 } },
                     "Remove ",
                     React.createElement("strong", { style: { color: C.ink, fontWeight: 600 } }, log.type),
@@ -9140,7 +9149,40 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         } }, rx.benchmark ? "Start the benchmark" : "Start this class")),
                 React.createElement("div", { style: { marginTop: 8 } },
                     React.createElement(Btn, { kind: "quiet", onClick: () => setChoosing(true) }, rx.benchmark ? "Skip it and train instead" : "I'd rather do something else")))),
-            (log === null || log === void 0 ? void 0 : log.type) && (React.createElement(React.Fragment, null,
+            (log === null || log === void 0 ? void 0 : log.type) && (log === null || log === void 0 ? void 0 : log.completed) && !sessionDetail && (React.createElement("div", { style: { marginTop: 14 } },
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9, padding: "13px 15px",
+                        borderRadius: 12, background: C.mint } },
+                    React.createElement("span", { style: { color: C.moss, fontSize: 17 } }, "\u2713"),
+                    React.createElement("span", { style: { flex: 1, fontSize: 13.5, fontWeight: 600, color: C.moss } },
+                        "Session logged",
+                        log.minutes ? ` · ${log.minutes} min` : "",
+                        log.rpe ? ` · ${log.rpe}/10` : ""),
+                    React.createElement("button", { onClick: () => setSessionDetail(true), className: "tap", style: {
+                            border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
+                            fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit"
+                        } }, "details")),
+                (() => {
+                    const isMonthly = /benchmark/i.test(String(log.type || ""));
+                    const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
+                    if (!isMonthly && !isWeeklyM)
+                        return null;
+                    const pr = isMonthly ? coach.monthlyProgress : coach.weeklyProgress;
+                    const shut = isMonthly ? coach.monthlyDone : coach.weeklyDone;
+                    if (shut || !pr || !pr.total)
+                        return null;
+                    return (React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.clay, marginTop: 7 } },
+                        "the tick is the session \u2014 the ",
+                        isMonthly ? "benchmark" : "weekly check",
+                        " numbers are",
+                        " ",
+                        pr.pct,
+                        "% in, ",
+                        pr.left,
+                        " still to enter"));
+                })())),
+            (log === null || log === void 0 ? void 0 : log.type) && (!(log === null || log === void 0 ? void 0 : log.completed) || sessionDetail) && (React.createElement(React.Fragment, null,
+                sessionDetail && (React.createElement("div", { style: { marginTop: 10 } },
+                    React.createElement(Btn, { kind: "quiet", onClick: () => setSessionDetail(false) }, "Fold it away again"))),
                 s && (React.createElement("div", { style: { marginTop: 14 } },
                     React.createElement(SessionBlock, { primary: true, cls: s, note: log === null || log === void 0 ? void 0 : log.sessionNote, onNote: (v) => write({ sessionNote: v }), onClass: (props) => patchClass(s.id, props) }))),
                 React.createElement("div", { style: { marginTop: 16 } },
@@ -13481,7 +13523,21 @@ ${coach.voicePatterns.length ? coach.voicePatterns.map((v) => `  * ${v.text}`).j
   say so plainly and help her plan for it rather than waiting for it to happen.
 - WHAT YOU HAVE TALKED ABOUT BEFORE (most recent conversations — read these so she never has to repeat
   herself, and so you can pick up threads she left open):
-${(data.chats || []).slice(-6).map((c) => `  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-6).map((m) => `${m.role === "user" ? "SHE" : "YOU"}: ${(m.text || "").slice(0, 200)}`).join(" | ")}`).join("\n") || "  no previous conversations"}
+${(() => {
+            /* HER REPORT, 10 August: "the coach is still stale — it does not integrate
+               all my communications." It couldn't: this read six messages per
+               conversation, 200 characters each. A day with thirty exchanges lost most
+               of itself before the coach ever saw it. TODAY goes in whole — every
+               message, uncut. Earlier days are trimmed but real. */
+            const all = data.chats || [];
+            const todayC = all.filter((c) => c.date === coach.t);
+            const older = all.filter((c) => c.date !== coach.t).slice(-8);
+            const one = (m) => `${m.role === "user" ? "SHE" : "YOU"}: ${m.text || ""}`;
+            const lines = [];
+            todayC.forEach((c) => lines.push(`  * TODAY, in full — every word of it:\n${(c.messages || []).map((m) => "      " + one(m)).join("\n")}`));
+            older.forEach((c) => lines.push(`  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-10).map((m) => one(m).slice(0, 300)).join(" | ")}`));
+            return lines.join("\n") || "  no previous conversations";
+        })()}
 - THE RECORD — everything she has told you that isn't a number. READ THIS BEFORE ANSWERING ANYTHING
   about how she feels, a pain, a tightness, or a question she has asked before. Never answer from
   scratch if it is already in here — refer back to it by date, say what she tried, and say whether it
@@ -13789,16 +13845,19 @@ Two or three sentences unless she asks for more.`;
                     } }, "edit")))))),
             busy && React.createElement("div", { style: { fontSize: 12, color: C.muted, padding: "6px 2px" } }, "thinking\u2026"),
             React.createElement("div", { ref: endRef })),
-        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-            React.createElement(AutoText, { value: draft, onChange: (v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }, onKeyDown: (e) => { if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                } }, placeholder: "Say it, or hold the mic", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
-            React.createElement(MicButton, { onText: (v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }, current: draft }),
-            React.createElement("button", { onClick: send, disabled: busy || !draft.trim(), className: "tap", style: {
-                    padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-                    background: draft.trim() && !busy ? C.signal : C.line, color: C.chalk,
-                } }, "Send")),
+        React.createElement("div", { style: { position: "sticky", bottom: 0, background: C.chalk,
+                padding: "10px 0 4px", borderTop: `1px solid ${C.line}` } },
+            React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
+                React.createElement(AutoText, { value: draft, onChange: (v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }, onKeyDown: (e) => { if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                    } }, placeholder: "Say it, or hold the mic", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45,
+                        maxHeight: "32vh", overflowY: "auto" } }),
+                React.createElement(MicButton, { onText: (v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }, current: draft }),
+                React.createElement("button", { onClick: send, disabled: busy || !draft.trim(), className: "tap", style: {
+                        padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+                        background: draft.trim() && !busy ? C.signal : C.line, color: C.chalk,
+                    } }, "Send"))),
         React.createElement("div", { style: { marginTop: 20 } },
             React.createElement(Btn, { kind: "quiet", onClick: close }, "Back"))));
 }
@@ -14153,6 +14212,22 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                         fontSize: 11, color: C.muted, fontFamily: "inherit"
                     } }, "edit or remove this test")))))),
         React.createElement("div", { style: { marginTop: 14 } },
+            isCurrent && (() => {
+                var _a;
+                const dayLog = (data.logs || {})[coach.t] || {};
+                const putLog = (patch) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+                        [coach.t]: { ...((d.logs || {})[coach.t] || {}), ...patch } } }));
+                return (React.createElement(Card, { style: { marginBottom: 12 } },
+                    React.createElement(Eyebrow, null, "The session itself"),
+                    React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 10px" } }, "This sitting counts as today's session. Say how it went here \u2014 none of it sits on the landing page any more."),
+                    React.createElement(Field, { label: "How long", unit: "min", value: (_a = dayLog.minutes) !== null && _a !== void 0 ? _a : "", onChange: (v) => putLog({ minutes: v, type: dayLog.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark"), completed: true }) }),
+                    React.createElement(RpeTap, { value: dayLog.rpe, onChange: (v) => putLog({ rpe: v }) }),
+                    dayLog.rpe && React.createElement(SetsTap, { value: dayLog.sets, onChange: (v) => putLog({ sets: v }) }),
+                    dayLog.rpe && React.createElement(DuringTap, { value: dayLog.during, onChange: (v) => putLog({ during: v }) }),
+                    dayLog.during && React.createElement(WhenTap, { value: dayLog.when, onChange: (v) => putLog({ when: v }) }),
+                    dayLog.during && (React.createElement(Scale, { label: "How you felt afterwards", value: dayLog.energyAfter, onChange: (v) => putLog({ energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
+                    React.createElement(Note, { label: "A line about how it went", value: dayLog.sessionNote, onChange: (v) => putLog({ sessionNote: v }) })));
+            })(),
             (() => {
                 const filled = (f) => {
                     if (f.type === "note" || f.type === "scale")
