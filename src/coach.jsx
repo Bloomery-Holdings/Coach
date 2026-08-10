@@ -955,17 +955,63 @@ const sameIssue = (a, b) => {
    measured on both sides. What ships here is a starting point, not the app's
    opinion of what should be measured. Ids never change once created, so
    renaming a test keeps every reading it has ever had (rule 12, rule 13). */
-const SEED_MOBILITY = [
-  { id: "sitrise", mins: 0.75, inWeekly: true, label: "Sit-to-rise", unit: "/10", better: "higher", max: 10,
-    how: "Sit down cross-legged on the floor and stand back up. Start with 10 points: lose one for each hand, forearm, knee or side of leg you use for support, on the way down and on the way up. Half a point for wobbling. USE WHATEVER SUPPORT YOU NEED — needing a hand down and a hand up is a 8, not a failure, and that is exactly what the test is for. There is no version of this you cannot score.",
-    why: "This is the single most-studied whole-body functional test there is — hip mobility, ankle range, single-leg strength and trunk control in one movement. It is also exactly the thing that quietly disappears in your fifties if nobody measures it.",
-    needs: ["legs", "core"], drills: ["deepsquat", "hipopen", "ankle", "getup"] },
+/* MOBILITY, REBUILT 10 August.
 
-  { id: "fold", mins: 0.75, inWeekly: false, label: "Forward fold", unit: "cm", better: "lower", side: false,
-    how: "Stand, feet together, knees straight but not locked, and fold forward. Measure the gap from fingertips to floor in centimetres. Palms flat is 0; fingertips touching is about 0 too — go by fingertips.",
-    why: "Posterior chain length: hamstrings, calves and lower back together. It is the one most people notice first, and the one that responds fastest to consistent work.",
+   Her verdict on the old one: "the mobility tests you're giving me are not
+   very smart, honestly. The only suitable one is the forward fold... the
+   cross-legged, I do it very simply and easily, I don't need it. The ankle to
+   wall, it's not — it's stupid, honestly. You need to put exercise related to
+   the flexibility of each muscle."
+
+   She is right about what was wrong. The old battery was a set of general
+   function screens — sit-to-rise, cross-legged sit, knee-to-wall — which tell
+   you whether a PATTERN works but not which muscle is short. What she asked
+   for is a length test per muscle group, which is both what she wants to see
+   move and what actually chooses a drill.
+
+   And the sit-to-rise is gone from here entirely, on her instruction: "you
+   cannot put one of my goals as an exercise or a test unless it is a weekly
+   full test of all the goals. Don't put for me one of the goals within the
+   mobility exercises or the strength exercises or the cardio exercises." It
+   is one of the things she wants to be able to do, so it is scored in the
+   goals battery with the rest of them and nowhere else.
+
+   Four of the five she named are here as she described them — the standing
+   fold, the seated fold, the straight-leg raise lying on her back, and the
+   straddle. The upper-body and spine tests stay, because nothing she said
+   was about those and they are the ones her shoulder depends on.
+
+   Retiring one of these never destroys a reading: retireMobTests removes a
+   row only where nothing was ever logged against it (rule 20). Ids never
+   change, so renaming keeps the history. */
+const SEED_MOBILITY = [
+  /* ---- LEGS: one test per muscle group, which is what she asked for ---- */
+  { id: "fold", mins: 0.75, inWeekly: true, label: "Standing forward fold", unit: "cm", better: "lower", side: false,
+    how: "Stand, feet together, knees straight but not locked, and fold forward. Measure the gap from fingertips to floor in centimetres. Fingertips touching the floor is 0; if your palms go flat, measure how far past the floor line your wrists reach and log it as a negative number.",
+    why: "Hamstrings, calves and lower back together — the whole back of you in one number. You said this is the one that makes sense, so it is the one that comes every week.",
     needs: ["legs", "back"], drills: ["hamstring", "calf", "catcow"] },
 
+  { id: "seatfold", mins: 0.75, inWeekly: false, label: "Seated forward fold", unit: "cm", better: "lower", side: false,
+    how: "Sit on the floor, legs straight together, toes up. Hinge from the hips and reach along your legs. Measure from fingertips to toes: short of the toes is a positive number, past them is negative.",
+    why: "The same muscles as the standing fold with your balance and your calves taken out of it, so the number moves for one reason only. Standing and seated moving differently tells you which of the two is actually short.",
+    needs: ["legs", "back"], drills: ["hamstring", "catcow"] },
+
+  { id: "slr", mins: 1, inWeekly: false, label: "Straight-leg raise", unit: "°", better: "higher", side: true,
+    how: "Lie on your back, both legs straight. Keep one leg flat on the floor and raise the other, knee straight, as far as it will go without the flat leg lifting or the hip rolling. Estimate the angle from the floor: flat is 0, straight up is 90. Each leg separately.",
+    why: "Hamstring length on its own — no back, no calves, no balance. It is the most sensitive flexibility test there is and the one where a left-right difference shows up first.",
+    needs: ["legs"], drills: ["hamstring", "pigeon"] },
+
+  { id: "straddle", mins: 1, inWeekly: false, label: "Legs apart, sitting", unit: "cm between ankles", better: "higher", side: false,
+    how: "Sit on the floor and open your legs as wide as they go, knees facing the ceiling, back tall and not rounded. Measure the gap between your ankles in centimetres. Wider is more open, so this is a number that should go up. Sit on the edge of a cushion if your back rounds — the measurement only means something with the back tall.",
+    why: "The adductors, the inside of the thighs. Nothing else in this battery reaches them, and they are what closes down the hips as the rest of the leg tightens.",
+    needs: ["legs"], drills: ["straddlework", "deepsquat", "pigeon"] },
+
+  { id: "quadlen", mins: 1, inWeekly: false, label: "Heel to bottom", unit: "cm", better: "lower", side: true,
+    how: "Lie face down, hips flat on the floor. Bend one knee and bring the heel towards your bottom, using a strap or your hand if you need it. Measure the gap between heel and bottom. If the hip lifts off the floor, that is where the measurement stops.",
+    why: "Quadriceps and the front of the hip — the pair that shorten most from sitting and that pull the pelvis out of position. Nothing else here measures the front of your leg.",
+    needs: ["legs"], drills: ["quadstretch", "hipflexor"] },
+
+  /* ---- SHOULDERS AND SPINE: unchanged, and the shoulder depends on them ---- */
   { id: "wallreach", mins: 1, inWeekly: false, label: "Overhead reach", unit: "cm", better: "lower", side: true,
     how: "Stand with your back flat to a wall, lower back pressed in. Raise both arms overhead, thumbs to the wall, elbows straight. Measure the gap from wrist to wall on each side.",
     why: "Shoulder flexion and thoracic extension. Directly relevant to your right shoulder, and the asymmetry between sides is the number that matters more than either one alone.",
@@ -976,21 +1022,18 @@ const SEED_MOBILITY = [
     why: "Shoulder internal and external rotation combined. The classic test for the shoulder capsule, and the one that tends to reveal a restriction before it starts to hurt.",
     needs: ["shoulders", "arms"], drills: ["shoulderpass", "sleeper", "doorway"] },
 
-  { id: "kneewall", mins: 1, inWeekly: false, label: "Ankle to wall", unit: "cm", better: "higher", side: true,
-    how: "Kneel with one foot flat, toes a measured distance from a wall. Drive the knee forward to touch the wall without the heel lifting. The furthest distance that still works is the score.",
-    why: "Ankle dorsiflexion. Under-measured and quietly decisive — it limits squat depth, it limits how you rise from the floor, and it is one of the first things to shorten from sitting.",
-    needs: ["legs"], drills: ["ankle", "calf", "deepsquat"] },
-
   { id: "rotate", mins: 1, inWeekly: false, label: "Seated rotation", unit: "/10", better: "higher", max: 10, side: true,
     how: "Sit tall on a chair, arms crossed on your chest, and turn as far as you can each way without your hips moving. Score how far you get out of ten, judged against a full ninety degrees.",
     why: "Thoracic rotation. It protects the lower back and the shoulder by letting the mid-back do the work they otherwise take on.",
     needs: ["back", "core"], drills: ["thoracic", "catcow", "openbook"] },
-
-  { id: "hipopen", mins: 0.75, inWeekly: false, label: "Cross-legged sit", unit: "/10", better: "higher", max: 10,
-    how: "Sit cross-legged on the floor, back unsupported. Score out of ten: can you sit tall without rounding, and for how long is it comfortable?",
-    why: "Hip external rotation and adductor length. This is the position the sit-to-rise starts from, so it usually has to improve first.",
-    needs: ["legs", "core"], drills: ["hipopen", "pigeon", "deepsquat"] },
 ];
+
+/* Retired on 10 August, and why:
+     sitrise      one of her goals — belongs in the goals battery, nowhere else
+     hipopen      "I do it very simply and easily. I don't need it."
+     kneewall     "it's stupid, honestly"
+   None of them is deleted from her device if she ever logged one. */
+const RETIRED_MOBILITY = ["sitrise", "hipopen", "kneewall"];
 
 /* Ten minutes of work, chosen by what the tests say is short. Never a whole
    session — these are add-ons after whatever she already did. */
@@ -1010,6 +1053,11 @@ const SEED_DRILLS = [
   { id: "doorway", label: "Doorway chest opener", mins: 2, how: "Forearm on a doorframe, step through gently. Three heights: low, mid, high — they reach different fibres.", targets: "chest and front shoulder" },
   { id: "latstretch", label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
   { id: "getup", label: "Floor sit-and-rise practice", mins: 3, how: "Practise the movement itself, slowly, using as little support as you need — and notice which point you need it. That point is the thing to work on.", targets: "the whole pattern, and it improves with practice alone" },
+  /* added 10 August with the rebuilt mobility battery — every new test has to
+     have somewhere to send her, or the score does nothing */
+  { id: "straddlework", label: "Straddle sit and side reach", mins: 3, how: "Sit with your legs as wide as they go, knees facing the ceiling. Sit tall first — that alone is the work if it is hard. Then reach over one leg, then the other, then straight down the middle, breathing at the end of each rather than bouncing.", targets: "adductors, the inside of the thighs" },
+  { id: "quadstretch", label: "Quad stretch, hips square", mins: 2, how: "Lying face down with a strap round the ankle, or standing holding the foot. Keep the hip pressed down and the knee under the hip — if the hip lifts or the knee drifts out, the stretch has gone into your lower back instead.", targets: "quadriceps" },
+  { id: "hipflexor", label: "Half-kneeling hip flexor", mins: 2, how: "Half-kneeling, back knee down. Tuck the pelvis under first, then shift forward only as far as you can hold the tuck. Most of the movement people feel here is their lower back arching, which does nothing.", targets: "hip flexors and the front of the hip" },
 ];
 const drillById = (id, list) => (list && list.length ? list : SEED_DRILLS).find((d) => d.id === id) || null;
 
@@ -1254,7 +1302,7 @@ const REVIEW_SHAPE = {
      Deliberately narrow. It must serve a goal she stated, it must say why the
      library cannot cover it, and it is an addition to the month, never a
      replacement for a class. Anything that fails those is dropped. */
-  prescription: "0 to 6 written exercises, ONLY where a goal she stated needs something no class in her library reaches. Each { label, goalIds: [every goal this one serves], targets, sets, reps, freq, how, why }. Integrate across ALL her goals first: never give the same movement twice under two different goal headings — give it once and list both goals.",
+  prescription: "The ten minutes she does after EVERY session she trains, written to build the muscles and ranges her stated goals need. One to eight exercises. EVERY open goal must be served by at least one of them — this is not conditional on what her classes cover. Her instruction, 10 August: 'a daily battery of ten minutes that would impact the muscles that need me to achieve my goals REGARDLESS of whether it is covered by classes or not.' Each { label, goalIds: [every goal this one serves], targets, sets, reps, freq, how, why, mins }. Integrate across ALL her goals before you write anything: never give the same movement twice under two different goal headings — give it once and list both goals. The whole set must fit in ten minutes; say the minutes for each.",
   /* Her question, 9 August: "how long should I take to achieve it?" A real
      answer, and one that must never read as a plan. Rule 6 is absolute — the
      app designs one month and never further — so this is an ESTIMATE of how
@@ -1309,10 +1357,19 @@ const validateReview = (parsed, ctx) => {
     && p.evidence.every((e) => e && typeof e.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.date)));
   const rejected = claims.length - usable.length;
 
-  /* Rule 10 as she amended it. A written exercise is allowed only when it
-     serves a goal she actually set and says what the library could not do.
-     Everything else is dropped silently — a prescription nobody asked for is
-     how an app that follows filmed classes turns into a spreadsheet. */
+  /* HER TEN MINUTES AFTER EVERY SESSION.
+
+     This used to be gated on the library: a written exercise was allowed only
+     where no class of hers could reach the muscle. Her instruction of 10
+     August removes that gate — "regardless of whether it is covered by
+     classes or not" — because a class that comes round once a fortnight
+     cannot build anything, and she alternates rather than repeats.
+
+     What survives is the rule that matters: a written exercise must serve a
+     goal she actually set. Anything that serves none is still dropped, and
+     the same movement filed under two goals is merged rather than repeated.
+     That is what keeps an app built on filmed classes from turning into a
+     spreadsheet of homework nobody asked for. */
   const rx = Array.isArray(parsed.prescription) ? parsed.prescription : [];
   const goalIds = (ctx.openGoals || []).map((g) => g.id);
   /* one exercise, every goal it serves. Her instruction: "it should integrate
@@ -1330,8 +1387,13 @@ const validateReview = (parsed, ctx) => {
     if (seenLabel.has(key)) return null;
     seenLabel.add(key);
     return { ...x, goalIds: Array.from(new Set(gs)) };
-  }).filter(Boolean).slice(0, 6);
+  }).filter(Boolean).slice(0, 8);
   const rejectedRx = rx.length - usableRx.length;
+  /* Which goals came back with nothing. Not fatal — losing a whole month's
+     design over one thin goal would be worse than the gap — but never
+     silent either (rule 23). It is shown with the review and it goes into
+     the record. */
+  const rxGaps = goalIds.filter((id) => !usableRx.some((x) => (x.goalIds || []).includes(id)));
 
   /* how long a goal takes. An estimate, never a plan — the guard refuses
      anything that reads as a schedule beyond the one month being designed. */
@@ -1352,6 +1414,7 @@ const validateReview = (parsed, ctx) => {
     errors,
     rejectedClaims: rejected,
     rejectedRx,
+    rxGaps,
     horizons: usableHz,
     prescription: usableRx.map((x) => ({
       id: "rx" + Math.random().toString(36).slice(2, 9),
@@ -1367,7 +1430,9 @@ const validateReview = (parsed, ctx) => {
       freq: String(x.freq || "after every session you train").slice(0, 60),
       how: x.how.trim(),
       why: x.why.trim(),
-      mins: 3,
+      /* what the model says it costs, kept inside something sane so a bad
+         number cannot blow the ten minutes on its own */
+      mins: Math.max(0.5, Math.min(6, Number(x.mins) > 0 ? Number(x.mins) : 2)),
       fromReview: true,
     })),
     block: errors.length ? null : {
@@ -1766,10 +1831,10 @@ Return ONLY a JSON object, no prose around it, no code fence:
   "interpretation": "what her numbers actually did this month, plain language, naming what is real and what is noise",
   "profile": [ { "claim": "...", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "..." } ] } ],
   "keptGoals": ["the id of every open goal you have kept in view"],
-  "prescription": [ { "label": "...", "goalIds": ["every goal id this one movement serves"], "targets": "the muscles or ranges it reaches", "sets": "3", "reps": "8", "freq": "after every session you train", "how": "how to do it, in plain language", "why": "what no class in her library could do" } ],
+  "prescription": [ { "label": "...", "goalIds": ["every goal id this one movement serves"], "targets": "the muscles or ranges it reaches", "sets": "3", "reps": "8", "mins": 2, "freq": "after every session you train", "how": "how to do it, in plain language", "why": "which goal this builds towards and what it is doing for it" } ],
   "horizons": [ { "goalId": "...", "weeks": "a realistic estimate, in weeks or months", "firstSigns": "what she notices first and roughly when", "thisMonth": "what should measurably move inside these four weeks" } ]
 }
-"prescription" is [] unless a goal genuinely needs something her library cannot reach. "horizons" has one entry for every open goal.
+"prescription" is her ten minutes after every session and must cover EVERY open goal — never empty while she has one. It is not conditional on her library. The total must fit in ten minutes. "horizons" has one entry for every open goal.
 Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.`;
 };
 
@@ -1853,7 +1918,7 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
     block: verdict.block, interpretation: verdict.block ? verdict.block.interpretation : "",
     reasoning: verdict.block ? verdict.block.reasoning : "",
     profile: verdict.profile, rejectedClaims: verdict.rejectedClaims,
-    prescription: verdict.prescription, rejectedRx: verdict.rejectedRx, horizons: verdict.horizons,
+    prescription: verdict.prescription, rejectedRx: verdict.rejectedRx, rxGaps: verdict.rxGaps, horizons: verdict.horizons,
     ruleBlock: ruleBlock || null,
   };
 };
@@ -2729,7 +2794,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 61";
+const BUILD = "10 August 2026 · 62";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2793,13 +2858,55 @@ const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "ellip
   /* 10 August: it loads the shoulder she is rehabilitating, and she said
      plainly she cannot do it. Replaced by the glute bridge below. */
   "updown"];
-const BATTERY_TIDY = 56;   /* the build that last changed the list; stamped so each tidy runs once */
+/* ============================================================================
+   THE SEED STAMP — and the bug it was hiding
+   ---------------------------------------------------------------------------
+   Every migration below is gated on a number stamped into her settings, so it
+   runs once rather than on every load. The gate is `done`, and `done` means
+   ALREADY DONE, SKIP.
+
+   It was compared against BATTERY_TIDY, which was 56 and never moved. Build 56
+   stamped 56 into her settings — and from that moment `56 >= 56` was true, so
+   every migration skipped itself forever. Corrections to rows she already had
+   still reached her, because fillFromSeed is not gated. But nothing NEW could
+   ever arrive and nothing retired could ever leave.
+
+   Which means the glute bridge added in build 57 never appeared on her phone,
+   and the plank up-downs she said she cannot do never left it. She would have
+   opened the battery this morning and found the same list.
+
+   So the stamp is now one number that moves whenever the seed changes, and the
+   gate compares against the CURRENT one. Bumping SEED_VERSION re-arms every
+   migration exactly once. The two constants below stay only to record when
+   each retirement was introduced.
+========================================================================== */
+const SEED_VERSION = 62;
+const BATTERY_TIDY = 56;        /* build that retired the first five rows      */
+const MOBILITY_REBUILD = 62;    /* build that rebuilt mobility by muscle length */
 
 const hasReading = (store, id) => {
   try {
     return Object.values(store || {}).some((e) => e && Object.keys(e).some((k) =>
       (k === id || k.startsWith(id + "__")) && e[k] !== "" && e[k] !== undefined && e[k] !== null));
   } catch (e) { return true; }   /* if in doubt, keep it */
+};
+
+/* Mobility readings live in their own store keyed by week, with each test as
+   an object rather than a flat value — so "did she ever log this" is a
+   different question from the battery's, and it needs its own answer. */
+const hasMobReading = (store, id) => {
+  try {
+    return Object.values(store || {}).some((e) => {
+      const v = e && e[id];
+      if (v === undefined || v === null) return false;
+      if (typeof v === "object") return Object.values(v).some((x) => x !== "" && x !== undefined && x !== null);
+      return v !== "";
+    });
+  } catch (e) { return true; }   /* if in doubt, keep it */
+};
+const retireMobTests = (list, store, done) => {
+  if (!done || !Array.isArray(list)) return list;
+  return list.filter((m) => !(RETIRED_MOBILITY.includes(m.id) && !hasMobReading(store, m.id)));
 };
 
 const retireFields = (list, store, done) => {
@@ -2834,7 +2941,7 @@ const BLANK = {
     /* the weekday her training week begins. 6 is Saturday, which is hers. */
     weekStartsOn: WEEK_STARTS_ON,
     /* which build last tidied the battery; stops the retirement running twice */
-    batteryTidy: BATTERY_TIDY,
+    batteryTidy: SEED_VERSION,
     /* Off by default. Only useful if she is actually experiencing these, and
        it is not the app's business to assume she is. */
     trackSymptoms: false,
@@ -2947,7 +3054,7 @@ async function loadData() {
       const d = JSON.parse(r);
       return {
         ...BLANK, ...d,
-        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: BATTERY_TIDY },
+        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION },
         /* `label` and `bilateral` are new to this list, and they are the
            reason a correction could never reach her. Split squat said "L/R"
            and gave one box; shoulder press and lateral raise, which are
@@ -2960,8 +3067,8 @@ async function loadData() {
             ? addNewFields(
                 retireFields(
                   fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"]),
-                  d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY),
-                SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
+                  d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
+                SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
             ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"])
@@ -2977,8 +3084,11 @@ async function loadData() {
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
           ? addNewFields(
-              fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly"]),
-              SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
+              retireMobTests(
+                fillFromSeed(d.mobTests, SEED_MOBILITY,
+                  ["how", "why", "mins", "inWeekly", "label", "unit", "better", "side", "needs", "drills"]),
+                d.mobility, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
+              SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
           : SEED_MOBILITY,
         drills: Array.isArray(d.drills) && d.drills.length
           ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
@@ -3792,9 +3902,33 @@ function useCoach(data, day, clock) {
        left, and the ceiling lifts to make room rather than pushing goal work
        out. If nothing else happens today, the thing she said she wanted still
        happens. */
+    /* ---- TEN MINUTES AFTER EVERY SESSION -------------------------------
+       Her instruction, 10 August: "I need a daily battery of ten minutes that
+       would impact the muscles that need me to achieve my goals regardless of
+       whether it is covered by classes or not... and then I will do a weekly
+       battery of the goals themselves, to give them a score."
+
+       So the two are cleanly separated. THIS is the work: the same ten
+       minutes after every session she trains, aimed at the muscles her goals
+       need. The SCORING is weekly and lives in the battery — nothing here
+       asks her to rate anything.
+
+       Goal work is reserved first and is never displaced. Mobility fills
+       whatever is left of the ten minutes, and if the goal work already fills
+       them, mobility waits — she asked for goal work every training day, and
+       a drill she does once a fortnight builds nothing.
+
+       Which goal each exercise serves is carried through, so the card can say
+       it rather than presenting ten minutes of unexplained homework. */
+    const DAILY_BUDGET = 10;
     const dailyDrills = (() => {
+      /* goal -> its drills, in the order she set them */
+      const goalOf = {};
       const goalIds = [];
-      openGoals.forEach((g) => (g.drills || []).forEach((d) => { if (!goalIds.includes(d)) goalIds.push(d); }));
+      openGoals.forEach((g) => (g.drills || []).forEach((id) => {
+        if (!goalIds.includes(id)) goalIds.push(id);
+        (goalOf[id] = goalOf[id] || []).push(g.text);
+      }));
       const mobIds = [];
       mobWeakest.forEach((r) => (r.drills || []).forEach((d) => { if (!goalIds.includes(d) && !mobIds.includes(d)) mobIds.push(d); }));
       mobAsym.forEach((r) => (r.drills || []).forEach((d) => { if (!goalIds.includes(d) && !mobIds.includes(d)) mobIds.push(d); }));
@@ -3805,15 +3939,22 @@ function useCoach(data, day, clock) {
       for (const id of goalIds) {
         const d = drillById(id, drills);
         if (!d) continue;
-        out.push({ ...d, forGoal: true }); mins += d.mins || 0; goalMins += d.mins || 0;
+        out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [] });
+        mins += d.mins || 0; goalMins += d.mins || 0;
       }
-      /* mobility fills the rest of the ten minutes, never displaces the above */
+      /* mobility fills what is left of the ten minutes, never displaces it */
       for (const id of mobIds) {
         const d = drillById(id, drills);
-        if (!d || mins + (d.mins || 0) > 11) continue;
+        if (!d || mins + (d.mins || 0) > DAILY_BUDGET) continue;
         out.push(d); mins += d.mins || 0;
       }
-      return { list: out, mins, goalMins, goalCount: out.filter((x) => x.forGoal).length };
+      /* which goals have nothing to do today. Said out loud, never hidden. */
+      const covered = new Set();
+      out.forEach((d) => (d.forGoalText || []).forEach((x) => covered.add(x)));
+      const uncovered = openGoals.filter((g) => !covered.has(g.text));
+      return { list: out, mins: Math.round(mins * 10) / 10, goalMins: Math.round(goalMins * 10) / 10,
+        goalCount: out.filter((x) => x.forGoal).length,
+        budget: DAILY_BUDGET, over: mins > DAILY_BUDGET, uncovered };
     })();
 
     /* ---- THE THINGS SHE WANTS TO DO, SCORED ---------------------------
@@ -3836,7 +3977,15 @@ function useCoach(data, day, clock) {
        card on Today stands down once the battery has taken them rather than
        asking her the same question twice. */
     const goalScoredIn = (g, from) => (g.scores || []).some((sc) => sc.date >= from);
-    const goalCheckDue = openGoals.filter((g) => !goalScoredIn(g, ws));
+    /* SCORING IS WEEKLY, AND THE BATTERY OWNS IT.
+
+       Her instruction, 10 August: "I score them on a weekly basis, not on a
+       daily basis." So Today does not ask while the weekly sitting is still
+       to come — the battery will ask, once, with all of them together. The
+       only time Today picks it up is when the week's battery has already gone
+       in WITHOUT them, which is a real gap rather than a daily nag. */
+    const weeklyIn = !!weekly[ws];
+    const goalCheckDue = weeklyIn ? openGoals.filter((g) => !goalScoredIn(g, ws)) : [];
     /* every one of them, always — this is what the battery asks */
     const goalBattery = openGoals;
     const goalMinutes = Math.round(openGoals.length * 0.75 * 10) / 10;
@@ -7783,13 +7932,23 @@ function DrillsCard({ coach, setSheet }) {
     <Card style={{ background: C.mint }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
         <Eyebrow color={C.moss}>Your ten minutes</Eyebrow>
-        <span className="mono" style={{ fontSize: 10, color: C.muted }}>{coach.dailyDrills.mins} min</span>
+        <span className="mono" style={{ fontSize: 10, color: coach.dailyDrills.over ? C.clay : C.muted }}>
+          {coach.dailyDrills.mins} min{coach.dailyDrills.over ? ` · over your ${coach.dailyDrills.budget}` : ""}
+        </span>
       </div>
       <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 12 }}>
         {coach.dailyDrills.goalCount
-          ? `After whatever else you do today — every training day, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one is" : coach.dailyDrills.goalCount + " are"} for what you said you want to be able to do, and ${coach.dailyDrills.goalCount === 1 ? "it happens" : "they happen"} regardless of what came round in the rotation. The rest are chosen by what your mobility tests say is short.`
-          : "After whatever else you do today. These are chosen by what your mobility tests say is short — they change as the scores change."}
+          ? `After every session you train — this one and every other one, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one builds" : coach.dailyDrills.goalCount + " build"} the muscles your goals need, whether or not a class happens to reach them, because a class that comes round once a fortnight builds nothing. ${coach.dailyDrills.goalMins} of the ten minutes go there. The rest is chosen by whatever your mobility tests say is short.`
+          : "After every session you train. These are chosen by what your mobility tests say is short — they change as the scores change. Set a goal and the first few minutes become work for that instead."}
       </div>
+      {(coach.dailyDrills.uncovered || []).length > 0 && (
+        <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 12,
+          padding: "9px 11px", background: C.card, borderRadius: 9 }}>
+          Nothing here is building "{coach.dailyDrills.uncovered[0].text}"{coach.dailyDrills.uncovered.length > 1
+            ? ` and ${coach.dailyDrills.uncovered.length - 1} other${coach.dailyDrills.uncovered.length > 2 ? "s" : ""}` : ""} yet.
+          The next monthly read writes the work for it — or pick the drills yourself from the goal.
+        </div>
+      )}
       {coach.dailyDrills.list.map((d, i) => (
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -7803,9 +7962,14 @@ function DrillsCard({ coach, setSheet }) {
           )}
           <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 4 }}>{d.how}</div>
           <div style={{ fontSize: 11, color: C.moss, marginTop: 4 }}>{d.targets}</div>
+          {(d.forGoalText || []).length > 0 && (
+            <div style={{ fontSize: 11, color: C.moss, marginTop: 4 }}>
+              For: {d.forGoalText.join(" · ")}
+            </div>
+          )}
           {d.fromReview && (
             <div style={{ fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" }}>
-              Written for one of your goals — nothing in your library reaches it.
+              Written for you at the last monthly read.
             </div>
           )}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
@@ -13842,13 +14006,26 @@ function ReviewSheet({ data, setData, coach, setSheet, close }) {
 
           {shown.ok && (shown.prescription || []).length > 0 && (
             <Card style={{ marginBottom: 12 }}>
-              <Eyebrow color={C.ochre}>Written for you, because no class covers it</Eyebrow>
+              <Eyebrow color={C.ochre}>Your ten minutes, written for your goals</Eyebrow>
               <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
-                These are done alongside your classes, never instead of one. Each is here because
-                something you said you want to be able to do needs a muscle or a range nothing in your
-                library reaches. They attach to that goal when you start the block, and they join your
-                ten minutes after a session.
+                This is the work you do after every session you train — alongside your classes, never
+                instead of one. Each is here to build a muscle or a range something you said you want
+                to be able to do actually needs, whether or not a class happens to cover it: you
+                alternate rather than repeat, and a class that comes round once a fortnight builds
+                nothing. They attach to their goal when you start the block.
+                {(() => {
+                  const total = (shown.prescription || []).reduce((a, x) => a + (Number(x.mins) || 0), 0);
+                  return total ? ` About ${Math.round(total * 10) / 10} minutes in total.` : "";
+                })()}
               </div>
+              {(shown.rxGaps || []).length > 0 && (
+                <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.ink, marginBottom: 12,
+                  padding: "9px 11px", background: C.pist, borderRadius: 9 }}>
+                  {(shown.rxGaps || []).length} of your goals came back with no work written for
+                  {(shown.rxGaps || []).length === 1 ? " it" : " them"}. That is a gap, not a decision —
+                  you can pick drills for it yourself from the goal, or say so in chat and have this run again.
+                </div>
+              )}
               {shown.prescription.map((x, i) => {
                 const g = (data.goals || []).find((y) => y.id === x.goalId);
                 return (
@@ -13856,7 +14033,8 @@ function ReviewSheet({ data, setData, coach, setSheet, close }) {
                     borderTop: i ? `1px solid ${C.line}` : "none" }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{x.label}</div>
                     <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
-                      {[x.sets && x.reps ? `${x.sets} x ${x.reps}` : x.sets || x.reps, x.freq].filter(Boolean).join(" · ")}
+                      {[x.sets && x.reps ? `${x.sets} x ${x.reps}` : x.sets || x.reps,
+                        x.mins ? `${x.mins}m` : null, x.freq].filter(Boolean).join(" · ")}
                     </div>
                     {x.targets && (
                       <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>{x.targets}</div>
@@ -13880,7 +14058,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close }) {
               {shown.rejectedRx > 0 && (
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, fontStyle: "italic" }}>
                   {shown.rejectedRx} other exercise{shown.rejectedRx === 1 ? " was" : "s were"} dropped for not
-                  serving a goal you actually set, or for not saying what your library could not do.
+                  serving a goal you actually set, or for repeating one already here.
                 </div>
               )}
             </Card>
@@ -14683,7 +14861,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 9 }}>
                   <textarea rows={2} value={goalWords[g.id] || ""}
                     onChange={(e) => setGoalWords((x) => ({ ...x, [g.id]: e.target.value }))}
-                    placeholder="What stopped you, if something did. Anything at all."
+                    placeholder="Why not a ten? What stopped you — anything at all."
                     style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
                   <MicButton onText={(v) => setGoalWords((x) => ({ ...x, [g.id]: v }))}
                     current={goalWords[g.id] || ""} />
