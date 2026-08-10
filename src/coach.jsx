@@ -2932,7 +2932,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 79";
+const BUILD = "10 August 2026 · 80";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3111,6 +3111,12 @@ const BLANK = {
      the minor ones, the tendons and the ligaments all get reached. One
      programme per body area, and she can have as many areas as she wants. */
   bodywork: [],
+  /* WHAT SHE ACTUALLY DID IN A BODY-WORK EXERCISE, by day.
+     Her instruction, 10 August: "I want each exercise to have the exact
+     criteria regarding the exercises in the measurement — its weight, its
+     reps, its timer or stopwatch, how to do it, anything you want to say,
+     everything in it."  { date: { exerciseId: { w, reps, secs } } } */
+  bwlog: {},
   journal: [],    /* free entries: { id, date, text } */
   notes: {},      /* date -> { text, kept } */
   notesUsed: [],  /* pool indices already spent, so nothing repeats */
@@ -3236,6 +3242,7 @@ async function loadData() {
         profile: Array.isArray(d.profile) ? d.profile : [],
         reviews: Array.isArray(d.reviews) ? d.reviews : [],
         bodywork: Array.isArray(d.bodywork) ? d.bodywork : [],
+        bwlog: d.bwlog && typeof d.bwlog === "object" ? d.bwlog : {},
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
           ? addNewFields(
@@ -7535,7 +7542,7 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
   );
 }
 
-const Btn = ({ children, onClick, kind = "solid", style = {} }) => {
+const Btn = ({ children, onClick, kind = "solid", style = {}, disabled }) => {
   const base = { width: "100%", padding: "14px 16px", borderRadius: 11, cursor: "pointer", fontSize: 15, fontWeight: 600, fontFamily: "'IBM Plex Sans', sans-serif" };
   const kinds = {
     solid: { background: C.ink, color: C.chalk, border: `1px solid ${C.ink}` },
@@ -7543,7 +7550,10 @@ const Btn = ({ children, onClick, kind = "solid", style = {} }) => {
     ghost: { background: "transparent", color: C.ink, border: `1px solid ${C.line}` },
     quiet: { background: "transparent", color: C.muted, border: "none", padding: "10px 0", fontSize: 13, fontWeight: 500 },
   };
-  return <button onClick={onClick} className="tap" style={{ ...base, ...kinds[kind], ...style }}>{children}</button>;
+  /* `disabled` was accepted and ignored, so a button that said "writing…"
+     could be tapped again and fire the whole thing twice. */
+  return <button onClick={disabled ? undefined : onClick} className="tap" disabled={!!disabled}
+    style={{ ...base, ...kinds[kind], ...(disabled ? { opacity: 0.55, cursor: "default" } : {}), ...style }}>{children}</button>;
 };
 
 /* renders one assessment field according to its type */
@@ -17017,11 +17027,42 @@ const bodyworkState = (prog) => {
            roundComplete: lists.length > 0 && doneCount > 0 && inRound === 0 };
 };
 
+/* Everything she has ever logged against one body-work exercise, newest
+   first — so "last time" is a real number rather than a memory. */
+const bwHistory = (data, exId, skip) => {
+  const out = [];
+  Object.keys(data.bwlog || {}).forEach((date) => {
+    if (date === skip) return;
+    const e = (data.bwlog[date] || {})[exId];
+    if (!e) return;
+    const has = ["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "");
+    if (has) out.push({ date, ...e });
+  });
+  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+};
+const bwSay = (e) => [
+  String(e.w ?? "").trim() ? `${e.w} kg` : "",
+  String(e.reps ?? "").trim() ? `${e.reps} reps` : "",
+  String(e.secs ?? "").trim() ? `${e.secs}s` : "",
+].filter(Boolean).join(" x ");
+
 function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
   const [editing, setEditing] = useState(false);
   const noteId = `bw:${prog.id}:${ex.id}`;
   const today = coach.t;
   const notes = ((data.logs || {})[today] || {}).drillNotes || {};
+  /* HER INSTRUCTION, 10 August: every exercise here carries the same apparatus
+     a measurement does — what you lifted, how many, how long, the protocol, and
+     somewhere to say what happened. Written straight through on every
+     keystroke, like everything else since build 71. */
+  const did = ((data.bwlog || {})[today] || {})[ex.id] || {};
+  const putDid = (k, v) => setData((d) => {
+    const day = (d.bwlog || {})[today] || {};
+    return { ...d, bwlog: { ...(d.bwlog || {}),
+      [today]: { ...day, [ex.id]: { ...(day[ex.id] || {}), [k]: v } } } };
+  });
+  const past = bwHistory(data, ex.id, today);
+  const lastTime = past.find((x) => bwSay(x));
   const putNote = (v) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
     [today]: { ...((d.logs || {})[today] || {}),
       drillNotes: { ...(((d.logs || {})[today] || {}).drillNotes || {}), [noteId]: v } } } }));
@@ -17047,7 +17088,47 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
       {ex.targets && (
         <div style={{ fontSize: 11.5, color: C.moss, marginTop: 4 }}>{ex.targets}</div>
       )}
-      <Timer key={ex.id + ":t"} compact label={ex.name} />
+
+      {/* WHAT YOU ACTUALLY DID. Prescribed above, logged here. */}
+      <div style={{ marginTop: 10, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+          <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: C.muted }}>What you did</span>
+          {lastTime && (
+            <span className="mono" style={{ fontSize: 10, color: C.moss }}>
+              last time {bwSay(lastTime)}
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <span style={{ flex: 1 }}>
+            <Field label="Weight" unit="kg" value={did.w ?? ""} onChange={(v) => putDid("w", v)} />
+          </span>
+          <span style={{ flex: 1 }}>
+            <Field label="Reps" unit="each set" value={did.reps ?? ""} onChange={(v) => putDid("reps", v)} />
+          </span>
+          <span style={{ flex: 1 }}>
+            <Field label="Hold" unit="sec" value={did.secs ?? ""} onChange={(v) => putDid("secs", v)} />
+          </span>
+        </div>
+        <Timer key={ex.id + ":t"} compact label={ex.name}
+          seconds={secondsFor({ how: `${ex.dose} ${ex.how}` })}
+          onStop={(v) => putDid("secs", String(v))} />
+        {past.length > 0 && (
+          <details style={{ marginTop: 6 }}>
+            <summary className="mono" style={{ fontSize: 10.5, color: C.moss, cursor: "pointer" }}>
+              every time you have done this one ({past.length})
+            </summary>
+            <div style={{ marginTop: 6 }}>
+              {past.map((x, i) => (
+                <div key={i} className="mono" style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>
+                  {dayAndMonth(x.date)} — {bwSay(x) || "—"}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+      </div>
       <ExerciseNote value={notes[noteId]} onChange={putNote}
         history={noteHistory(data, "drill", noteId, today)}
         ask={(txt) => setSheet({ kind: "chat", about: ex.name,
@@ -17245,6 +17326,10 @@ function BodyWork({ data, setData, coach, setSheet }) {
   const [mins, setMins] = useState("10");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  /* "When I hit design ten lists, where do the lists show? I still don't see
+     them." A thing that appears silently somewhere else on the page has not
+     appeared at all. It says so now, by name, at the top. */
+  const [justMade, setJustMade] = useState(null);
   /* HER INSTRUCTION, 10 August: "You want me to ask the coach to design ten
      lists at once — how would I manoeuvre within them? I'm not against him
      designing them at once. I'm against that they will be shown one after the
@@ -17272,7 +17357,7 @@ function BodyWork({ data, setData, coach, setSheet }) {
   const [step, setStep] = useState("");
   const build = async () => {
     const want = area.trim();
-    if (!want) return;
+    if (!want || busy) return;      /* one at a time, whatever she taps */
     setBusy(true); setErr(null); setStep("");
     try {
       const out = await designBodyWork({
@@ -17289,13 +17374,18 @@ function BodyWork({ data, setData, coach, setSheet }) {
         created: coach.t, lists: out.lists, log: {}, rounds: [], status: "active" }] }));
       setArea("");
       setPick("all");
-      if (out.partial) setErr(`I got ${out.lists.length} lists written and the rest didn't come through. ${out.lists.length} is a real rotation — use them, and ask again whenever you want the other ${10 - out.lists.length}.`);
+      setJustMade({ area: out.area, n: out.lists.length, partial: !!out.partial });
     } catch (e) {
-      setErr(e.message === "no-key"
+      /* The exact reason, always. A message that says only "something went
+         wrong" is the same as saying nothing (rule 23). */
+      const why = String((e && e.message) || e || "unknown");
+      setErr(why === "no-key"
         ? "This one needs your Anthropic key, which lives in Settings. Everything else in the app works without it."
-        : e.message === "unreadable"
-        ? "The coach answered but I couldn't read it back as lists. Nothing has changed — try again, and if it happens twice tell me and I'll look at it."
-        : "I couldn't reach the coach to build it. Nothing has changed — check you have a connection and try again.");
+        : why === "unreadable"
+        ? "The coach answered, but not as lists I could read back. Nothing has changed — tap it again; it usually works the second time."
+        : why === "request-failed"
+        ? "The coach refused the request. That is almost always the key in Settings — expired, or with no credit on it. Nothing has changed."
+        : `I couldn't reach the coach. Nothing has changed. What came back: "${why}"`);
     }
     setBusy(false); setStep("");
   };
@@ -17326,6 +17416,24 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
           her ten minutes for what she wants to be able to do, AND today's list
           from each body area, stacked — the goal work stays the same until she
           changes a goal, the body lists move on every training day. */}
+      {justMade && (
+        <Card style={{ background: C.mint, marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 4 }}>
+            {justMade.n} list{justMade.n === 1 ? "" : "s"} written for {justMade.area}.
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+            {justMade.partial
+              ? `The other ${10 - justMade.n} didn't come through — ${justMade.n} is a real rotation on its own, and you can ask again for the rest whenever you like. `
+              : ""}
+            The first one is below, and it is the one to do after today's session. The rest come round
+            on the training days after it — tap "see all {justMade.n} lists" inside the card to look ahead.
+          </div>
+          <div style={{ marginTop: 10 }}>
+            <Btn kind="quiet" onClick={() => setJustMade(null)}>Got it</Btn>
+          </div>
+        </Card>
+      )}
+
       {parts.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
           {[
