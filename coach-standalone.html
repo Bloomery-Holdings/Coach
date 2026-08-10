@@ -3089,7 +3089,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 78";
+const BUILD = "10 August 2026 · 79";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7946,6 +7946,79 @@ function noteHistory(data, kind, id, skip) {
     }
     return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
+/* EVERY NOTE SHE HAS EVER WRITTEN, GROUPED BY THE EXERCISE IT BELONGS TO.
+   Her report, 10 August: "All the notes I've entered before — I don't know
+   where they go, I don't know where they come from, I don't know how to
+   retrieve them, I don't know whether they are reflected on the coach or not.
+   I cannot see anything."
+
+   The gathering existed but only inside Progress, and it did not know about
+   the body-work exercises at all. One function now, used by the sheet that
+   opens from every note box AND by the Progress fold, and it covers every
+   place a note can be written. */
+const allWritten = (data, coach) => {
+    var _a, _b;
+    const groups = [];
+    const seen = {};
+    const add = (key, label, rows) => {
+        if (!rows || !rows.length)
+            return;
+        if (!seen[key]) {
+            seen[key] = { key, label, rows: [] };
+            groups.push(seen[key]);
+        }
+        seen[key].rows.push(...rows);
+    };
+    (((_a = data.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []).forEach((f) => add(f.id, f.label, noteHistory(data, "weekly", f.id)));
+    (((_b = data.fields) === null || _b === void 0 ? void 0 : _b.monthly) || []).forEach((f) => add(f.id, f.label, noteHistory(data, "monthly", f.id)));
+    ((coach && coach.mobTests) || data.mobTests || []).forEach((m) => add("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
+    ((coach && coach.drills) || data.drills || []).forEach((x) => add("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
+    /* the body-area lists, which nothing was reading */
+    (data.bodywork || []).forEach((pg) => {
+        const seenIds = {};
+        [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))].forEach((l) => {
+            (l.exercises || []).forEach((ex) => {
+                if (seenIds[ex.id])
+                    return;
+                seenIds[ex.id] = true;
+                add("bw:" + ex.id, `${ex.name} · ${pg.area}`, noteHistory(data, "drill", `bw:${pg.id}:${ex.id}`));
+            });
+        });
+    });
+    (data.goals || []).forEach((g) => add("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
+    groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+    groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
+    return { groups, total: groups.reduce((n, g) => n + g.rows.length, 0) };
+};
+function WrittenSheet({ data, coach }) {
+    const { groups, total } = allWritten(data, coach);
+    return (React.createElement("div", null,
+        React.createElement(Eyebrow, { color: C.signal }, "Everything you've written"),
+        React.createElement("h1", { className: "disp", style: { fontSize: 24, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" } }, "Your own words, kept"),
+        React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 } },
+            "Every word you have written against an exercise, anywhere in the app \u2014 the battery, the mobility check, your body work, your goals \u2014 kept under the exercise it belongs to, newest first. Nothing here is ever deleted. ",
+            React.createElement("strong", { style: { color: C.ink, fontWeight: 600 } }, "The coach reads all of it before it answers you"),
+            ", and it is read again at the end of every month when the next block is designed."),
+        !groups.length ? (React.createElement(Card, null,
+            React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.55 } }, "Nothing yet. Anything you type in the box under an exercise lands here and stays."))) : (React.createElement(Card, null,
+            React.createElement("div", { className: "mono", style: { fontSize: 10, color: C.muted, marginBottom: 10,
+                    letterSpacing: "0.06em", textTransform: "uppercase" } },
+                total,
+                " note",
+                total === 1 ? "" : "s",
+                " \u00B7 ",
+                groups.length,
+                " exercise",
+                groups.length === 1 ? "" : "s"),
+            groups.map((gr, i) => (React.createElement("div", { key: gr.key, style: { padding: "10px 0",
+                    borderTop: i ? `1px solid ${C.line}` : "none" } },
+                React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 5 } }, gr.label),
+                gr.rows.map((r, j) => (React.createElement("div", { key: j, style: { marginBottom: 7 } },
+                    React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } },
+                        dayAndMonth(r.date),
+                        r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
+                    React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.ink } }, r.text)))))))))));
+}
 /* Folded, because eight months of notes under every row would bury the row —
    but one tap away, and the count is on the button so she knows it is there. */
 function NotePast({ rows }) {
@@ -7967,7 +8040,7 @@ function NotePast({ rows }) {
                 r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
             React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text))))))));
 }
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask }) {
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask, seeAll }) {
     const has = !!String(value || "").trim();
     const [open, setOpen] = useState(has);
     if (!open)
@@ -7984,7 +8057,10 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
             React.createElement(AutoText, { value: value, onChange: onChange, placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 12.5 } }),
             React.createElement(MicButton, { onText: onChange, current: value || "" })),
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 } },
-            React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.moss } }, "saved as you type"),
+            seeAll ? (React.createElement("button", { onClick: seeAll, className: "tap", style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+                    fontSize: 10.5, color: C.moss, fontFamily: "'IBM Plex Mono', monospace"
+                } }, "saved \u00B7 see everything you've written \u2192")) : (React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.moss } }, "saved as you type")),
             ask && String(value || "").trim() !== "" && (React.createElement("button", { onClick: () => ask(String(value || "").trim()), className: "tap", style: {
                     border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
                     padding: "7px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 600,
@@ -7992,7 +8068,7 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
                 } }, "Ask your coach about this \u2192"))),
         React.createElement(NotePast, { rows: history })));
 }
-const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
+const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
     var _a, _b, _c;
     if (f.type === "note")
         return (React.createElement("div", null,
@@ -8056,7 +8132,7 @@ const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
                 return (React.createElement(Timer, { key: f.id + ":up", compact: true, label: f.label, onStop: (v) => set(f.id, String(v)) }));
             return null;
         })(),
-        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history, ask: ask }),
+        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history, ask: ask, seeAll: seeAll }),
         React.createElement(HowTo, { f: f })));
 };
 /* ============================================================================
@@ -8202,7 +8278,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put, history, ask }) {
+function MobRow({ m, e, put, history, ask, seeAll }) {
     /* HER REPORT, 10 August: "in the mobility check you didn't put neither
        explanation of how it's done nor the link nor the photo. Although these
        are the ones that will really require to see a progression."
@@ -8237,9 +8313,9 @@ function MobRow({ m, e, put, history, ask }) {
                 React.createElement(Field, { label: "Left", unit: String(m.unit || "").replace("/", "of "), value: e.l || "", onChange: (v) => put(m.id, { l: v }) })),
             React.createElement("span", { style: { flex: 1 } },
                 React.createElement(Field, { label: "Right", unit: String(m.unit || "").replace("/", "of "), value: e.r || "", onChange: (v) => put(m.id, { r: v }) })))) : (React.createElement(Field, { label: "Score", unit: String(m.unit || "").replace("/", "of "), value: e.v || "", onChange: (v) => put(m.id, { v }) })),
-        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }), history: history, ask: ask })));
+        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }), history: history, ask: ask, seeAll: seeAll })));
 }
-function MobilitySheet({ data, setData, coach, close }) {
+function MobilitySheet({ data, setData, coach, close, setSheet }) {
     const wk = coach.ws;
     /* HER REPORT, 10 August: "I inputted the standing fold and the seated fold
        and they both couldn't save. I don't see them anywhere. And again, no
@@ -8265,7 +8341,8 @@ function MobilitySheet({ data, setData, coach, close }) {
         React.createElement(Eyebrow, { color: C.signal }, "Mobility & flexibility"),
         React.createElement("h1", { className: "disp", style: { fontSize: 26, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" } }, "Where your body still goes"),
         React.createElement("div", { style: { fontSize: 13, lineHeight: 1.6, color: C.muted, marginBottom: 18 } }, "Weekly, same day each time, unwarmed or lightly warmed \u2014 but consistently one or the other, or the numbers won't compare. Tap any test for how to do it and why it matters."),
-        (coach.mobTests || []).map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: entry[m.id] || {}, put: put, history: noteHistory(data, "mobility", m.id, wk) }))),
+        (coach.mobTests || []).map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: entry[m.id] || {}, put: put, history: noteHistory(data, "mobility", m.id, wk), seeAll: setSheet ? () => setSheet({ kind: "written" }) : undefined, ask: setSheet ? (txt) => setSheet({ kind: "chat", about: m.label,
+                seed: `About ${m.label}: ${txt}` }) : undefined }))),
         React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 } }, "Everything you tap or type here is already saved. This button only closes the week off so the app stops asking for it."),
         React.createElement(Btn, { kind: "signal", onClick: save }, "Done \u2014 close this week's mobility"),
         React.createElement("div", { style: { marginTop: 8 } },
@@ -8557,7 +8634,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
                         React.createElement(Timer, { key: d.id + ":tR", seconds: secs, label: `${d.label} — right`, compact: true })));
                 return React.createElement(Timer, { key: d.id + ":t", seconds: secs, label: d.label, compact: true });
             })(),
-            setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v), history: noteHistory(data, "drill", d.id, coach.t) })),
+            setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v), history: noteHistory(data, "drill", d.id, coach.t), seeAll: setSheet ? () => setSheet({ kind: "written" }) : undefined })),
             React.createElement("div", { style: { marginTop: 6 } },
                 React.createElement(HowTo, { f: d })))))));
 }
@@ -8673,7 +8750,7 @@ function BodyWorkCard({ log, write, isToday }) {
             "+ ",
             th.label)))))));
 }
-function Today({ data, setData, coach, setSheet }) {
+function Today({ data, setData, coach, setSheet, goTab }) {
     var _a, _b, _c, _d, _e, _f, _g;
     /* one note a day, taken from the pool and never handed out twice */
     useEffect(() => {
@@ -8898,7 +8975,21 @@ function Today({ data, setData, coach, setSheet }) {
                     coach.agenda.length,
                     ")"))))),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
-        isToday && coach.dailyDrills.goalCount > 0 && (React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData })),
+        isToday && coach.dailyDrills.list.length > 0 && (React.createElement(Card, { style: { background: C.mint } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+                React.createElement("span", { style: { flex: 1 } },
+                    React.createElement(Eyebrow, { color: C.moss }, "After your session"),
+                    React.createElement("div", { style: { fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45 } },
+                        coach.dailyDrills.mins,
+                        " minutes waiting in Body",
+                        coach.dailyDrills.goalCount > 0
+                            ? ` — ${coach.dailyDrills.goalCount === 1 ? "one movement" : coach.dailyDrills.goalCount + " movements"} for what you want to be able to do`
+                            : " — chosen by what your mobility scores say is short")),
+                React.createElement("button", { onClick: () => goTab && goTab("body"), className: "tap", style: {
+                        padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
+                        fontWeight: 600, border: "none", background: C.moss, color: C.chalk,
+                        fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0
+                    } }, "open")))),
         isToday && coach.openGoals.length === 0 && (React.createElement(Card, { style: { background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, "Start here"),
             React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginBottom: 12 } }, "The ten minutes after every session is built from what you want to be able to do \u2014 so it needs one of those first. Write it in your own words: something you want to be able to do and cannot yet, or can only just. The app picks the work for it straight away, and you score it once a week by trying it."),
@@ -9184,10 +9275,8 @@ function Today({ data, setData, coach, setSheet }) {
                     node: React.createElement(MobilityDoor, { coach: coach, setSheet: setSheet }) },
                 /* Only the mobility-only version lives down here — anything with
                    goal work in it is a card on the page above (rule 11). */
-                { id: "drills", title: "Today's ten minutes",
-                    count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
-                    node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
-                        ? React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData }) : null },
+                /* The ten minutes moved to the Body tab on 10 August. Nothing is
+                   shown here any more — the card above is the doorway. */
                 { id: "body", title: "Body work",
                     node: React.createElement(BodyWorkCard, { log: log, write: write, isToday: isToday }) },
             ] })),
@@ -9705,26 +9794,7 @@ function Progress({ data, setData, coach, setSheet }) {
                 coach.weeksHit === 1 ? "" : "s",
                 ".")),
         (() => {
-            var _a, _b;
-            const groups = [];
-            const seen = {};
-            const addRows = (id, label, rows) => {
-                if (!rows || !rows.length)
-                    return;
-                if (!seen[id]) {
-                    seen[id] = { key: id, label, rows: [] };
-                    groups.push(seen[id]);
-                }
-                seen[id].rows.push(...rows);
-            };
-            (((_a = data.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "weekly", f.id)));
-            (((_b = data.fields) === null || _b === void 0 ? void 0 : _b.monthly) || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "monthly", f.id)));
-            (coach.mobTests || []).forEach((m) => addRows("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
-            (coach.drills || []).forEach((x) => addRows("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
-            (data.goals || []).forEach((g) => addRows("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
-            groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
-            groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
-            const total = groups.reduce((n, g) => n + g.rows.length, 0);
+            const { groups, total } = allWritten(data, coach);
             return (React.createElement(Fold, { title: "Everything you've written", note: total
                     ? `${total} note${total === 1 ? "" : "s"} across ${groups.length} exercise${groups.length === 1 ? "" : "s"}`
                     : "nothing written against an exercise yet" },
@@ -13740,7 +13810,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 onlyMonthly(f) && (React.createElement("div", { className: "mono", style: { fontSize: 8.5, letterSpacing: "0.12em",
                         textTransform: "uppercase", color: C.ochre, marginBottom: 2 } }, "only here")),
                 React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), history: noteHistory(data, which, f.id, key), ask: (txt) => setSheet({ kind: "chat", about: f.label,
-                        seed: `About ${f.label}: ${txt}` }), pb: f.better === "up" ? coach.pbs[f.id] : null }),
+                        seed: `About ${f.label}: ${txt}` }), seeAll: () => setSheet({ kind: "written" }), pb: f.better === "up" ? coach.pbs[f.id] : null }),
                 React.createElement("button", { onClick: () => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id }), className: "tap", style: {
                         border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 8px",
                         fontSize: 11, color: C.muted, fontFamily: "inherit"
@@ -13806,7 +13876,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 "These choose your ten minutes of drills until the next one."),
             mobTests.map((m) => (React.createElement("div", { key: m.id },
                 React.createElement(MobRow, { m: m, e: mob[m.id] || {}, put: putMob, history: noteHistory(data, "mobility", m.id, coach.ws), ask: (txt) => setSheet({ kind: "chat", about: m.label,
-                        seed: `About ${m.label}: ${txt}` }) }),
+                        seed: `About ${m.label}: ${txt}` }), seeAll: () => setSheet({ kind: "written" }) }),
                 React.createElement("button", { onClick: () => setSheet({ kind: "edit-mobility", focus: m.id }), className: "tap", style: {
                         border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
                         fontSize: 11, color: C.muted, fontFamily: "inherit"
@@ -13988,7 +14058,7 @@ function CoachApp() {
                 React.createElement("div", { style: { width: 124, flexShrink: 0 } },
                     React.createElement(WeekSpine, { coach: coach }))),
             !ready ? React.createElement("div", { style: { padding: "60px 0", textAlign: "center", color: C.muted, fontSize: 13 } }, "Loading\u2026") : (React.createElement(React.Fragment, null,
-                tab === "today" && React.createElement(Today, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
+                tab === "today" && React.createElement(Today, { data: data, setData: setData, coach: coach, setSheet: setSheet, goTab: go }),
                 tab === "plan" && React.createElement(Workouts, { data: data, setData: setData, coach: coach }),
                 tab === "body" && React.createElement(BodyWork, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
                 tab === "progress" && React.createElement(Progress, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
@@ -14009,7 +14079,7 @@ function CoachApp() {
                        little or the last one wraps */
                     fontSize: 9.5, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase",
                 } }, label))))),
-        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) }))))));
+        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "written" ? (React.createElement(WrittenSheet, { data: data, coach: coach })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) }))))));
 }
 /* ============================================================================
    9. THE SAFETY NET
@@ -14316,7 +14386,8 @@ CONSTRAINTS THAT DO NOT BEND.
 - Write it so she can do it from the page alone, without looking anything up.
 - Plain, warm, specific language. No jargon she would have to decode.
 
-Return ONLY a JSON object, no prose around it, no code fence:
+Return ONLY a JSON object, no prose around it, no code fence. NOTHING before the { and
+nothing after the }:
 {
   "area": "the body area, two or three words",
   "line": "one or two sentences to her about what these ten lists are doing and in what order",
@@ -14334,31 +14405,72 @@ Return ONLY a JSON object, no prose around it, no code fence:
     }
   ]
 }
-Exactly ten lists. Each list's exercises must total roughly the minutes given.`;
-const designBodyWork = async ({ area, mins, apiKey, context }) => {
+Return exactly the number of lists asked for. Each list's exercises must total roughly
+the minutes given. Keep every "how" to two or three sentences — she needs to be able to
+do it from the page, not read an essay.`;
+/* ---- WHY NOTHING CAME OUT THE FIRST TIME -----------------------------
+   Her report, 10 August: "I asked for ten lists and nothing came out."
+
+   Ten lists of five written exercises, each with a protocol, is far more than
+   one reply can hold. The response ran past the limit, stopped mid-object, the
+   JSON would not parse, and the whole thing was thrown away — ten lists' worth
+   of work discarded because the tenth was incomplete.
+
+   So it is asked for in halves, and each half that arrives is KEPT. Five lists
+   is a usable rotation on its own; if the second half fails she has five and is
+   told so, rather than nothing and a shrug (rule 23). */
+const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid }) => {
     const raw = await askModel({
         system: BODYWORK_SYSTEM,
-        messages: [{ role: "user", content: `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"\nMINUTES PER LIST: ${mins}\n\n${context || ""}` }],
+        messages: [{ role: "user", content: [
+                    `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"`,
+                    `MINUTES PER LIST: ${mins}`,
+                    `HOW MANY LISTS TO WRITE NOW: ${count}. These are lists ${startAt} to ${startAt + count - 1} of ten.`,
+                    (avoid && avoid.length)
+                        ? `LISTS ALREADY WRITTEN FOR THIS AREA — do not repeat their exercises, their tools or their emphasis:\n${avoid.join("\n")}`
+                        : "",
+                    context || "",
+                ].filter(Boolean).join("\n\n") }],
         apiKey, maxTokens: 8000,
     });
     const out = parseReview(raw);
     if (!out || !Array.isArray(out.lists) || !out.lists.length)
         throw new Error("unreadable");
-    const lists = out.lists.slice(0, 10).map((l, i) => ({
-        id: newId(), n: i + 1,
-        title: String(l.title || `List ${i + 1}`),
-        focus: String(l.focus || ""),
-        exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
-            id: newId(),
-            name: String(x.name || "Exercise"),
-            tool: String(x.tool || ""),
-            dose: String(x.dose || ""),
-            mins: Number(x.mins) || 2,
-            how: String(x.how || ""),
-            targets: String(x.targets || ""),
-        })),
-    }));
-    return { area: String(out.area || area), line: String(out.line || ""), lists };
+    return out;
+};
+const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
+    id: newId(), n: startAt + i,
+    title: String(l.title || `List ${startAt + i}`),
+    focus: String(l.focus || ""),
+    exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
+        id: newId(),
+        name: String(x.name || "Exercise"),
+        tool: String(x.tool || ""),
+        dose: String(x.dose || ""),
+        mins: Number(x.mins) || 2,
+        how: String(x.how || ""),
+        targets: String(x.targets || ""),
+    })),
+}));
+const designBodyWork = async ({ area, mins, apiKey, context, onProgress }) => {
+    const say = (m) => { try {
+        onProgress && onProgress(m);
+    }
+    catch (e) { /* nothing */ } };
+    say("Writing lists 1 to 5…");
+    const first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [] });
+    let lists = shapeLists(first.lists.slice(0, 5), 1);
+    let partial = false;
+    try {
+        say("Writing lists 6 to 10…");
+        const second = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 6,
+            avoid: lists.map((l) => `${l.n}. ${l.title} — ${(l.exercises || []).map((x) => x.name).join(", ")}`) });
+        lists = [...lists, ...shapeLists(second.lists.slice(0, 5), lists.length + 1)];
+    }
+    catch (e) {
+        partial = true;
+    }
+    return { area: String(first.area || area), line: String(first.line || ""), lists, partial };
 };
 /* Which list comes next, and how far round she is. Kept as plain arithmetic so
    it survives without the model and reads the same every time. */
@@ -14393,7 +14505,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         ex.targets && (React.createElement("div", { style: { fontSize: 11.5, color: C.moss, marginTop: 4 } }, ex.targets)),
         React.createElement(Timer, { key: ex.id + ":t", compact: true, label: ex.name }),
         React.createElement(ExerciseNote, { value: notes[noteId], onChange: putNote, history: noteHistory(data, "drill", noteId, today), ask: (txt) => setSheet({ kind: "chat", about: ex.name,
-                seed: `About ${ex.name} in my ${prog.area} work: ${txt}` }) }),
+                seed: `About ${ex.name} in my ${prog.area} work: ${txt}` }), seeAll: () => setSheet({ kind: "written" }) }),
         !editing ? (React.createElement("button", { onClick: () => setEditing(true), className: "tap", style: {
                 border: "none", background: "transparent", cursor: "pointer", padding: "4px 0 0",
                 fontSize: 11, color: C.muted, fontFamily: "inherit"
@@ -14546,6 +14658,13 @@ function BodyWork({ data, setData, coach, setSheet }) {
     const [pick, setPick] = useState("all");
     const progs = data.bodywork || [];
     const hasTen = (((_a = coach.dailyDrills) === null || _a === void 0 ? void 0 : _a.list) || []).length > 0;
+    /* everything that has a list for today: her goal ten minutes, and one list
+       from each body area */
+    const parts = [...(hasTen ? ["goals"] : []), ...progs.map((pg) => pg.id)];
+    /* With one part there is nothing to choose between, so "everything" is not
+       offered and that part shows on its own. */
+    const showing = parts.length > 1 ? pick : (pick === "new" ? "new" : "all");
+    const [step, setStep] = useState("");
     const build = async () => {
         var _a, _b;
         const want = area.trim();
@@ -14553,6 +14672,7 @@ function BodyWork({ data, setData, coach, setSheet }) {
             return;
         setBusy(true);
         setErr(null);
+        setStep("");
         try {
             const out = await designBodyWork({
                 area: want, mins: Number(mins) || 10, apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
@@ -14561,19 +14681,26 @@ function BodyWork({ data, setData, coach, setSheet }) {
                     `WHAT SHE HAS SAID SHE WANTS TO BE ABLE TO DO: ${(data.goals || []).filter((g) => g.status !== "won" && g.status !== "retired").map((g) => g.text).join("; ") || "nothing recorded"}.`,
                     `SHE ALREADY HAS BODY WORK RUNNING FOR: ${progs.map((p) => p.area).join(", ") || "nothing else"} — do not duplicate those.`,
                 ].join("\n"),
+                onProgress: setStep,
             });
             setData((d) => ({ ...d, bodywork: [...(d.bodywork || []), {
                         id: newId(), area: out.area, line: out.line, mins: Number(mins) || 10,
                         created: coach.t, lists: out.lists, log: {}, rounds: [], status: "active"
                     }] }));
             setArea("");
+            setPick("all");
+            if (out.partial)
+                setErr(`I got ${out.lists.length} lists written and the rest didn't come through. ${out.lists.length} is a real rotation — use them, and ask again whenever you want the other ${10 - out.lists.length}.`);
         }
         catch (e) {
             setErr(e.message === "no-key"
                 ? "This one needs your Anthropic key, which lives in Settings. Everything else in the app works without it."
-                : "I couldn't reach the coach to build it. Nothing has changed — try again in a minute.");
+                : e.message === "unreadable"
+                    ? "The coach answered but I couldn't read it back as lists. Nothing has changed — try again, and if it happens twice tell me and I'll look at it."
+                    : "I couldn't reach the coach to build it. Nothing has changed — check you have a connection and try again.");
         }
         setBusy(false);
+        setStep("");
     };
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.signal }, "Body work"),
@@ -14585,9 +14712,9 @@ Only the list for today shows. The other nine come round on the days after it, a
 
 Add as many body areas as you want. Each keeps its own ten, and the chips above switch between them.` },
                 React.createElement("span", { style: { fontSize: 12.5, color: C.muted } }, "what this is"))),
-        (progs.length > 0 || hasTen) && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 } }, [
-            ["all", progs.length + (hasTen ? 1 : 0) > 1 ? "Today, all of it" : "Today"],
-            ...(hasTen ? [["goals", "The things you want to do"]] : []),
+        parts.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 } }, [
+            ...(parts.length > 1 ? [["all", "Everything today"]] : []),
+            ...(hasTen ? [["goals", "What you want to do"]] : []),
             ...progs.map((pg) => [pg.id, pg.area]),
             ["new", "+ another area"],
         ].map(([id, label]) => (React.createElement("button", { key: id, onClick: () => setPick(id), className: "tap", style: {
@@ -14597,19 +14724,20 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
                 background: pick === id ? C.signal : "transparent",
                 color: pick === id ? C.chalk : C.muted,
             } }, label))))),
-        (pick === "all" || pick === "goals") && hasTen && (React.createElement("div", { style: { marginBottom: 14 } },
+        (showing === "all" || showing === "goals") && hasTen && (React.createElement("div", { style: { marginBottom: 14 } },
             React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData }))),
         progs
-            .filter((prog) => pick === "all" || pick === prog.id)
+            .filter((prog) => showing === "all" || showing === prog.id)
             .map((prog) => (React.createElement(BodyWorkProgramme, { key: prog.id, prog: prog, data: data, setData: setData, coach: coach, setSheet: setSheet }))),
-        (pick === "new" || (!progs.length && !hasTen)) && (React.createElement(Card, { style: { background: C.pist } },
+        (showing === "new" || (!progs.length && !hasTen)) && (React.createElement(Card, { style: { background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, progs.length ? "Another body area" : "Ask your coach for a set"),
             React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "4px 0 12px" } }, "Say which part of you needs work, in your own words \u2014 \"stronger shoulders\", \"my lower back\", \"the whole of my hips\". The coach writes ten lists from it."),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
                 React.createElement(AutoText, { value: area, onChange: setArea, placeholder: "Stronger shoulders, all the small muscles too", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                 React.createElement(MicButton, { onText: setArea, current: area })),
             React.createElement(Field, { label: "Minutes per list", unit: "min", value: mins, onChange: setMins }),
-            React.createElement(Btn, { kind: "signal", onClick: build, disabled: busy || !area.trim() }, busy ? "Writing your ten lists…" : "Design ten lists"),
+            React.createElement(Btn, { kind: "signal", onClick: build, disabled: busy || !area.trim() }, busy ? (step || "Writing your ten lists…") : "Design ten lists"),
+            busy && (React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 } }, "It writes them in two halves and keeps whichever arrive. Give it up to a minute \u2014 leaving this screen while it works will lose it.")),
             err && React.createElement("div", { style: { fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 } }, err),
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 } }, "It takes about half a minute and costs a few cents. Everything it writes is yours to edit or delete afterwards, and nothing here is ever thrown away when a new round is designed.")))));
 }
