@@ -2942,7 +2942,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 66";
+const BUILD = "10 August 2026 · 67";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7429,6 +7429,16 @@ const secondsFor = (f) => {
         return Number(words[1]);
     return null;
 };
+/* Her drills and her prescribed goal work carry MINUTES. The battery carries
+   seconds. This is the one place that knows the difference. */
+const drillSeconds = (d) => {
+    if (!d)
+        return null;
+    const m = Number(d.mins);
+    if (Number.isFinite(m) && m > 0)
+        return Math.round(m * 60);
+    return secondsFor(d);
+};
 function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
     /* seconds: count DOWN from this. null: count UP. */
     const [ms, setMs] = useState(seconds ? seconds * 1000 : 0);
@@ -8145,6 +8155,12 @@ function DrillsCard({ coach, setSheet }) {
             coach.dailyDrills.uncovered.length > 1
                 ? ` and ${coach.dailyDrills.uncovered.length - 1} other${coach.dailyDrills.uncovered.length > 2 ? "s" : ""}` : "",
             " yet. The next monthly read writes the work for it \u2014 or pick the drills yourself from the goal.")),
+        React.createElement("div", { style: { padding: "2px 0 10px", borderBottom: `1px solid ${C.line}`, marginBottom: 4 } },
+            React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between" } },
+                React.createElement("span", { className: "mono", style: { fontSize: 10, letterSpacing: "0.1em",
+                        textTransform: "uppercase", color: C.muted } }, "The whole set"),
+                React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "counts up")),
+            React.createElement(Timer, { compact: true })),
         coach.dailyDrills.list.map((d, i) => (React.createElement("div", { key: d.id, style: { padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" } },
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 } },
                 React.createElement("span", { style: { fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink } }, d.label),
@@ -8159,6 +8175,10 @@ function DrillsCard({ coach, setSheet }) {
                 d.forGoalText.join(" · "))),
             d.fromReview && (React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Written for you at the last monthly read.")),
             d.suggested && !d.fromReview && (React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Chosen from the words of your goal, until you pick better ones or the coach writes them.")),
+            (() => {
+                const secs = drillSeconds(d);
+                return secs ? React.createElement(Timer, { key: d.id + ":t", seconds: secs, label: d.label, compact: true }) : null;
+            })(),
             React.createElement("div", { style: { marginTop: 6 } },
                 React.createElement(HowTo, { f: d })))))));
 }
