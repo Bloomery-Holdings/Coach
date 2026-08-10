@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 83";
+const BUILD = "10 August 2026 · 84";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9665,12 +9665,48 @@ function Today({ data, setData, coach, setSheet, goTab }) {
 
                 <div style={{ marginTop: 16 }}>
                   {log?.completed ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 15px", borderRadius: 12,
-                      background: C.mint }}>
-                      <span style={{ color: C.moss, fontSize: 17 }}>✓</span>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: C.moss }}>
-                        Done — {coach.weekDone} of {coach.seasonTarget} this week
-                      </span>
+                    <div>
+                      {/* HER REPORT, 10 August: "why do you say the monthly
+                          measurement is done while it's not? Why don't you put
+                          the carry-on button there instead of giving confusing
+                          signals?"
+
+                          Because this tick was never about the battery — it is
+                          the SESSION log, and it said "Done" beside a card
+                          titled Monthly benchmark. Two different things wearing
+                          one word. It says SESSION now, and where the session
+                          IS a measurement that is still half-entered, it says
+                          so and hands her the way back in. */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 15px", borderRadius: 12,
+                        background: C.mint }}>
+                        <span style={{ color: C.moss, fontSize: 17 }}>✓</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: C.moss }}>
+                          Session logged — {coach.weekDone} of {coach.seasonTarget} this week
+                        </span>
+                      </div>
+                      {(() => {
+                        const isMonthly = /benchmark/i.test(String(log?.type || ""));
+                        const isWeeklyM = /measurement|weekly check/i.test(String(log?.type || ""));
+                        if (!isMonthly && !isWeeklyM) return null;
+                        const pr = isMonthly ? coach.monthlyProgress : coach.weeklyProgress;
+                        const shut = isMonthly ? coach.monthlyDone : coach.weeklyDone;
+                        if (shut || !pr || !pr.total) return null;
+                        return (
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
+                            padding: "12px 14px", borderRadius: 12, background: C.pist }}>
+                            <span style={{ flex: 1, fontSize: 13, color: C.ink, lineHeight: 1.45 }}>
+                              The {isMonthly ? "benchmark" : "weekly check"} itself is not finished —
+                              {" "}{pr.left} still to enter, {pr.pct}% done. The session is logged; the
+                              numbers are not.
+                            </span>
+                            <button onClick={() => setSheet({ kind: isMonthly ? "monthly" : "weekly",
+                              key: isMonthly ? coach.mk : coach.ws })} className="tap" style={{
+                              padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
+                              fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
+                              fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>carry on</button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <Btn kind="signal" onClick={() => { write({ completed: true }); }}>Mark it done</Btn>
@@ -9770,18 +9806,50 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               </div>
             ) : (
               <div style={{ marginBottom: 14 }}>
-                {log?.type && (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "10px 0",
-                    borderBottom: `1px solid ${C.line}` }}>
-                    <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.type}</span>
-                    <input type="text" inputMode="numeric" value={log.minutes ?? ""}
-                      onChange={(e) => write({ minutes: e.target.value })}
-                      style={{ ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
-                        fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
-                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
-                    <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
-                  </div>
-                )}
+                {log?.type && (() => {
+                  /* HER REPORT, 10 August: "it should also say it is
+                     incomplete in this card. Why is there no conformity and
+                     proper wiring in this app?"
+
+                     She is right. Three places said something about the
+                     benchmark and all three meant different things by the
+                     same tick. ONE rule now, everywhere a measurement is
+                     named: the tick belongs to the SESSION, and if the
+                     battery behind it is unfinished the row says so and
+                     opens it. */
+                  const isMonthly = /benchmark/i.test(String(log.type || ""));
+                  const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
+                  const pr = isMonthly ? coach.monthlyProgress : isWeeklyM ? coach.weeklyProgress : null;
+                  const shut = isMonthly ? coach.monthlyDone : isWeeklyM ? coach.weeklyDone : true;
+                  const openBattery = !!pr && pr.total > 0 && !shut;
+                  return (
+                    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.line}` }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.type}</span>
+                        <input type="text" inputMode="numeric" value={log.minutes ?? ""}
+                          onChange={(e) => write({ minutes: e.target.value })}
+                          style={{ ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
+                            fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
+                        <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
+                        <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
+                      </div>
+                      {openBattery && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
+                          padding: "10px 12px", borderRadius: 10, background: C.pist }}>
+                          <span style={{ flex: 1, fontSize: 12, color: C.ink, lineHeight: 1.45 }}>
+                            The tick is the session, not the numbers. The {isMonthly ? "benchmark" : "weekly check"} is
+                            {" "}incomplete — {pr.left} still to enter, {pr.pct}% done.
+                          </span>
+                          <button onClick={() => setSheet({ kind: isMonthly ? "monthly" : "weekly",
+                            key: isMonthly ? coach.mk : coach.ws })} className="tap" style={{
+                            padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                            fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
+                            fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>carry on</button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {extraSessions.map((x) => {
                   const cls = classByName(x.type);
                   return (
@@ -15947,6 +16015,18 @@ Two or three sentences unless she asks for more.`;
         </div>
       )}
 
+      {/* WHERE IS IT? If today is empty, say so plainly and say what IS
+          stored, rather than opening blank and leaving her to conclude the
+          app threw her conversation away (rule 23). */}
+      {msgs.length === 0 && (
+        <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginBottom: 12,
+          lineHeight: 1.6 }}>
+          {earlier.length
+            ? `nothing stored under today yet · ${earlier.length} earlier day${earlier.length === 1 ? "" : "s"} kept, open them above`
+            : "nothing stored yet · everything you say here is written down before I even answer"}
+        </div>
+      )}
+
       {msgs.length === 0 && coach.leading.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
           <div style={{ maxWidth: "88%", padding: "12px 15px", borderRadius: 16,
@@ -17112,6 +17192,7 @@ nothing after the }:
         { "name": "...", "tool": "what she needs for it, or 'nothing'",
           "dose": "sets and reps or a hold, e.g. '3 x 12' or '3 x 30 seconds each side'",
           "mins": 2,
+          "search": "the two or three words to search video for, the standard name of the movement",
           "how": "how to do it, precise enough to do from the page",
           "targets": "the muscles, tendons or ligaments it reaches" }
       ]
@@ -17164,6 +17245,14 @@ const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
     mins: Number(x.mins) || 2,
     how: String(x.how || ""),
     targets: String(x.targets || ""),
+    /* HER INSTRUCTION, 10 August: "I want the ten lists to include also a link
+       for a video to show me how the exercise is done, like all the other
+       exercises." The label the coach gives is what gets searched, so a
+       movement it called something unusual still finds itself. A search link
+       can never go dead, and she can paste her own over it. */
+    label: String(x.name || "Exercise"),
+    search: String(x.search || x.name || ""),
+    video: "",
   })),
 }));
 
@@ -17257,6 +17346,17 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
       {ex.targets && (
         <div style={{ fontSize: 11.5, color: C.moss, marginTop: 4 }}>{ex.targets}</div>
       )}
+      {/* "I want the ten lists to include also a link for a video to show me
+          how the exercise is done, like all the other exercises." The search
+          link can never go dead; paste one in the editor and it is used
+          instead from then on. */}
+      <div style={{ marginTop: 6 }}>
+        <a href={videoFor({ video: ex.video, label: ex.search || ex.name })}
+          target="_blank" rel="noreferrer" style={{
+            fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
+          {ex.video ? "watch it →" : "find it on video →"}
+        </a>
+      </div>
 
       {/* WHAT YOU ACTUALLY DID. Prescribed above, logged here. */}
       <div style={{ marginTop: 10, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
@@ -17314,6 +17414,12 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
           <Field label="Sets and reps" unit="" type="text" value={ex.dose} onChange={(v) => patch({ dose: v })} />
           <Note label="How it's done" value={ex.how} onChange={(v) => patch({ how: v })} />
           <Note label="What it reaches" value={ex.targets} onChange={(v) => patch({ targets: v })} />
+          <Field label="Video link" unit="" type="text" value={ex.video || ""}
+            onChange={(v) => patch({ video: v.trim() })} />
+          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-6px 0 14px" }}>
+            Leave it empty and the link searches for the movement instead — that can never go dead.
+            Paste one you like and it is used from then on.
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn kind="quiet" onClick={() => setEditing(false)}>Done editing</Btn>
             <button onClick={drop} className="tap" style={{
