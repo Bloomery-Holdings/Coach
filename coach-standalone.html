@@ -3048,7 +3048,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 73";
+const BUILD = "10 August 2026 · 74";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7799,21 +7799,106 @@ function HowTo({ f }) {
 /* One box, wherever an exercise is done. Folded until she wants it, so a
    battery of twenty rows is not a wall of empty text areas — and it says it is
    optional, because a box that feels compulsory is friction (rule 24). */
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?" }) {
+/* ============================================================================
+   EVERYTHING SHE HAS EVER WRITTEN AGAINST THIS EXERCISE
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 10 August: "I need all my data, including my notes that I
+   enter, to be accessible to me — so I see what I used to write before, and
+   then when I feel different I want to look backwards to see what I wrote and
+   how am I different now. It's not something that is hidden, and it should be
+   available under each part or each exercise I enter it."
+
+   Every note was already being stored. Not one of them was ever shown back.
+   This gathers them, per exercise, wherever they were written — battery,
+   mobility, the ten minutes, a goal — and hands them back at the exact place
+   she is about to write the next one (rule 11).
+
+   `skip` is the sitting she is in right now: today's words are on screen
+   already and do not belong in the history of themselves.
+   ==========================================================================*/
+function noteHistory(data, kind, id, skip) {
+    const d = data || {};
+    const out = [];
+    const push = (date, text) => { const v = String(text || "").trim(); if (v)
+        out.push({ date, text: v }); };
+    if (kind === "weekly" || kind === "monthly") {
+        const store = d[kind] || {};
+        Object.keys(store).forEach((k) => {
+            if (k === skip)
+                return;
+            const e = store[k] || {};
+            push(e.on || k, e[id + "__note"]);
+        });
+    }
+    else if (kind === "mobility") {
+        Object.keys(d.mobility || {}).forEach((k) => {
+            if (k === skip)
+                return;
+            const week = d.mobility[k] || {};
+            const o = week[id];
+            if (o && typeof o === "object")
+                push(week.on || k, o.note);
+        });
+    }
+    else if (kind === "drill") {
+        Object.keys(d.logs || {}).forEach((date) => {
+            if (date === skip)
+                return;
+            push(date, ((d.logs[date] || {}).drillNotes || {})[id]);
+        });
+    }
+    else if (kind === "goal") {
+        const g = (d.goals || []).find((x) => x.id === id);
+        (g && g.scores ? g.scores : []).forEach((sc) => {
+            if (sc.date === skip)
+                return;
+            const v = String(sc.note || "").trim();
+            if (v)
+                out.push({ date: sc.date, text: v, value: sc.value });
+        });
+    }
+    return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+/* Folded, because eight months of notes under every row would bury the row —
+   but one tap away, and the count is on the button so she knows it is there. */
+function NotePast({ rows }) {
+    const [open, setOpen] = useState(false);
+    if (!rows || !rows.length)
+        return null;
+    return (React.createElement("div", { style: { marginTop: 4 } },
+        React.createElement("button", { onClick: () => setOpen((v) => !v), className: "tap", style: {
+                border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
+                fontSize: 11.5, color: C.moss, fontFamily: "inherit", fontWeight: 600
+            } },
+            open ? "Hide" : "What you wrote before",
+            " (",
+            rows.length,
+            ")"),
+        open && (React.createElement("div", { style: { marginTop: 4, borderLeft: `2px solid ${C.line}`, paddingLeft: 9 } }, rows.map((r, i) => (React.createElement("div", { key: i, style: { marginBottom: 7 } },
+            React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } },
+                dayAndMonth(r.date),
+                r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
+            React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text))))))));
+}
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history }) {
     const has = !!String(value || "").trim();
     const [open, setOpen] = useState(has);
     if (!open)
-        return (React.createElement("button", { onClick: () => setOpen(true), className: "tap", style: {
-                border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
-                fontSize: 11.5, color: C.muted, fontFamily: "inherit"
-            } },
-            "+ ",
-            label));
-    return (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" } },
-        React.createElement("textarea", { rows: 2, value: value || "", onChange: (e) => onChange(e.target.value), placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 } }),
-        React.createElement(MicButton, { onText: onChange, current: value || "" })));
+        return (React.createElement("div", null,
+            React.createElement("button", { onClick: () => setOpen(true), className: "tap", style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
+                    fontSize: 11.5, color: C.muted, fontFamily: "inherit"
+                } },
+                "+ ",
+                label),
+            React.createElement(NotePast, { rows: history })));
+    return (React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" } },
+            React.createElement("textarea", { rows: 2, value: value || "", onChange: (e) => onChange(e.target.value), placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 } }),
+            React.createElement(MicButton, { onText: onChange, current: value || "" })),
+        React.createElement(NotePast, { rows: history })));
 }
-const AssessInput = ({ f, form, set, pb, target }) => {
+const AssessInput = ({ f, form, set, pb, target, history }) => {
     var _a, _b, _c;
     if (f.type === "note")
         return (React.createElement("div", null,
@@ -7877,7 +7962,7 @@ const AssessInput = ({ f, form, set, pb, target }) => {
                 return (React.createElement(Timer, { key: f.id + ":up", compact: true, label: f.label, onStop: (v) => set(f.id, String(v)) }));
             return null;
         })(),
-        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v) }),
+        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history }),
         React.createElement(HowTo, { f: f })));
 };
 /* ============================================================================
@@ -8023,7 +8108,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put }) {
+function MobRow({ m, e, put, history }) {
     /* HER REPORT, 10 August: "in the mobility check you didn't put neither
        explanation of how it's done nor the link nor the photo. Although these
        are the ones that will really require to see a progression."
@@ -8058,7 +8143,7 @@ function MobRow({ m, e, put }) {
                 React.createElement(Field, { label: "Left", unit: String(m.unit || "").replace("/", "of "), value: e.l || "", onChange: (v) => put(m.id, { l: v }) })),
             React.createElement("span", { style: { flex: 1 } },
                 React.createElement(Field, { label: "Right", unit: String(m.unit || "").replace("/", "of "), value: e.r || "", onChange: (v) => put(m.id, { r: v }) })))) : (React.createElement(Field, { label: "Score", unit: String(m.unit || "").replace("/", "of "), value: e.v || "", onChange: (v) => put(m.id, { v }) })),
-        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }) })));
+        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }), history: history })));
 }
 function MobilitySheet({ data, setData, coach, close }) {
     const wk = coach.ws;
@@ -8086,7 +8171,7 @@ function MobilitySheet({ data, setData, coach, close }) {
         React.createElement(Eyebrow, { color: C.signal }, "Mobility & flexibility"),
         React.createElement("h1", { className: "disp", style: { fontSize: 26, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" } }, "Where your body still goes"),
         React.createElement("div", { style: { fontSize: 13, lineHeight: 1.6, color: C.muted, marginBottom: 18 } }, "Weekly, same day each time, unwarmed or lightly warmed \u2014 but consistently one or the other, or the numbers won't compare. Tap any test for how to do it and why it matters."),
-        (coach.mobTests || []).map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: entry[m.id] || {}, put: put }))),
+        (coach.mobTests || []).map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: entry[m.id] || {}, put: put, history: noteHistory(data, "mobility", m.id, wk) }))),
         React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 } }, "Everything you tap or type here is already saved. This button only closes the week off so the app stops asking for it."),
         React.createElement(Btn, { kind: "signal", onClick: save }, "Done \u2014 close this week's mobility"),
         React.createElement("div", { style: { marginTop: 8 } },
@@ -8252,6 +8337,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
                         React.createElement("textarea", { rows: 2, value: scoreNote, onChange: (e) => setScoreNote(e.target.value), placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
                         React.createElement(MicButton, { onText: setScoreNote, current: scoreNote })),
+                    React.createElement(NotePast, { rows: noteHistory(data, "goal", g.id, coach.t) }),
                     React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (React.createElement("button", { key: n, className: "tap", onClick: () => { score(g.id, n, scoreNote.trim()); setScoreNote(""); setScoring(null); }, style: { flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8, cursor: "pointer",
                             fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
                             border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted } }, n)))),
@@ -8377,7 +8463,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
                         React.createElement(Timer, { key: d.id + ":tR", seconds: secs, label: `${d.label} — right`, compact: true })));
                 return React.createElement(Timer, { key: d.id + ":t", seconds: secs, label: d.label, compact: true });
             })(),
-            setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v) })),
+            setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v), history: noteHistory(data, "drill", d.id, coach.t) })),
             React.createElement("div", { style: { marginTop: 6 } },
                 React.createElement(HowTo, { f: d })))))));
 }
@@ -9524,6 +9610,39 @@ function Progress({ data, setData, coach, setSheet }) {
                 " week",
                 coach.weeksHit === 1 ? "" : "s",
                 ".")),
+        (() => {
+            var _a, _b;
+            const groups = [];
+            const seen = {};
+            const addRows = (id, label, rows) => {
+                if (!rows || !rows.length)
+                    return;
+                if (!seen[id]) {
+                    seen[id] = { key: id, label, rows: [] };
+                    groups.push(seen[id]);
+                }
+                seen[id].rows.push(...rows);
+            };
+            (((_a = data.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "weekly", f.id)));
+            (((_b = data.fields) === null || _b === void 0 ? void 0 : _b.monthly) || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "monthly", f.id)));
+            (coach.mobTests || []).forEach((m) => addRows("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
+            (coach.drills || []).forEach((x) => addRows("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
+            (data.goals || []).forEach((g) => addRows("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
+            groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+            groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
+            const total = groups.reduce((n, g) => n + g.rows.length, 0);
+            return (React.createElement(Fold, { title: "Everything you've written", note: total
+                    ? `${total} note${total === 1 ? "" : "s"} across ${groups.length} exercise${groups.length === 1 ? "" : "s"}`
+                    : "nothing written against an exercise yet" },
+                React.createElement(Explain, null, "Every word you have written against a particular exercise, kept under that exercise and never deleted. The numbers say what changed; this says why. It is also what the coach reads before it answers."),
+                !groups.length ? (React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.55 } }, "Nothing yet. Anything you type in the box under an exercise \u2014 in a battery, in the mobility check, in your ten minutes, or against a goal \u2014 gathers here and stays.")) : groups.map((gr) => (React.createElement("div", { key: gr.key, style: { padding: "10px 0", borderTop: `1px solid ${C.line}` } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 5 } }, gr.label),
+                    gr.rows.map((r, i) => (React.createElement("div", { key: i, style: { marginBottom: 6 } },
+                        React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } },
+                            dayAndMonth(r.date),
+                            r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
+                        React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text)))))))));
+        })(),
         React.createElement(Fold, { title: "Every day so far", note: `${recentDays.length} days, day by day, editable` },
             React.createElement(Explain, null, "Tap any day to change it: empty \u2192 trained \u2192 rest \u2192 empty. Use this to fix a mistake or fill in a day you forgot."),
             React.createElement("div", { style: { display: "flex", flexDirection: "column" } }, recentDays.map((d) => {
@@ -10996,6 +11115,17 @@ const mergeHeard = (soFar, next) => {
         return a; /* already have these words */
     return a + " " + b;
 };
+/* Two bursts either side of a pause are two different things she said, not
+   one restated — so they are JOINED, never merged. mergeHeard is right within
+   a single burst and wrong across two, because "yes" after "yes" is two. */
+const joinSpeech = (a, b) => {
+    const x = String(a || "").trim(), y = String(b || "").trim();
+    if (!x)
+        return y;
+    if (!y)
+        return x;
+    return x + " " + y;
+};
 function useDictation(onText) {
     const [listening, setListening] = useState(false);
     const [supported, setSupported] = useState(false);
@@ -11019,6 +11149,22 @@ function useDictation(onText) {
     const wants = useRef(false); /* does she still intend to be talking */
     const shortEnds = useRef(0); /* consecutive sessions that died instantly */
     const startedAt = useRef(0);
+    /* ---- WHY ONLY THE LAST PART OF A SENTENCE SURVIVED -------------------
+       10 August: "it keeps recording, but the write-up comes out fragmented,
+       and it only records the last part of what I said and neglects the rest."
+  
+       The auto-restart above is what did it. Every restart is a NEW recognition
+       session and a new session starts with an EMPTY results list — so onresult,
+       which rebuilds the text from that list, rebuilt it from nothing but the
+       newest burst and wrote over everything said before the pause. The longer
+       she talked the more restarts there were, so the more of it vanished, and
+       what survived was always the tail.
+  
+       "carried" holds everything completed in earlier bursts of the same
+       dictation. What she is saying right now is added to it, never instead
+       of it. */
+    const carried = useRef(""); /* bursts already finished, this run   */
+    const heardNow = useRef(""); /* the burst in progress               */
     useEffect(() => {
         const SR = typeof window !== "undefined" &&
             (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -11046,7 +11192,8 @@ function useDictation(onText) {
             let out = "";
             for (let i = 0; i < e.results.length; i++)
                 out = mergeHeard(out, e.results[i][0].transcript);
-            cb.current(out);
+            heardNow.current = out;
+            cb.current(joinSpeech(carried.current, out));
         };
         r.onend = () => {
             if (!wants.current) {
@@ -11061,6 +11208,9 @@ function useDictation(onText) {
                 setProblem("Dictation keeps stopping on its own. Type instead for now — the box beside the microphone takes typing.");
                 return;
             }
+            /* bank the burst that just ended — the next session starts empty */
+            carried.current = joinSpeech(carried.current, heardNow.current);
+            heardNow.current = "";
             try {
                 r.start();
             }
@@ -11070,19 +11220,19 @@ function useDictation(onText) {
             }
         };
         r.onerror = (e) => {
+            /* no-speech fires on any silence and aborted fires on our own restart.
+               Neither is a failure, and neither may turn the button off: it used to
+               say "not listening" while the microphone was still running, and then
+               a tap could not stop it because the session was already open. */
+            if ((e === null || e === void 0 ? void 0 : e.error) === "no-speech" || (e === null || e === void 0 ? void 0 : e.error) === "aborted") {
+                setProblem(null);
+                return;
+            }
             wants.current = false;
             shortEnds.current = 0;
             setListening(false);
             if ((e === null || e === void 0 ? void 0 : e.error) === "not-allowed" || (e === null || e === void 0 ? void 0 : e.error) === "service-not-allowed")
                 setProblem("Microphone permission was refused. Allow it for this site in your browser settings.");
-            /* no-speech fires on any silence and is not a failure — it used to
-               stop her mid-thought and show a message. It just keeps listening. */
-            else if ((e === null || e === void 0 ? void 0 : e.error) === "no-speech") {
-                wants.current = true;
-                setProblem(null);
-            }
-            else if ((e === null || e === void 0 ? void 0 : e.error) === "aborted")
-                setProblem(null);
             else if ((e === null || e === void 0 ? void 0 : e.error) === "network")
                 setProblem("Dictation needs a connection. It's the one part of the app that does.");
             else if (e === null || e === void 0 ? void 0 : e.error)
@@ -11109,6 +11259,8 @@ function useDictation(onText) {
         else {
             wants.current = true;
             shortEnds.current = 0;
+            carried.current = "";
+            heardNow.current = "";
             try {
                 r.start();
                 setListening(true);
@@ -11846,6 +11998,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 } },
                                 React.createElement("textarea", { rows: 2, value: goalNotes[g.id] || "", onChange: (e) => setGoalNotes((n) => ({ ...n, [g.id]: e.target.value })), placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 } }),
                                 React.createElement(MicButton, { onText: (v) => setGoalNotes((n) => ({ ...n, [g.id]: v })), current: goalNotes[g.id] || "" })),
+                            React.createElement(NotePast, { rows: noteHistory(data, "goal", g.id, coach.t) }),
                             React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 } }, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (React.createElement("button", { key: n, className: "tap", "aria-label": `score ${n} for ${g.text}`, onClick: () => scoreGoal(g.id, n), style: { flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8,
                                     cursor: "pointer", fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
                                     border: `1.5px solid ${C.line}`, background: C.card, color: C.muted } }, n))))));
@@ -13458,7 +13611,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 group.map((f) => (React.createElement("div", { key: f.id },
                     onlyMonthly(f) && (React.createElement("div", { className: "mono", style: { fontSize: 8.5, letterSpacing: "0.12em",
                             textTransform: "uppercase", color: C.ochre, marginBottom: 2 } }, "only here")),
-                    React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), pb: f.better === "up" ? coach.pbs[f.id] : null }))))));
+                    React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), history: noteHistory(data, which, f.id, key), pb: f.better === "up" ? coach.pbs[f.id] : null }))))));
         }),
         goalTests.length > 0 && (React.createElement(Card, { style: { marginBottom: 12, background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, "The things you want to do"),
@@ -13502,7 +13655,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                     : `All ${mobTests.length}, warm, at the end. ${mobTests.filter((m) => m.side).length} of them measured left and right — an asymmetry is the thing a single number hides.`,
                 " ",
                 "These choose your ten minutes of drills until the next one."),
-            mobTests.map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: mob[m.id] || {}, put: putMob }))))),
+            mobTests.map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: mob[m.id] || {}, put: putMob, history: noteHistory(data, "mobility", m.id, coach.ws) }))))),
         React.createElement("div", { style: { marginTop: 14 } },
             (() => {
                 const filled = (f) => {
