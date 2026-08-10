@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 85";
+const BUILD = "10 August 2026 · 86";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7248,6 +7248,13 @@ function AutoText({ value, onChange, rows = 2, placeholder, style, ...rest }) {
     el.style.height = "auto";
     const h = Number(el.scrollHeight) || 0;
     if (h > 0) el.style.height = h + "px";
+    /* a capped box scrolls inside itself past the cap, and follows the cursor
+       to the end so what she is saying right now is always the visible part */
+    if (style && style.maxHeight && el.clientHeight < el.scrollHeight) {
+      el.style.overflowY = "auto";
+      if (typeof el.selectionStart === "number" && el.selectionStart >= String(el.value || "").length - 2)
+        el.scrollTop = el.scrollHeight;
+    }
   });
   return (
     <textarea ref={ref} rows={rows} value={value || ""} placeholder={placeholder}
@@ -9107,6 +9114,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   const [open, setOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
   const [clearing, setClearing] = useState(false);
+  /* a logged session is one line on Today; this opens the rest of it */
+  const [sessionDetail, setSessionDetail] = useState(false);
   const [adding, setAdding] = useState(false);
 
   const remaining = Math.max(0, coach.seasonTarget - coach.weekDone);
@@ -9533,7 +9542,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                  belongs beside the thing it removes. Two taps, because it
                  deletes something (rule 20), and it clears only the session:
                  the mood, the sleep and anything else that day stay put. */}
-            {log?.type && (
+            {log?.type && (!log?.completed || sessionDetail) && (
               <div style={{ marginTop: 9 }}>
                 {clearing ? (
                   <div style={{ padding: "11px 13px", background: C.chalk, borderRadius: 11 }}>
@@ -9603,8 +9612,48 @@ function Today({ data, setData, coach, setSheet, goTab }) {
             )}
 
             {/* once a class is chosen */}
-            {log?.type && (
+            {/* HER INSTRUCTION, 10 August, with a marker pen through the lot:
+                "why is all this on the landing page... I only need the carry
+                on button." Once the session is logged, ALL of it folds to one
+                line. The questions still exist — behind "details", and inside
+                the sitting the carry-on opens — they just stop living on the
+                landing page. */}
+            {log?.type && log?.completed && !sessionDetail && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "13px 15px",
+                  borderRadius: 12, background: C.mint }}>
+                  <span style={{ color: C.moss, fontSize: 17 }}>✓</span>
+                  <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: C.moss }}>
+                    Session logged{log.minutes ? ` · ${log.minutes} min` : ""}{log.rpe ? ` · ${log.rpe}/10` : ""}
+                  </span>
+                  <button onClick={() => setSessionDetail(true)} className="tap" style={{
+                    border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
+                    fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>details</button>
+                </div>
+                {(() => {
+                  const isMonthly = /benchmark/i.test(String(log.type || ""));
+                  const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
+                  if (!isMonthly && !isWeeklyM) return null;
+                  const pr = isMonthly ? coach.monthlyProgress : coach.weeklyProgress;
+                  const shut = isMonthly ? coach.monthlyDone : coach.weeklyDone;
+                  if (shut || !pr || !pr.total) return null;
+                  return (
+                    <div className="mono" style={{ fontSize: 10.5, color: C.clay, marginTop: 7 }}>
+                      the tick is the session — the {isMonthly ? "benchmark" : "weekly check"} numbers are
+                      {" "}{pr.pct}% in, {pr.left} still to enter
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {log?.type && (!log?.completed || sessionDetail) && (
               <>
+                {sessionDetail && (
+                  <div style={{ marginTop: 10 }}>
+                    <Btn kind="quiet" onClick={() => setSessionDetail(false)}>Fold it away again</Btn>
+                  </div>
+                )}
                 {s && (
                   <div style={{ marginTop: 14 }}>
                     <SessionBlock primary cls={s} note={log?.sessionNote}
@@ -15760,7 +15809,21 @@ ${coach.voicePatterns.length ? coach.voicePatterns.map((v) => `  * ${v.text}`).j
   say so plainly and help her plan for it rather than waiting for it to happen.
 - WHAT YOU HAVE TALKED ABOUT BEFORE (most recent conversations — read these so she never has to repeat
   herself, and so you can pick up threads she left open):
-${(data.chats || []).slice(-6).map((c) => `  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-6).map((m) => `${m.role === "user" ? "SHE" : "YOU"}: ${(m.text || "").slice(0, 200)}`).join(" | ")}`).join("\n") || "  no previous conversations"}
+${(() => {
+  /* HER REPORT, 10 August: "the coach is still stale — it does not integrate
+     all my communications." It couldn't: this read six messages per
+     conversation, 200 characters each. A day with thirty exchanges lost most
+     of itself before the coach ever saw it. TODAY goes in whole — every
+     message, uncut. Earlier days are trimmed but real. */
+  const all = data.chats || [];
+  const todayC = all.filter((c) => c.date === coach.t);
+  const older = all.filter((c) => c.date !== coach.t).slice(-8);
+  const one = (m) => `${m.role === "user" ? "SHE" : "YOU"}: ${m.text || ""}`;
+  const lines = [];
+  todayC.forEach((c) => lines.push(`  * TODAY, in full — every word of it:\n${(c.messages || []).map((m) => "      " + one(m)).join("\n")}`));
+  older.forEach((c) => lines.push(`  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-10).map((m) => one(m).slice(0, 300)).join(" | ")}`));
+  return lines.join("\n") || "  no previous conversations";
+})()}
 - THE RECORD — everything she has told you that isn't a number. READ THIS BEFORE ANSWERING ANYTHING
   about how she feels, a pain, a tightness, or a question she has asked before. Never answer from
   scratch if it is already in here — refer back to it by date, say what she tried, and say whether it
@@ -16114,17 +16177,28 @@ Two or three sentences unless she asks for more.`;
         <div ref={endRef} />
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <AutoText value={draft} onChange={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Say it, or hold the mic"
-          style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
-        <MicButton onText={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
-          current={draft} />
-        <button onClick={send} disabled={busy || !draft.trim()} className="tap" style={{
-          padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
-          background: draft.trim() && !busy ? C.signal : C.line, color: C.chalk,
-        }}>Send</button>
+      {/* HER REPORT, 10 August: "there is no send button after I finish my
+          recording." There was — three screens down. A long dictation grew the
+          box until Send was pushed off the bottom of the sheet, which from
+          where she stands is a missing button. The composer is pinned to the
+          bottom of the screen now, the box stops growing at a third of it and
+          scrolls inside itself past that, and Send sits beside the mic where
+          it can never leave. */}
+      <div style={{ position: "sticky", bottom: 0, background: C.chalk,
+        padding: "10px 0 4px", borderTop: `1px solid ${C.line}` }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <AutoText value={draft} onChange={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Say it, or hold the mic"
+            style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45,
+              maxHeight: "32vh", overflowY: "auto" }} />
+          <MicButton onText={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
+            current={draft} />
+          <button onClick={send} disabled={busy || !draft.trim()} className="tap" style={{
+            padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
+            background: draft.trim() && !busy ? C.signal : C.line, color: C.chalk,
+          }}>Send</button>
+        </div>
       </div>
 
       <div style={{ marginTop: 20 }}>
@@ -16590,6 +16664,37 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       )}
 
       <div style={{ marginTop: 14 }}>
+      {/* THE SESSION ITSELF, UNDER CARRY ON — her instruction, 10 August.
+          Everything Today used to spread across the landing page about this
+          sitting-as-a-session is asked here instead, writing to the same day
+          log. Only on the current sitting; an old month is numbers only. */}
+      {isCurrent && (() => {
+        const dayLog = (data.logs || {})[coach.t] || {};
+        const putLog = (patch) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+          [coach.t]: { ...((d.logs || {})[coach.t] || {}), ...patch } } }));
+        return (
+          <Card style={{ marginBottom: 12 }}>
+            <Eyebrow>The session itself</Eyebrow>
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 10px" }}>
+              This sitting counts as today's session. Say how it went here — none of it sits on the
+              landing page any more.
+            </div>
+            <Field label="How long" unit="min" value={dayLog.minutes ?? ""}
+              onChange={(v) => putLog({ minutes: v, type: dayLog.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark"), completed: true })} />
+            <RpeTap value={dayLog.rpe} onChange={(v) => putLog({ rpe: v })} />
+            {dayLog.rpe && <SetsTap value={dayLog.sets} onChange={(v) => putLog({ sets: v })} />}
+            {dayLog.rpe && <DuringTap value={dayLog.during} onChange={(v) => putLog({ during: v })} />}
+            {dayLog.during && <WhenTap value={dayLog.when} onChange={(v) => putLog({ when: v })} />}
+            {dayLog.during && (
+              <Scale label="How you felt afterwards" value={dayLog.energyAfter}
+                onChange={(v) => putLog({ energyAfter: v })} max={5} lo="wiped" hi="great" />
+            )}
+            <Note label="A line about how it went" value={dayLog.sessionNote}
+              onChange={(v) => putLog({ sessionNote: v })} />
+          </Card>
+        );
+      })()}
+
         {(() => {
           const filled = (f) => {
             if (f.type === "note" || f.type === "scale") return String(form[f.id] || "").trim() !== "";
