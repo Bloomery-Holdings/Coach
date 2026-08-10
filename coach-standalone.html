@@ -2668,6 +2668,18 @@ const analyseMeasure = (f, store, F = FORMULA_DEFAULTS) => {
         isBest: neutral ? false : now.v === best.v && series.length > 1,
         points: series.length,
         rung: rungNow, rungMoved,
+        /* THE TWO NUMBERS SHE ACTUALLY SETS.
+           The total is a product of these, and an instruction has to be given in
+           them or it cannot be followed. They were referenced by the shoulder
+           ceiling above and never actually put on this object, so every reading
+           of m.weight and m.reps was NaN and fell through to its guard. */
+        bilateral: !!f.bilateral,
+        weight: f.type === "weightreps" ? (Number(store[now.k][f.id + "__w"]) || null) : null,
+        reps: f.type === "weightreps"
+            ? (f.bilateral
+                ? ((Number(store[now.k][f.id + "__L"]) || 0) + (Number(store[now.k][f.id + "__R"]) || 0)) || null
+                : (Number(store[now.k][f.id]) || null))
+            : null,
         /* A rung change is judged by the rung. Otherwise, only past its own error
            floor does a move get a direction. And a neutral measure never gets one. */
         direction: neutral ? "tracked"
@@ -3048,7 +3060,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 74";
+const BUILD = "10 August 2026 · 75";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7323,12 +7335,41 @@ const Scale = ({ label, value, onChange, max = 5, lo, hi, pb }) => (React.create
     (lo || hi) && React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: C.muted } },
         React.createElement("span", null, lo),
         React.createElement("span", null, hi))));
+/* ============================================================================
+   A BOX THAT GROWS WITH WHAT SHE SAYS
+   ---------------------------------------------------------------------------
+   HER REPORT, 10 August: "I still can't see the note I input. Unless I scroll
+   inside the box, I can't see what I wrote. And this applies everywhere in the
+   application."
+
+   Every note box was two rows tall and fixed. Dictate three sentences into it
+   and the first two scroll out of sight — so the one input method the app is
+   built around (rule 22) produced text she could not read back. A box she
+   cannot read is a box she stops trusting.
+
+   It measures its own content after every render and takes exactly the height
+   that content needs. CSS field-sizing does the same thing natively where the
+   browser has it; this works everywhere.
+   ==========================================================================*/
+function AutoText({ value, onChange, rows = 2, placeholder, style, ...rest }) {
+    const ref = useRef(null);
+    useEffect(() => {
+        const el = ref.current;
+        if (!el || !el.style)
+            return; /* no DOM under test — nothing to size */
+        el.style.height = "auto";
+        const h = Number(el.scrollHeight) || 0;
+        if (h > 0)
+            el.style.height = h + "px";
+    });
+    return (React.createElement("textarea", { ref: ref, rows: rows, value: value || "", placeholder: placeholder, onChange: (e) => onChange(e.target.value), style: { ...style, resize: "none", overflow: "hidden" }, ...rest }));
+}
 /* Rule 22: typing is friction, and friction is why people stop. Every box that
    takes her words takes her voice too. */
 const Note = ({ label, value, onChange, hint }) => (React.createElement("div", { style: { display: "block", marginBottom: 12 } },
     React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, label),
     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-        React.createElement("textarea", { rows: 2, value: value || "", onChange: (e) => onChange(e.target.value), placeholder: "Type here, or use the microphone", style: { ...inputStyle, resize: "vertical", marginBottom: 0, fontFamily: "'IBM Plex Sans', sans-serif" } }),
+        React.createElement(AutoText, { value: value, onChange: onChange, placeholder: "Type here, or use the microphone", style: { ...inputStyle, marginBottom: 0, fontFamily: "'IBM Plex Sans', sans-serif" } }),
         React.createElement(MicButton, { onText: onChange, current: value || "" })),
     hint && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.45 } }, hint)));
 /* ---------------------------------------------------------------------------
@@ -7345,7 +7386,7 @@ function EditableText({ value, onSave, children, rows = 3, placeholder, small })
     if (editing) {
         return (React.createElement("div", null,
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 } },
-                React.createElement("textarea", { rows: rows, value: draft, onChange: (e) => setDraft(e.target.value), placeholder: placeholder || "Type here, or use the microphone", style: { ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 } }),
+                React.createElement(AutoText, { rows: rows, value: draft, onChange: setDraft, placeholder: placeholder || "Type here, or use the microphone", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                 React.createElement(MicButton, { onText: setDraft, current: draft })),
             React.createElement("div", { style: { display: "flex", gap: 8 } },
                 React.createElement("button", { className: "tap", onClick: () => { onSave(draft); setEditing(false); }, style: {
@@ -7880,7 +7921,7 @@ function NotePast({ rows }) {
                 r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
             React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text))))))));
 }
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history }) {
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask }) {
     const has = !!String(value || "").trim();
     const [open, setOpen] = useState(has);
     if (!open)
@@ -7894,11 +7935,18 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
             React.createElement(NotePast, { rows: history })));
     return (React.createElement("div", null,
         React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" } },
-            React.createElement("textarea", { rows: 2, value: value || "", onChange: (e) => onChange(e.target.value), placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 } }),
+            React.createElement(AutoText, { value: value, onChange: onChange, placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 12.5 } }),
             React.createElement(MicButton, { onText: onChange, current: value || "" })),
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 } },
+            React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.moss } }, "saved as you type"),
+            ask && String(value || "").trim() !== "" && (React.createElement("button", { onClick: () => ask(String(value || "").trim()), className: "tap", style: {
+                    border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
+                    padding: "7px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+                    fontFamily: "inherit"
+                } }, "Ask your coach about this \u2192"))),
         React.createElement(NotePast, { rows: history })));
 }
-const AssessInput = ({ f, form, set, pb, target, history }) => {
+const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
     var _a, _b, _c;
     if (f.type === "note")
         return (React.createElement("div", null,
@@ -7962,7 +8010,7 @@ const AssessInput = ({ f, form, set, pb, target, history }) => {
                 return (React.createElement(Timer, { key: f.id + ":up", compact: true, label: f.label, onStop: (v) => set(f.id, String(v)) }));
             return null;
         })(),
-        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history }),
+        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history, ask: ask }),
         React.createElement(HowTo, { f: f })));
 };
 /* ============================================================================
@@ -8040,7 +8088,7 @@ function SessionBlock({ cls, note, minutes, onNote, onMinutes, onClass, onRemove
             React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 12, lineHeight: 1.45 } }, "These belong to the class, so the change sticks for every time you do it."))),
         showNote ? (React.createElement("div", { style: { marginTop: 12 } },
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                React.createElement("textarea", { rows: 2, value: note || "", onChange: (e) => onNote(e.target.value), placeholder: "How it went, what you changed, what hurt", style: { ...inputStyle, resize: "vertical", lineHeight: 1.5, marginBottom: 0, fontSize: 13.5 } }),
+                React.createElement(AutoText, { value: note, onChange: onNote, placeholder: "How it went, what you changed, what hurt", style: { ...inputStyle, lineHeight: 1.5, marginBottom: 0, fontSize: 13.5 } }),
                 React.createElement(MicButton, { onText: onNote, current: note || "" })))) : (React.createElement("button", { onClick: () => setShowNote(true), className: "tap", style: {
                 border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
                 fontSize: 11.5, color: C.muted, fontWeight: 500,
@@ -8108,7 +8156,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put, history }) {
+function MobRow({ m, e, put, history, ask }) {
     /* HER REPORT, 10 August: "in the mobility check you didn't put neither
        explanation of how it's done nor the link nor the photo. Although these
        are the ones that will really require to see a progression."
@@ -8143,7 +8191,7 @@ function MobRow({ m, e, put, history }) {
                 React.createElement(Field, { label: "Left", unit: String(m.unit || "").replace("/", "of "), value: e.l || "", onChange: (v) => put(m.id, { l: v }) })),
             React.createElement("span", { style: { flex: 1 } },
                 React.createElement(Field, { label: "Right", unit: String(m.unit || "").replace("/", "of "), value: e.r || "", onChange: (v) => put(m.id, { r: v }) })))) : (React.createElement(Field, { label: "Score", unit: String(m.unit || "").replace("/", "of "), value: e.v || "", onChange: (v) => put(m.id, { v }) })),
-        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }), history: history })));
+        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }), history: history, ask: ask })));
 }
 function MobilitySheet({ data, setData, coach, close }) {
     const wk = coach.ws;
@@ -8251,7 +8299,7 @@ function RecordCard({ data, setData, coach, setSheet }) {
                             last.helped >= 4 ? "helped" : last.helped >= 3 ? "some help" : "didn't help")))),
                 trying === iss.id ? (React.createElement("div", { style: { marginTop: 10 } },
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                        React.createElement("textarea", { rows: 2, value: what, onChange: (e) => setWhat(e.target.value), placeholder: "What did you do about it?", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                        React.createElement(AutoText, { value: what, onChange: setWhat, placeholder: "What did you do about it?", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                         React.createElement(MicButton, { onText: setWhat, current: what })),
                     React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 7 } }, "Did it help?"),
                     React.createElement("div", { style: { display: "flex", gap: 5 } }, [1, 2, 3, 4, 5].map((n) => (React.createElement("button", { key: n, className: "tap", onClick: () => { logTried(iss.id, what || "unspecified", n); setWhat(""); setTrying(null); }, style: { flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer", fontSize: 11,
@@ -8272,7 +8320,7 @@ function RecordCard({ data, setData, coach, setSheet }) {
         }),
         adding ? (React.createElement("div", { style: { marginTop: 12 } },
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                React.createElement("textarea", { rows: 3, value: text, onChange: (e) => setText(e.target.value), placeholder: "My right lower back is tight again...", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                React.createElement(AutoText, { rows: 3, value: text, onChange: (v) => setText(v), placeholder: "My right lower back is tight again...", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                 React.createElement(MicButton, { onText: setText, current: text })),
             React.createElement(Btn, { kind: "signal", onClick: add }, "Tell the coach"),
             React.createElement("div", { style: { marginTop: 7 } },
@@ -8335,7 +8383,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                 scoring === g.id ? (React.createElement("div", { style: { marginTop: 10 } },
                     React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 7 } }, "Try it now. How close are you, out of ten?"),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                        React.createElement("textarea", { rows: 2, value: scoreNote, onChange: (e) => setScoreNote(e.target.value), placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                        React.createElement(AutoText, { value: scoreNote, onChange: setScoreNote, placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                         React.createElement(MicButton, { onText: setScoreNote, current: scoreNote })),
                     React.createElement(NotePast, { rows: noteHistory(data, "goal", g.id, coach.t) }),
                     React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4 } }, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (React.createElement("button", { key: n, className: "tap", onClick: () => { score(g.id, n, scoreNote.trim()); setScoreNote(""); setScoring(null); }, style: { flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8, cursor: "pointer",
@@ -8378,7 +8426,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
         }),
         adding ? (React.createElement("div", { style: { marginTop: 12 } },
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                React.createElement("textarea", { rows: 2, value: text, onChange: (e) => setText(e.target.value), placeholder: "What do you want to be able to do?", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                React.createElement(AutoText, { value: text, onChange: setText, placeholder: "What do you want to be able to do?", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                 React.createElement(MicButton, { onText: setText, current: text })),
             React.createElement(Btn, { kind: "signal", onClick: add }, "Add it"),
             React.createElement("div", { style: { marginTop: 7 } },
@@ -8568,7 +8616,7 @@ function BodyWorkCard({ log, write, isToday }) {
             React.createElement("div", { style: { fontSize: 11.5, lineHeight: 1.45, color: C.muted, marginBottom: 11 } }, (_b = therapyById(adding)) === null || _b === void 0 ? void 0 : _b.why),
             React.createElement(Field, { label: "How long", unit: "min", value: mins, onChange: setMins }),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 } },
-                React.createElement("textarea", { rows: 2, value: note, onChange: (e) => setNote(e.target.value), placeholder: "What they worked on, how it felt \u2014 optional", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                React.createElement(AutoText, { value: note, onChange: setNote, placeholder: "What they worked on, how it felt \u2014 optional", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                 React.createElement(MicButton, { onText: setNote, current: note })),
             React.createElement(Btn, { kind: "signal", onClick: add }, "Log it"),
             React.createElement("div", { style: { marginTop: 7 } },
@@ -8907,7 +8955,7 @@ function Today({ data, setData, coach, setSheet }) {
                                 fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                             } }, "same today")))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement("textarea", { rows: 2, value: (_c = log === null || log === void 0 ? void 0 : log.loads) !== null && _c !== void 0 ? _c : "", onChange: (e) => write({ loads: e.target.value }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: (_c = log === null || log === void 0 ? void 0 : log.loads) !== null && _c !== void 0 ? _c : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => write({ loads: v }), current: (log === null || log === void 0 ? void 0 : log.loads) || "" })),
                     React.createElement("div", { style: { marginTop: 7 } },
                         React.createElement(InfoNote, { small: true, why: "Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class \u2014 so next month you can see what actually moved rather than what the class usually calls for." }, "what this is for")))),
@@ -9274,7 +9322,7 @@ function Workouts({ data, setData, coach }) {
                             num),
                         React.createElement("span", { className: "mono", style: { fontSize: 10, color: coach.themesAuto[lvl] ? C.moss : C.ochre } }, coach.themesAuto[lvl] ? "set by coach" : "yours")),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement("textarea", { rows: 2, value: (_a = plan.themes[lvl][num]) !== null && _a !== void 0 ? _a : coach.auto[lvl], onChange: (e) => setTheme(lvl, num, e.target.value), style: { ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0,
+                        React.createElement(AutoText, { value: (_a = plan.themes[lvl][num]) !== null && _a !== void 0 ? _a : coach.auto[lvl], onChange: (v) => setTheme(lvl, num, v), style: { ...inputStyle, lineHeight: 1.45, marginBottom: 0,
                                 color: coach.themesAuto[lvl] ? C.muted : C.ink } }),
                         React.createElement(MicButton, { onText: (v) => setTheme(lvl, num, v), current: (_b = plan.themes[lvl][num]) !== null && _b !== void 0 ? _b : "" }))));
             }),
@@ -9336,16 +9384,16 @@ function Workouts({ data, setData, coach }) {
                     React.createElement(Field, { label: "Mission cue", unit: "shown on Today", type: "text", value: w.cue, onChange: (v) => patch(w.id, { cue: v }) }),
                     React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "Resistance / loads"),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 } },
-                        React.createElement("textarea", { rows: 3, value: w.resistance || "", onChange: (e) => patch(w.id, { resistance: e.target.value }), placeholder: "Plate weights, band strength, machine settings", style: { ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 } }),
+                        React.createElement(AutoText, { rows: 3, value: w.resistance || "", onChange: (v) => patch(w.id, { resistance: v }), placeholder: "Plate weights, band strength, machine settings", style: { ...inputStyle, lineHeight: 1.45, marginBottom: 0 } }),
                         React.createElement(MicButton, { onText: (v) => patch(w.id, { resistance: v }), current: w.resistance || "" })),
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 14, lineHeight: 1.45 } }, "Starting points from the published class formats, not prescriptions. Overwrite them with what you actually lift."),
                     React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "How the class runs"),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 } },
-                        React.createElement("textarea", { rows: 3, value: w.structure || "", onChange: (e) => patch(w.id, { structure: e.target.value }), placeholder: "Tracks, sections, how the effort is distributed", style: { ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 } }),
+                        React.createElement(AutoText, { rows: 3, value: w.structure || "", onChange: (v) => patch(w.id, { structure: v }), placeholder: "Tracks, sections, how the effort is distributed", style: { ...inputStyle, lineHeight: 1.45, marginBottom: 0 } }),
                         React.createElement(MicButton, { onText: (v) => patch(w.id, { structure: v }), current: w.structure || "" })),
                     React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "How it feels to you"),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 } },
-                        React.createElement("textarea", { rows: 3, value: w.felt || "", onChange: (e) => patch(w.id, { felt: e.target.value }), placeholder: "What's hard, what your shoulder does, what you change", style: { ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 } }),
+                        React.createElement(AutoText, { rows: 3, value: w.felt || "", onChange: (v) => patch(w.id, { felt: v }), placeholder: "What's hard, what your shoulder does, what you change", style: { ...inputStyle, lineHeight: 1.45, marginBottom: 0 } }),
                         React.createElement(MicButton, { onText: (v) => patch(w.id, { felt: v }), current: w.felt || "" })),
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 4, lineHeight: 1.45 } }, "Your coach reads this. It outranks anything I guessed.")))));
         }),
@@ -10244,9 +10292,13 @@ function VersionRow() {
                 marginTop: 9, lineHeight: 1.5 } }, line))));
 }
 /* -------------------------------------------------------- FIELD EDITOR ---- */
-function FieldEditor({ which, data, setData, close }) {
+function FieldEditor({ which, data, setData, close, focus }) {
     const [list, setList] = useState(data.fields[which]);
-    const [openId, setOpenId] = useState(null);
+    /* Opened from the "edit" beside a row, it lands on THAT exercise already
+       open. Her instruction, 10 August: "I need an edit button next to each
+       exercise. I can edit the exercise itself, I can edit how it's measured,
+       or I can delete it altogether." */
+    const [openId, setOpenId] = useState(focus || null);
     const patch = (id, p) => setList((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
     const move = (i, dir) => setList((l) => {
         const n = [...l], j = i + dir;
@@ -10597,7 +10649,7 @@ function Journal({ data, setData, coach, close }) {
         React.createElement(Card, { style: { marginBottom: 16 } },
             React.createElement(Eyebrow, null, "Write something"),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                React.createElement("textarea", { rows: 4, value: draft, onChange: (e) => setDraft(e.target.value), placeholder: "Anything at all \u2014 how the week is going, what you noticed, what you want to change", style: { ...inputStyle, resize: "vertical", lineHeight: 1.55, fontSize: 14.5, marginBottom: 10 } }),
+                React.createElement(AutoText, { rows: 4, value: draft, onChange: (v) => setDraft(v), placeholder: "Anything at all \u2014 how the week is going, what you noticed, what you want to change", style: { ...inputStyle, lineHeight: 1.55, fontSize: 14.5, marginBottom: 10 } }),
                 React.createElement(MicButton, { onText: setDraft, current: draft })),
             React.createElement(Btn, { kind: draft.trim() ? "signal" : "quiet", onClick: saveEntry }, "Save to today")),
         React.createElement("input", { type: "text", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "Search your notes", style: { ...inputStyle, marginBottom: 16 } }),
@@ -10606,7 +10658,7 @@ function Journal({ data, setData, coach, close }) {
             React.createElement("div", { className: "mono", style: { fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, marginBottom: 12 } }, parse(d).toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })),
             free.map((e) => (React.createElement("div", { key: e.id, style: { marginBottom: 14 } },
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                    React.createElement("textarea", { rows: 3, value: e.text, onChange: (ev) => editEntry(e.id, ev.target.value), className: "serif-it", style: { ...inputStyle, resize: "vertical", lineHeight: 1.55, fontSize: 15.5, marginBottom: 6,
+                    React.createElement(AutoText, { rows: 3, value: e.text, onChange: (v) => editEntry(e.id, v), className: "serif-it", style: { ...inputStyle, lineHeight: 1.55, fontSize: 15.5, marginBottom: 6,
                             background: "transparent", border: "none", borderLeft: `2px solid ${C.signal}`,
                             borderRadius: 0, padding: "0 0 0 12px" } }),
                     React.createElement(MicButton, { onText: (v) => editEntry(e.id, v), current: e.text })),
@@ -11723,7 +11775,7 @@ function WhyCard({ data, setData, coach, setSheet }) {
         reason && !nextQ && (React.createElement(React.Fragment, null,
             React.createElement("div", { style: { fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 7 } }, "Anything else about it? Only if you want to."),
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                React.createElement("textarea", { rows: 2, value: words, onChange: (e) => setWords(e.target.value), style: { ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 } }),
+                React.createElement(AutoText, { value: words, onChange: setWords, style: { ...inputStyle, marginBottom: 0, fontSize: 13.5 } }),
                 React.createElement(MicButton, { onText: setWords, current: words })),
             React.createElement("div", { style: { marginTop: 10 } },
                 React.createElement(Btn, { kind: "signal", onClick: () => save() }, "Done")),
@@ -11805,7 +11857,7 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
             React.createElement(Eyebrow, null, "Tell me something yourself"),
             adding ? (React.createElement(React.Fragment, null,
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                    React.createElement("textarea", { rows: 2, value: text, onChange: (e) => setText(e.target.value), placeholder: "I never want an early session on a Monday", style: { ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 } }),
+                    React.createElement(AutoText, { value: text, onChange: setText, placeholder: "I never want an early session on a Monday", style: { ...inputStyle, marginBottom: 0, fontSize: 13.5 } }),
                     React.createElement(MicButton, { onText: setText, current: text })),
                 React.createElement(Btn, { kind: "signal", onClick: addOwn }, "Add it"),
                 React.createElement("div", { style: { marginTop: 8 } },
@@ -11996,7 +12048,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                                 "/10 on ",
                                 dayAndMonth(last.date))),
                             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 } },
-                                React.createElement("textarea", { rows: 2, value: goalNotes[g.id] || "", onChange: (e) => setGoalNotes((n) => ({ ...n, [g.id]: e.target.value })), placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 } }),
+                                React.createElement(AutoText, { value: goalNotes[g.id] || "", onChange: (v) => setGoalNotes((n) => ({ ...n, [g.id]: v })), placeholder: "Anything to say about it? What stopped you, if something did.", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                                 React.createElement(MicButton, { onText: (v) => setGoalNotes((n) => ({ ...n, [g.id]: v })), current: goalNotes[g.id] || "" })),
                             React.createElement(NotePast, { rows: noteHistory(data, "goal", g.id, coach.t) }),
                             React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 } }, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (React.createElement("button", { key: n, className: "tap", "aria-label": `score ${n} for ${g.text}`, onClick: () => scoreGoal(g.id, n), style: { flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8,
@@ -12152,10 +12204,10 @@ function QuietRows({ rows, open, setOpen }) {
             React.createElement("span", { style: { fontSize: 15, color: C.muted, lineHeight: 1 } }, open === r.id ? "−" : "+")),
         open === r.id && React.createElement("div", { style: { margin: "0 -16px 10px" } }, r.node))))));
 }
-function MobilityEditor({ data, setData, coach, close }) {
+function MobilityEditor({ data, setData, coach, close, focus }) {
     var _a, _b;
     const [tab, setTab] = useState("tests");
-    const [openId, setOpenId] = useState(null);
+    const [openId, setOpenId] = useState(focus || null);
     const tests = ((_a = data.mobTests) === null || _a === void 0 ? void 0 : _a.length) ? data.mobTests : coach.mobTests;
     const drills = ((_b = data.drills) === null || _b === void 0 ? void 0 : _b.length) ? data.drills : coach.drills;
     const setTests = (fn) => setData((d) => { var _a; return ({ ...d, mobTests: fn(((_a = d.mobTests) === null || _a === void 0 ? void 0 : _a.length) ? d.mobTests : tests) }); });
@@ -12212,11 +12264,11 @@ function MobilityEditor({ data, setData, coach, close }) {
                         item.side ? " ✓" : "")),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "How to do it"),
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 } },
-                    React.createElement("textarea", { rows: 3, value: item.how || "", onChange: (e) => patchTest(item.id, { how: e.target.value }), style: { ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 } }),
+                    React.createElement(AutoText, { rows: 3, value: item.how || "", onChange: (v) => patchTest(item.id, { how: v }), style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                     React.createElement(MicButton, { onText: (v) => patchTest(item.id, { how: v }), current: item.how || "" })),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "Why it matters"),
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 } },
-                    React.createElement("textarea", { rows: 3, value: item.why || "", onChange: (e) => patchTest(item.id, { why: e.target.value }), style: { ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 } }),
+                    React.createElement(AutoText, { rows: 3, value: item.why || "", onChange: (v) => patchTest(item.id, { why: v }), style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                     React.createElement(MicButton, { onText: (v) => patchTest(item.id, { why: v }), current: item.why || "" })),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 6 } },
                     "Drills this points at ",
@@ -12235,7 +12287,7 @@ function MobilityEditor({ data, setData, coach, close }) {
                 React.createElement(Field, { label: "What it targets", unit: "", type: "text", value: item.targets || "", onChange: (v) => patchDrill(item.id, { targets: v }) }),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "How to do it"),
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                    React.createElement("textarea", { rows: 3, value: item.how || "", onChange: (e) => patchDrill(item.id, { how: e.target.value }), style: { ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 } }),
+                    React.createElement(AutoText, { rows: 3, value: item.how || "", onChange: (v) => patchDrill(item.id, { how: v }), style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                     React.createElement(MicButton, { onText: (v) => patchDrill(item.id, { how: v }), current: item.how || "" }))))))));
     return (React.createElement(React.Fragment, null,
         React.createElement(Eyebrow, { color: C.ochre }, "Yours to change"),
@@ -12485,7 +12537,7 @@ function ProgramView({ data, setData, coach, setSheet }) {
                     React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.muted } }, live ? `you are here · week ${coach.programWeek + 1}` : `weeks ${ph.from + 1}–${ph.to + 1}`)),
                 React.createElement("input", { value: ph.name, onChange: (e) => setField(pi, "name", e.target.value), style: { ...inputStyle, marginBottom: 6, fontSize: 15, fontWeight: 600 } }),
                 React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 } },
-                    React.createElement("textarea", { rows: 2, value: ph.line, onChange: (e) => setField(pi, "line", e.target.value), style: { ...inputStyle, marginBottom: 0, fontSize: 12.5, resize: "none", lineHeight: 1.5 } }),
+                    React.createElement(AutoText, { value: ph.line, onChange: (v) => setField(pi, "line", v), style: { ...inputStyle, marginBottom: 0, fontSize: 12.5, lineHeight: 1.5 } }),
                     React.createElement(MicButton, { onText: (v) => setField(pi, "line", v), current: ph.line || "" })),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 } },
                     React.createElement("span", { style: { fontSize: 12.5, color: C.muted } }, "Length"),
@@ -13344,7 +13396,7 @@ Two or three sentences unless she asks for more.`;
                     } }, m.content),
                 m.role === "user" && (editing === i ? (React.createElement("div", { style: { width: "85%", marginTop: 6 } },
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 } },
-                        React.createElement("textarea", { rows: 3, value: editDraft, onChange: (e) => setEditDraft(e.target.value), style: { ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 } }),
+                        React.createElement(AutoText, { rows: 3, value: editDraft, onChange: setEditDraft, style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
                         React.createElement(MicButton, { onText: setEditDraft, current: editDraft })),
                     React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "flex-end" } },
                         React.createElement("button", { className: "tap", onClick: () => {
@@ -13369,10 +13421,10 @@ Two or three sentences unless she asks for more.`;
             busy && React.createElement("div", { style: { fontSize: 12, color: C.muted, padding: "6px 2px" } }, "thinking\u2026"),
             React.createElement("div", { ref: endRef })),
         React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-            React.createElement("textarea", { rows: 2, value: draft, onChange: (e) => setDraft(e.target.value), onKeyDown: (e) => { if (e.key === "Enter" && !e.shiftKey) {
+            React.createElement(AutoText, { value: draft, onChange: setDraft, onKeyDown: (e) => { if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     send();
-                } }, placeholder: "Say it, or hold the mic", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 } }),
+                } }, placeholder: "Say it, or hold the mic", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
             React.createElement(MicButton, { onText: setDraft, current: draft }),
             React.createElement("button", { onClick: send, disabled: busy || !draft.trim(), className: "tap", style: {
                     padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -13411,16 +13463,50 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`
             : Math.round(v * 10) / 10);
         if (f.type === "weightreps") {
-            /* Load is a product, so the aim is a total you can reach either way —
-               more weight, more reps, whichever your body offers that day. */
+            /* ---- WHY "BEAT 173 KG TOTAL" WAS THE WRONG ANSWER ---------------
+               Her words, 10 August: "you've moved 170 kg, make it 173. How do I do
+               that? It's not even feasible. If I do one more rep it will be 175.
+               I want you to tell me: increase the weight from five kilograms to
+               six. That's how I see a progress requested from me."
+      
+               She is right, and the fault is a category error. Total load is a
+               PRODUCT of the only two things she can actually set — the weight on
+               the bar and the reps she gets in the minute — and neither of them
+               moves in units of one kilo of total. So the total stays as the
+               arithmetic behind it, and the instruction is now given in the two
+               numbers she types into this row.
+      
+               Weight first where the step is a real one, because that is what she
+               asked for and it is the harder stimulus. Reps where a weight step
+               would cost her more than about a third of the set — going 1 kg to
+               2 kg is a hundred per cent jump, and telling her to do it is telling
+               her to fail. */
             const prev = ((_a = m.reading) === null || _a === void 0 ? void 0 : _a.sub) || "";
-            return {
-                last: `${Math.round(m.now)} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`,
-                aim: frozen ? "hold what you did — shoulder"
-                    : sore ? "hold what you did — your shoulder was uncomfortable this week"
-                        : loadIsMass(f) ? `beat ${Math.round(raw)} kg total — more weight or more reps`
-                            : `beat ${Math.round(raw)} — a heavier band or more reps`,
-            };
+            const w = Number(m.weight), r = Number(m.reps);
+            const totalNow = Math.round(m.now);
+            const sides = m.bilateral ? 2 : 1;
+            const say = (n) => (sides === 2 ? `${Math.ceil(n / 2)} reps each side` : `${n} reps`);
+            const last = w > 0 && r > 0
+                ? `${w} ${loadUnit(f)} x ${say(r)} (${totalNow}${loadIsMass(f) ? " kg" : ""} moved)`
+                : `${totalNow} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`;
+            if (frozen)
+                return { last, aim: "hold what you did — shoulder" };
+            if (sore)
+                return { last, aim: "hold what you did — your shoulder was uncomfortable this week" };
+            if (!(w > 0 && r > 0)) {
+                return { last, aim: loadIsMass(f)
+                        ? `beat ${Math.round(raw)} kg moved — more weight or more reps`
+                        : `beat ${Math.round(raw)} — a heavier band or more reps` };
+            }
+            const stepUp = loadIsMass(f) ? (overhead ? KG_STEP_SHOULDER : (w < 4 ? 0.5 : 1)) : 1;
+            const upW = Math.round((w + stepUp) * 10) / 10;
+            const repsAtUpW = Math.max(1, Math.ceil(raw / upW));
+            const repsSameW = Math.max(r + 1, Math.ceil(raw / w));
+            const worthIt = repsAtUpW >= Math.ceil(r * 0.66);
+            const aim = worthIt
+                ? `go up to ${upW} ${loadUnit(f)} and get ${say(repsAtUpW)} — that beats what you did`
+                : `stay at ${w} ${loadUnit(f)} and get ${say(repsSameW)}`;
+            return { last, aim };
         }
         return { last: fmt(m.now), aim: (frozen || sore) ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
     };
@@ -13531,6 +13617,30 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     /* Her instruction: an estimate per exercise, so the sitting has a real
        budget rather than a hopeful one. Everything carries its own minutes and
        the total is arithmetic, not a promise. */
+    /* WHAT IS STILL EMPTY GOES TO THE TOP.
+       Her instruction, 10 August: "When there are exercises missing from the
+       battery, put them at the beginning of the measurements when I open. Don't
+       tell me eleven out of twenty-nine done. Rearrange them so the missing
+       ones are at the beginning, so I can complete them the following day."
+  
+       A fraction is a score, and a score on a half-finished sitting is the
+       wrong thing to hand her (rules 24, 25). The list itself is the answer:
+       open it the next day and the rows that still need her are the rows she
+       lands on. The order only changes once she has started — an untouched
+       battery has nothing to reorder, and the capability grouping is the right
+       shape for a fresh one. */
+    const isFilled = (f) => {
+        if (f.type === "note" || f.type === "scale")
+            return String(form[f.id] || "").trim() !== "";
+        if (f.type === "weightreps")
+            return String(form[f.id + "__w"] || "").trim() !== "";
+        if (f.bilateral)
+            return String(form[f.id + "__L"] || "").trim() !== "";
+        return String(form[f.id] || "").trim() !== "";
+    };
+    const doneFields = fields.filter(isFilled);
+    const left = fields.filter((f) => !isFilled(f));
+    const started = doneFields.length > 0;
     const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
     const batteryMins = Math.round(minsOf(fields) + minsOf(mobTests));
     const goalMins = Math.round(coach.goalMinutes || 0);
@@ -13551,34 +13661,11 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             " minutes",
             goalMins > 0 ? `, plus ${goalMins} for your goals` : ""),
         (() => {
-            const done = fields.filter((f) => {
-                if (f.type === "note" || f.type === "scale")
-                    return String(form[f.id] || "").trim() !== "";
-                if (f.type === "weightreps")
-                    return String(form[f.id + "__w"] || "").trim() !== "";
-                if (f.bilateral)
-                    return String(form[f.id + "__L"] || "").trim() !== "";
-                return String(form[f.id] || "").trim() !== "";
-            });
-            const left = fields.filter((f) => !done.includes(f));
             if (!fields.length)
                 return null;
-            return (React.createElement(Card, { style: { marginBottom: 14, background: left.length ? C.pist : C.mint } },
-                React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: C.ink } },
-                    done.length,
-                    " of ",
-                    fields.length,
-                    " entered",
-                    left.length === 0 ? " — all of them" : ""),
-                React.createElement("div", { style: { height: 6, borderRadius: 999, background: C.card, margin: "8px 0 10px", overflow: "hidden" } },
-                    React.createElement("div", { style: { height: "100%", width: `${Math.round((done.length / fields.length) * 100)}%`,
-                            background: left.length ? C.signal : C.moss } })),
-                left.length > 0 ? (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted } },
-                    "Still to do: ",
-                    left.map((f) => f.label).join(", "),
-                    ".",
-                    " ",
-                    "Everything you have typed is already saved \u2014 you can close this and come back to the rest whenever you like, and it will still be here.")) : (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted } }, "Every row is in. Press the button at the bottom when you want to close it off."))));
+            if (!started)
+                return null; /* nothing filled yet — nothing to say */
+            return (React.createElement(Card, { style: { marginBottom: 14, background: left.length ? C.pist : C.mint } }, left.length > 0 ? (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.ink } }, "Picking up where you left off. The ones you haven't done yet are at the top \u2014 work down from there. Everything you already typed is saved and sitting further down, exactly as you left it.")) : (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.ink } }, "Every row is in. Press the button at the bottom when you want to close it off."))));
         })(),
         React.createElement(Card, { style: { marginBottom: 14 } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between" } },
@@ -13602,17 +13689,33 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 } },
                 f.label,
                 " \u2014 put it back")))))),
-        [...CAPS, ""].map((cap) => {
-            const group = fields.filter((f) => (f.cap || "") === cap);
-            if (!group.length)
-                return null;
-            return (React.createElement(Card, { key: cap || "feel", style: { marginBottom: 12 } },
-                React.createElement(Eyebrow, null, cap ? capLabel(cap) : "How the week felt"),
-                group.map((f) => (React.createElement("div", { key: f.id },
-                    onlyMonthly(f) && (React.createElement("div", { className: "mono", style: { fontSize: 8.5, letterSpacing: "0.12em",
-                            textTransform: "uppercase", color: C.ochre, marginBottom: 2 } }, "only here")),
-                    React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), history: noteHistory(data, which, f.id, key), pb: f.better === "up" ? coach.pbs[f.id] : null }))))));
-        }),
+        (() => {
+            const row = (f) => (React.createElement("div", { key: f.id },
+                onlyMonthly(f) && (React.createElement("div", { className: "mono", style: { fontSize: 8.5, letterSpacing: "0.12em",
+                        textTransform: "uppercase", color: C.ochre, marginBottom: 2 } }, "only here")),
+                React.createElement(AssessInput, { f: f, form: form, set: set, target: targetFor(f), history: noteHistory(data, which, f.id, key), ask: (txt) => setSheet({ kind: "chat", about: f.label,
+                        seed: `About ${f.label}: ${txt}` }), pb: f.better === "up" ? coach.pbs[f.id] : null }),
+                React.createElement("button", { onClick: () => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id }), className: "tap", style: {
+                        border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 8px",
+                        fontSize: 11, color: C.muted, fontFamily: "inherit"
+                    } }, "edit or remove this exercise")));
+            const cards = [];
+            if (started && left.length) {
+                cards.push(React.createElement(Card, { key: "__left", style: { marginBottom: 12, borderLeft: `3px solid ${C.signal}` } },
+                    React.createElement(Eyebrow, { color: C.signal }, "Still to do"),
+                    left.map(row)));
+            }
+            const rest = started && left.length ? doneFields : fields;
+            [...CAPS, ""].forEach((cap) => {
+                const group = rest.filter((f) => (f.cap || "") === cap);
+                if (!group.length)
+                    return;
+                cards.push(React.createElement(Card, { key: cap || "feel", style: { marginBottom: 12 } },
+                    React.createElement(Eyebrow, null, (started && left.length ? "Already in · " : "") + (cap ? capLabel(cap) : "How the week felt")),
+                    group.map(row)));
+            });
+            return cards;
+        })(),
         goalTests.length > 0 && (React.createElement(Card, { style: { marginBottom: 12, background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, "The things you want to do"),
             React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 14px" } },
@@ -13632,7 +13735,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                             background: picked === n ? C.ink : C.card,
                             color: picked === n ? C.chalk : C.muted } }, n)))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginTop: 9 } },
-                        React.createElement("textarea", { rows: 2, value: goalWords[g.id] || "", onChange: (e) => putGoal(g.id, { note: e.target.value }), placeholder: "Why not a ten? What stopped you \u2014 anything at all.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: goalWords[g.id] || "", onChange: (v) => putGoal(g.id, { note: v }), placeholder: "Why not a ten? What stopped you \u2014 anything at all.", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => putGoal(g.id, { note: v }), current: goalWords[g.id] || "" }))));
             }),
             (coach.wonGoals || []).length > 0 && (React.createElement("div", { style: { marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` } },
@@ -13655,7 +13758,13 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                     : `All ${mobTests.length}, warm, at the end. ${mobTests.filter((m) => m.side).length} of them measured left and right — an asymmetry is the thing a single number hides.`,
                 " ",
                 "These choose your ten minutes of drills until the next one."),
-            mobTests.map((m) => (React.createElement(MobRow, { key: m.id, m: m, e: mob[m.id] || {}, put: putMob, history: noteHistory(data, "mobility", m.id, coach.ws) }))))),
+            mobTests.map((m) => (React.createElement("div", { key: m.id },
+                React.createElement(MobRow, { m: m, e: mob[m.id] || {}, put: putMob, history: noteHistory(data, "mobility", m.id, coach.ws), ask: (txt) => setSheet({ kind: "chat", about: m.label,
+                        seed: `About ${m.label}: ${txt}` }) }),
+                React.createElement("button", { onClick: () => setSheet({ kind: "edit-mobility", focus: m.id }), className: "tap", style: {
+                        border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
+                        fontSize: 11, color: C.muted, fontFamily: "inherit"
+                    } }, "edit or remove this test")))))),
         React.createElement("div", { style: { marginTop: 14 } },
             (() => {
                 const filled = (f) => {
@@ -13851,7 +13960,7 @@ function CoachApp() {
                     position: "relative",
                     fontSize: 10, fontWeight: 500, letterSpacing: "0.13em", textTransform: "uppercase",
                 } }, label))))),
-        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, close: () => setSheet(null) }))))));
+        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) }))))));
 }
 /* ============================================================================
    9. THE SAFETY NET
