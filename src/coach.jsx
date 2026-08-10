@@ -2359,9 +2359,9 @@ const SEED_WEEKLY = [
   { id: "plank", mins: 1.25, cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Forearms and toes, elbows under your shoulders, hips level with your shoulders. Time it until your hips drop or lift — the moment your body stops being a line, the clock stops.",
     why: "Trunk endurance. Not glamorous, but it is what lets everything else transmit force, and it is the reading most sensitive to a week off." },
-  { id: "updown", mins: 1.25, cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
-    how: "Sixty seconds. Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
-    why: "Trunk control while something is moving, which is much closer to real life than a static hold. It also loads the shoulder, so it is watched alongside pressing." },
+  { id: "bridge", mins: 1.25, cap: "core",     label: "Glute bridge",     role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. On your back, knees bent, feet flat and close enough to brush your fingertips with your heels. Drive through the heels and lift your hips until your body is a straight line from knee to shoulder, squeeze at the top, lower until your hips just touch the floor. That is one. Do not arch your lower back to get higher — the movement comes from the hips.",
+    why: "Hip extension and the glutes, which nothing else in this battery measures and which do most of the work in standing up, climbing stairs and walking uphill. Nothing goes through the shoulder, so it is a number you can keep building whatever the shoulder is doing." },
   { id: "sideplank", mins: 1.25, cap: "core",     label: "Side plank",       role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
     how: "On one forearm, body in a straight line, hips stacked. Time each side separately.",
     why: "The side of the trunk, the part a plank misses entirely. The difference between your two sides is the number worth watching." },
@@ -2577,7 +2577,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 56";
+const BUILD = "10 August 2026 · 57";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2637,8 +2637,11 @@ const openedFromDisk = () => {
   try { return typeof location !== "undefined" && location.protocol === "file:"; }
   catch (e) { return false; }
 };
-const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "elliptical"];
-const BATTERY_TIDY = 49;   /* the build that retired them; stamped so it runs once */
+const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "elliptical",
+  /* 10 August: it loads the shoulder she is rehabilitating, and she said
+     plainly she cannot do it. Replaced by the glute bridge below. */
+  "updown"];
+const BATTERY_TIDY = 56;   /* the build that last changed the list; stamped so each tidy runs once */
 
 const hasReading = (store, id) => {
   try {
@@ -2651,6 +2654,21 @@ const retireFields = (list, store, done) => {
   if (done || !Array.isArray(list) || !list.length) return list;
   const out = list.filter((f) => !RETIRED_WEEKLY.includes(f.id) || hasReading(store, f.id));
   return out.length === list.length ? list : out;
+};
+
+/* Retiring a row is only half of it. When a test is REPLACED, the replacement
+   has to arrive too — and `fillFromSeed` only ever patches rows she already
+   has. Anything in the seed that is missing from her list is added, in the
+   seed's own order, so a new test lands beside its neighbours rather than at
+   the bottom. Runs once, with the same stamp. */
+const addNewFields = (list, seed, done) => {
+  if (done || !Array.isArray(list) || !list.length) return list;
+  const have = new Set(list.map((f) => f.id));
+  const missing = seed.filter((f) => !have.has(f.id));
+  if (!missing.length) return list;
+  const order = seed.map((f) => f.id);
+  const rank = (f) => { const i = order.indexOf(f.id); return i === -1 ? 9999 : i; };
+  return [...list, ...missing].sort((a, b) => rank(a) - rank(b));
 };
 
 const BLANK = {
@@ -2780,9 +2798,11 @@ async function loadData() {
            herself is hers permanently. */
         fields: {
           weekly: d.fields?.weekly?.length
-            ? retireFields(
-                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"]),
-                d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
+            ? addNewFields(
+                retireFields(
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"]),
+                  d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY),
+                SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
             ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"])
@@ -2797,7 +2817,10 @@ async function loadData() {
         reviews: Array.isArray(d.reviews) ? d.reviews : [],
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
-          ? fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly"]) : SEED_MOBILITY,
+          ? addNewFields(
+              fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly"]),
+              SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
+          : SEED_MOBILITY,
         drills: Array.isArray(d.drills) && d.drills.length
           ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
         mobility: d.mobility || {},
@@ -3057,7 +3080,7 @@ const saveData = async (d) => {
 /* ============================================================================
    5. THE COACH
    ==========================================================================*/
-function useCoach(data, day) {
+function useCoach(data, day, clock) {
   return useMemo(() => {
     const { settings, logs, weekly, monthly, fields } = data;
     const morning = data.morning || {};
@@ -3070,6 +3093,13 @@ function useCoach(data, day) {
        watches the clock and hands the new date down. Falls back to reading it
        directly so nothing that calls useCoach(data) breaks. */
     const t = day || today();
+    /* ---- WHAT TIME IT IS, AND HOW LONG SHE HAS BEEN UP ----------------
+       Passed in rather than read here, for the same reason the date is: an
+       installed app is resumed, not restarted, so anything the engine reads
+       from the clock itself would be frozen at whenever she last opened it. */
+    const nowMins = Number.isFinite(clock) ? clock : minsOfDay();
+    const part = partOfDay(nowMins);
+    const nowLabel = hhmm(nowMins);
     const done = (d) => !!logs[d]?.completed;
     /* two on, one off beats fixed weekdays when the rhythm matters more than
        which day it lands on — the cycle just keeps turning */
@@ -3277,6 +3307,19 @@ function useCoach(data, day) {
     const loggedToday = logs[t] || null;
 
     /* recovery is entered in the morning and shapes the day before it happens */
+    /* WHEN SHE WOKE, and how long ago. Typed by hand in the morning card, or
+       filled from the WHOOP export's wake time when that lands. Everything the
+       coach says about how she feels this early leans on it. */
+    const mgToday = data.morning?.[t] || {};
+    const wokeRaw = mgToday.wokeAt
+      || (mgToday.wakeAt !== undefined && mgToday.wakeAt !== "" ? hhmm(Number(mgToday.wakeAt)) : "");
+    const wokeMins = parseHHMM(wokeRaw);
+    const minsAwake = wokeMins === null || nowMins < wokeMins ? null : nowMins - wokeMins;
+    const justWoke = minsAwake !== null && minsAwake <= 60;
+    const awakeLabel = minsAwake === null ? null
+      : minsAwake < 60 ? `${minsAwake} minutes`
+      : `${Math.floor(minsAwake / 60)}h ${String(minsAwake % 60).padStart(2, "0")}m`;
+
     const recValue = data.morning?.[t]?.recovery ?? loggedToday?.whoopRecovery ?? "";
     const recBaseline = recoveryBaseline(data.morning, t) || Number(settings.recoveryBaseline) || 55;
     const F = formulas(settings);
@@ -5997,7 +6040,16 @@ function useCoach(data, day) {
          outrank tone, because every compassionate line here is "warm" and
          every chase is "firm", so sorting by tone put her mood third, behind
          "your WHOOP recovery is still open". */
-      raise("day", "warm", lines[moodToday] || lines.flat, { lead: 1 });
+      /* HER EXAMPLE, 10 August, almost word for word: "you feel flat, but you
+         just woke up thirty minutes ago, so give it a little while."
+
+         It REPLACES the mood line rather than following it. Two warm openings
+         about the same feeling is two voices at once, and the second one
+         always sounds like it is arguing with the first. */
+      if (justWoke)
+        raise("day", "warm", `${lines[moodToday] || lines.flat} One thing before you decide anything: you have only been up ${awakeLabel}. Feeling like this that soon after waking is mostly just being awake — most people have no honest read on themselves for an hour or so. Coffee, move about, open a window. If it still feels like this in an hour then it is real, and we will work with it properly.`, { lead: 1 });
+      else
+        raise("day", "warm", lines[moodToday] || lines.flat, { lead: 1 });
     }
 
     /* Rule 3: the coach leads. It should not wait in Settings for her to find
@@ -6225,9 +6277,10 @@ function useCoach(data, day) {
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
-      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
+      batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
-  }, [data, day]);
+  }, [data, day, clock]);
 }
 
 /* ---------------------------------------------------------------------------
@@ -6239,6 +6292,56 @@ function useCoach(data, day) {
    This checks the clock every minute and whenever the app comes back to the
    front, and only changes anything on a date that has actually rolled over.
 --------------------------------------------------------------------------- */
+/* ============================================================================
+   THE CLOCK
+   ---------------------------------------------------------------------------
+   Her instruction, 10 August: "the whole app has to recognise day from night.
+   It doesn't have a clock. It doesn't know that I woke up or I'm sleeping. I
+   should tell it what time I woke up — because when I say I feel flat, it
+   should tell me: you only woke up thirty minutes ago."
+
+   So: minutes since midnight, in ten-minute steps. Ten rather than one because
+   the engine is a memo over everything she has ever logged, and there is no
+   coaching decision that changes between 7:03 and 7:09.
+========================================================================== */
+const minsOfDay = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const hhmm = (mins) => `${String(Math.floor(((mins % 1440) + 1440) % 1440 / 60)).padStart(2, "0")}:${String(Math.round(mins) % 60).padStart(2, "0")}`;
+const parseHHMM = (v) => {
+  const m = String(v || "").match(/^(\d{1,2})\s*[:.]?\s*(\d{2})$/);
+  if (!m) return null;
+  const h = Number(m[1]), mi = Number(m[2]);
+  return h >= 0 && h <= 23 && mi >= 0 && mi <= 59 ? h * 60 + mi : null;
+};
+/* What part of the day it is, in the words a person would use. */
+const PARTS = [
+  { key: "night", from: 0, to: 300, label: "the middle of the night" },
+  { key: "early", from: 300, to: 420, label: "very early" },
+  { key: "morning", from: 420, to: 720, label: "the morning" },
+  { key: "afternoon", from: 720, to: 1020, label: "the afternoon" },
+  { key: "evening", from: 1020, to: 1380, label: "the evening" },
+  { key: "late", from: 1380, to: 1440, label: "late at night" },
+];
+const partOfDay = (mins) => PARTS.find((p) => mins >= p.from && mins < p.to) || PARTS[0];
+
+const useClock = () => {
+  const [mins, setMins] = useState(() => Math.floor(minsOfDay() / 10) * 10);
+  useEffect(() => {
+    const check = () => setMins((m) => { const n = Math.floor(minsOfDay() / 10) * 10; return n === m ? m : n; });
+    let id = null;
+    try { id = setInterval(check, 60000); if (id && typeof id.unref === "function") id.unref(); } catch (e) {}
+    const onBack = () => { if (typeof document === "undefined" || document.visibilityState === undefined
+      || document.visibilityState === "visible") check(); };
+    try { document.addEventListener("visibilitychange", onBack); } catch (e) {}
+    try { window.addEventListener("focus", onBack); } catch (e) {}
+    return () => {
+      try { if (id) clearInterval(id); } catch (e) {}
+      try { document.removeEventListener("visibilitychange", onBack); } catch (e) {}
+      try { window.removeEventListener("focus", onBack); } catch (e) {}
+    };
+  }, []);
+  return mins;
+};
+
 const useToday = () => {
   const [day, setDay] = useState(today());
   useEffect(() => {
@@ -6882,33 +6985,25 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put, open, setOpen }) {
-  const isOpen = open === m.id;
+function MobRow({ m, e, put }) {
+  /* HER REPORT, 10 August: "in the mobility check you didn't put neither
+     explanation of how it's done nor the link nor the photo. Although these
+     are the ones that will really require to see a progression."
+
+     They were there — behind a chevron on the row header, which is not a
+     thing anyone taps. The strength battery has an explicit "how it's done"
+     link under every exercise, and these did not, so from where she was
+     standing they simply did not exist. Same component now, same words, same
+     photo slot, same video link. */
   return (
     <Card style={{ marginBottom: 11 }}>
-      <button className="tap" onClick={() => setOpen(isOpen ? null : m.id)} style={{
-        border: "none", background: "transparent", cursor: "pointer", padding: 0,
-        width: "100%", textAlign: "left", display: "block", marginBottom: 10 }}>
-        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{m.label}</span>
-          <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-            {m.unit}{m.side ? " · L/R" : ""} {isOpen ? "▴" : "▾"}
-          </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{m.label}</span>
+        <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+          {m.unit}{m.side ? " · L/R" : ""}
         </span>
-      </button>
-      {isOpen && (
-        <div style={{ marginBottom: 12, padding: "12px 14px", background: C.chalk, borderRadius: 11 }}>
-          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 8 }}>{m.how}</div>
-          <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted }}>{m.why}</div>
-          <ExercisePhoto id={m.id} />
-          <div style={{ marginTop: 10 }}>
-            <a href={videoFor(m)} target="_blank" rel="noreferrer" style={{
-              fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
-              {m.video ? "watch it →" : "find it on video →"}
-            </a>
-          </div>
-        </div>
-      )}
+      </div>
+      <HowTo f={m} />
       {m.side ? (
         <div style={{ display: "flex", gap: 10 }}>
           <span style={{ flex: 1 }}>
@@ -6951,7 +7046,7 @@ function MobilitySheet({ data, setData, coach, close }) {
       </div>
 
       {(coach.mobTests || []).map((m) => (
-        <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put} open={open} setOpen={setOpen} />
+        <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put} />
       ))}
 
       <Btn kind="signal" onClick={save}>Save this week</Btn>
@@ -7774,6 +7869,22 @@ function Today({ data, setData, coach, setSheet }) {
             </div>
             <div style={{ flex: 1 }}>
               <Field label="Sleep" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
+            </div>
+          </div>
+
+          {/* "It doesn't know that I woke up or I'm sleeping." — 10 August.
+              One field, and the coach stops treating the first half hour of
+              her day as a verdict on it. */}
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Woke at" unit="hh:mm" type="text" value={coach.wokeRaw}
+                onChange={(v) => setData((d) => ({ ...d,
+                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), wokeAt: v } } }))} />
+            </div>
+            <div style={{ flex: 1, paddingBottom: 12 }}>
+              <div className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+                {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
+              </div>
             </div>
           </div>
 
@@ -13486,6 +13597,12 @@ ${coach.openGoals.length ? coach.openGoals.map((g) => `  * "${g.text}"${(g.score
 - MOBILITY TESTS: ${coach.mobScore === null ? "not taken yet" : `overall ${coach.mobScore}%`}
 ${coach.mobScored.length ? coach.mobScored.map((r) => `  * ${r.label}: ${r.now}${r.unit}${r.gapPct !== null ? ` (L/R ${r.gapPct}% apart)` : ""}${r.moved !== null ? `, ${r.better ? "better" : "worse"} than last week` : ""}`).join("\n") : ""}
 - TODAY'S TEN MINUTES: ${coach.dailyDrills.list.length ? coach.dailyDrills.list.map((d) => d.label).join(", ") : "nothing prescribed"}
+- THE CLOCK. It is ${coach.nowLabel}, which is ${coach.part.label}. ${coach.awakeLabel
+    ? `She woke at ${coach.wokeRaw} and has been up ${coach.awakeLabel}.${coach.justWoke
+        ? " SHE HAS ONLY JUST WOKEN UP. If she says she feels flat, low, tired or unable to face it, say so kindly: nobody has an honest read on themselves in the first hour, and a decision about training made from inside it is made on the wrong information. Suggest she gives it an hour before deciding anything. Do not treat the feeling as false — treat the timing as unreliable."
+        : ""}`
+    : "She has not told you what time she woke, and the WHOOP export has not filled it in either. If how she feels this morning comes up, it is worth asking — it changes what an early low mood means."}
+  Use the time of day: do not offer a full session late at night, and do not talk about tomorrow's plan at six in the morning as though today were over.
 - HOW SHE SAYS SHE IS TODAY: ${coach.moodToday ? `she tapped "${coach.moodToday}"${coach.moodToday !== "good" ? " — this outranks everything below. Start with how she is, not with training. Do not open with a number or a plan." : ""}` : "not said"}
 - ADHERENCE STATE (this outranks any training consideration — the goal is that she is still training in a year):
   Lapse state: ${coach.lapseState}${coach.daysSinceSession !== null ? `, ${coach.daysSinceSession} days since her last session` : ""}. Weeks training: ${coach.weeksTraining}.
@@ -13793,7 +13910,6 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
      own store because every mobility calculation reads that shape. */
   const mobTests = (coach.mobTests || []).filter((m) => (isWeekly ? m.inWeekly !== false : true));
   const [mob, setMob] = useState(() => ({ ...(data.mobility?.[coach.ws] || {}) }));
-  const [mobOpen, setMobOpen] = useState(null);
   const putMob = (id, patch) => setMob((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }));
 
   /* Her instruction: an estimate per exercise, so the sitting has a real
@@ -13866,7 +13982,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             {" "}These choose your ten minutes of drills until the next one.
           </div>
           {mobTests.map((m) => (
-            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob} open={mobOpen} setOpen={setMobOpen} />
+            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob} />
           ))}
         </Card>
       )}
@@ -13969,7 +14085,8 @@ function CoachApp() {
   }
 
   const today_ = useToday();
-  const coach = useCoach(data, today_);
+  const clock_ = useClock();
+  const coach = useCoach(data, today_, clock_);
 
   const tab = stack[stack.length - 1];
   const go = (t) => { if (t !== tab) setStack((s) => [...s.slice(-9), t]); };
