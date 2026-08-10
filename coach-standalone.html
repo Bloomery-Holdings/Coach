@@ -1693,6 +1693,49 @@ const reviewPayload = (data, coach) => {
             return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
         }).join("\n");
     }));
+    S("WHAT SHE WROTE BESIDE A PARTICULAR EXERCISE", rvSafe(() => {
+        var _a, _b;
+        const pool = [...(((_a = d.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []), ...(((_b = d.fields) === null || _b === void 0 ? void 0 : _b.monthly) || [])];
+        const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+        const out = [];
+        [["weekly", d.weekly], ["monthly", d.monthly]].forEach(([which, store]) => {
+            Object.keys(store || {}).sort().forEach((k) => {
+                const e = store[k] || {};
+                Object.keys(e).forEach((key) => {
+                    if (!/__note$/.test(key))
+                        return;
+                    const v = String(e[key] || "").trim();
+                    if (v)
+                        out.push(`${k} ${which} — ${name(key.replace(/__note$/, ""))}: "${v}"`);
+                });
+            });
+        });
+        Object.keys(d.mobility || {}).sort().forEach((k) => {
+            const e = d.mobility[k] || {};
+            Object.keys(e).forEach((id) => {
+                var _a;
+                const v = e[id] && typeof e[id] === "object" ? String(e[id].note || "").trim() : "";
+                if (v)
+                    out.push(`${k} mobility — ${((_a = (d.mobTests || []).find((m) => m.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+            });
+        });
+        Object.keys(d.logs || {}).sort().forEach((date) => {
+            const dn = (d.logs[date] || {}).drillNotes || {};
+            Object.keys(dn).forEach((id) => {
+                var _a;
+                const v = String(dn[id] || "").trim();
+                if (v)
+                    out.push(`${date} ten minutes — ${((_a = (d.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+            });
+        });
+        if (!out.length)
+            return "she has not written anything against an individual exercise";
+        return out.join("\n") + `
+  This is the most specific thing in this whole read: a problem named against
+  the exercise it happened on. Where the same exercise keeps collecting the
+  same complaint, that is a test that does not fit her, not a failure of hers —
+  say so, and offer to change it.`;
+    }));
     S("WHAT SHE DECLINED, AND WHEN", rvSafe(() => {
         var _a, _b;
         const sk = d.skips || {}, df = d.deferrals || {}, si = d.standIns || {};
@@ -2418,6 +2461,11 @@ const phaseFor = (t, gymDate) => {
 /* Total load: kilograms times repetitions. 10 kg x 15 beats 10 kg x 12, and it
    also beats 6.5 kg x 20 — which weight alone gets wrong in both directions.
    Bilateral lifts sum both sides, so a weak side pulls the total down honestly. */
+const loadUnit = (f) => (f && f.loadLabel) || "kg";
+/* A load in kilograms multiplies out to a total that means something — kilos
+   moved. A band level does not: level 3 for ten reps is not "30" of anything.
+   So the arithmetic only speaks where the unit is mass. */
+const loadIsMass = (f) => loadUnit(f) === "kg";
 const loadOf = (entry, f) => {
     const w = Number(entry[f.id + "__w"]);
     if (isNaN(w) || w <= 0)
@@ -2471,7 +2519,7 @@ const formatReading = (f, e) => {
         const reps = f.bilateral
             ? `${w} kg × ${(_a = e[f.id + "__L"]) !== null && _a !== void 0 ? _a : "—"} left · ${(_b = e[f.id + "__R"]) !== null && _b !== void 0 ? _b : "—"} right`
             : `${w} kg × ${(_c = e[f.id]) !== null && _c !== void 0 ? _c : "—"} reps`;
-        return { main: isNaN(load) ? `${w} kg` : `${Math.round(load)} kg total`, sub: reps };
+        return { main: isNaN(load) || !loadIsMass(f) ? `${w} ${loadUnit(f)}` : `${Math.round(load)} kg total`, sub: reps };
     }
     if (f.type === "time") {
         const v = readMeasure(e, f);
@@ -2627,7 +2675,7 @@ const bestEntryFor = (f, stores) => {
     let main = "", sub = "";
     if (f.type === "weightreps") {
         const w = Number(e[f.id + "__w"]);
-        main = `${w} kg`;
+        main = `${w} ${loadUnit(f)}`;
         if (f.bilateral) {
             const L = e[f.id + "__L"], R = e[f.id + "__R"];
             sub = `${L !== null && L !== void 0 ? L : "—"} left · ${R !== null && R !== void 0 ? R : "—"} right`;
@@ -2719,8 +2767,12 @@ const SEED_WEEKLY = [
     { id: "cablerow", mins: 1.5, cap: "pull", label: "Cable row", role: "anchor", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false,
         how: "Sixty seconds. Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. Log the weight and the reps in the minute. Same seat height and same handle every time.",
         why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
-    { id: "bandrow", mins: 1.25, cap: "pull", label: "Band row", role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
-        how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band every time or the number means nothing.",
+    /* Her report, 10 August: "band row also needs kilograms. It doesn't have it,
+       it only has reps." Right — a band has a resistance and the rep count means
+       nothing without it, exactly like every other loaded row. Bands are rated
+       in kilograms on the band itself; log that number. */
+    { id: "bandrow", mins: 1.25, cap: "pull", label: "Band row", role: "rotating", type: "weightreps", unit: "level x reps in 60s", loadLabel: "level", better: "up", inWeekly: true,
+        how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Log which band level you used and the reps you got in the minute. If your bands are not numbered, number them yourself lightest to heaviest and keep to it — the reps mean nothing without knowing which band they were done on.",
         why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
     { id: "latpull", mins: 1.5, cap: "pull", label: "Lat pulldown", role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false,
         how: "Sixty seconds. Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. Log the weight and the reps in the minute.",
@@ -2942,7 +2994,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 67";
+const BUILD = "10 August 2026 · 70";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3235,10 +3287,10 @@ async function loadData() {
                    herself is hers permanently. */
                 fields: {
                     weekly: ((_b = (_a = d.fields) === null || _a === void 0 ? void 0 : _a.weekly) === null || _b === void 0 ? void 0 : _b.length)
-                        ? addNewFields(retireFields(fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"]), d.weekly, (((_c = d.settings) === null || _c === void 0 ? void 0 : _c.batteryTidy) || 0) >= SEED_VERSION), SEED_WEEKLY, (((_d = d.settings) === null || _d === void 0 ? void 0 : _d.batteryTidy) || 0) >= SEED_VERSION)
+                        ? addNewFields(retireFields(fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]), d.weekly, (((_c = d.settings) === null || _c === void 0 ? void 0 : _c.batteryTidy) || 0) >= SEED_VERSION), SEED_WEEKLY, (((_d = d.settings) === null || _d === void 0 ? void 0 : _d.batteryTidy) || 0) >= SEED_VERSION)
                         : SEED_WEEKLY,
                     monthly: ((_f = (_e = d.fields) === null || _e === void 0 ? void 0 : _e.monthly) === null || _f === void 0 ? void 0 : _f.length)
-                        ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"])
+                        ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"])
                         : SEED_MONTHLY,
                 },
                 library: ((_g = d.library) === null || _g === void 0 ? void 0 : _g.length) ? d.library : SEED_LIBRARY,
@@ -7666,6 +7718,23 @@ function HowTo({ f }) {
                     } }, f.video ? "watch it →" : "find it on video →"))))));
 }
 /* renders one battery exercise according to its shape */
+/* One box, wherever an exercise is done. Folded until she wants it, so a
+   battery of twenty rows is not a wall of empty text areas — and it says it is
+   optional, because a box that feels compulsory is friction (rule 24). */
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?" }) {
+    const has = !!String(value || "").trim();
+    const [open, setOpen] = useState(has);
+    if (!open)
+        return (React.createElement("button", { onClick: () => setOpen(true), className: "tap", style: {
+                border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
+                fontSize: 11.5, color: C.muted, fontFamily: "inherit"
+            } },
+            "+ ",
+            label));
+    return (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" } },
+        React.createElement("textarea", { rows: 2, value: value || "", onChange: (e) => onChange(e.target.value), placeholder: "What went wrong, what hurt, what you changed. Optional.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 } }),
+        React.createElement(MicButton, { onText: onChange, current: value || "" })));
+}
 const AssessInput = ({ f, form, set, pb, target }) => {
     var _a, _b, _c;
     if (f.type === "note")
@@ -7689,10 +7758,10 @@ const AssessInput = ({ f, form, set, pb, target }) => {
     const loadNow = f.type === "weightreps" ? loadOf(form, f) : NaN;
     const cells = f.type === "weightreps"
         ? (f.bilateral
-            ? [{ ph: "kg", value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
+            ? [{ ph: loadUnit(f), value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
                 { ph: "L reps", value: form[f.id + "__L"], onChange: (v) => { set(f.id + "__L", v); set(f.id, v); } },
                 { ph: "R reps", value: form[f.id + "__R"], onChange: (v) => set(f.id + "__R", v) }]
-            : [{ ph: "kg", value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
+            : [{ ph: loadUnit(f), value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
                 { ph: "reps", value: form[f.id], onChange: (v) => set(f.id, v) }])
         : f.bilateral
             ? [{ ph: "left", value: form[f.id + "__L"], onChange: (v) => { set(f.id + "__L", v); set(f.id, v); } },
@@ -7704,7 +7773,7 @@ const AssessInput = ({ f, form, set, pb, target }) => {
             target.last,
             " \u2192 ",
             f.type === "weightreps" ? target.aim : `aim for ${target.aim}`)),
-        f.type === "weightreps" && !isNaN(loadNow) && (React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.moss, marginTop: 5 } },
+        f.type === "weightreps" && !isNaN(loadNow) && loadIsMass(f) && (React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.moss, marginTop: 5 } },
             "that's ",
             Math.round(loadNow),
             " kg moved")),
@@ -7714,12 +7783,23 @@ const AssessInput = ({ f, form, set, pb, target }) => {
         React.createElement(NumRow, { label: ladder ? f.rungs[rung] : f.label, unit: f.unit, cells: cells, pb: pb }),
         (() => {
             const secs = secondsFor(f);
+            const twoSided = !!(f.bilateral || f.side);
+            if (secs && twoSided)
+                return (React.createElement("div", null,
+                    React.createElement(Timer, { key: f.id + ":L", seconds: secs, label: `${f.label} — left`, compact: true }),
+                    React.createElement(Timer, { key: f.id + ":R", seconds: secs, label: `${f.label} — right`, compact: true })));
             if (secs)
                 return (React.createElement(Timer, { key: f.id + ":down", seconds: secs, label: f.label, compact: true }));
-            if (f.type === "time" || /^sec/i.test(String(f.unit || "")))
+            const isHold = f.type === "time" || /^sec/i.test(String(f.unit || ""));
+            if (isHold && twoSided)
+                return (React.createElement("div", null,
+                    React.createElement(Timer, { key: f.id + ":upL", compact: true, label: `${f.label} — left`, onStop: (v) => set(f.id + "__L", String(v)) }),
+                    React.createElement(Timer, { key: f.id + ":upR", compact: true, label: `${f.label} — right`, onStop: (v) => set(f.id + "__R", String(v)) })));
+            if (isHold)
                 return (React.createElement(Timer, { key: f.id + ":up", compact: true, label: f.label, onStop: (v) => set(f.id, String(v)) }));
             return null;
         })(),
+        React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v) }),
         React.createElement(HowTo, { f: f })));
 };
 /* ============================================================================
@@ -7886,7 +7966,8 @@ function MobRow({ m, e, put }) {
             React.createElement("span", { style: { flex: 1 } },
                 React.createElement(Field, { label: "Left", unit: String(m.unit || "").replace("/", "of "), value: e.l || "", onChange: (v) => put(m.id, { l: v }) })),
             React.createElement("span", { style: { flex: 1 } },
-                React.createElement(Field, { label: "Right", unit: String(m.unit || "").replace("/", "of "), value: e.r || "", onChange: (v) => put(m.id, { r: v }) })))) : (React.createElement(Field, { label: "Score", unit: String(m.unit || "").replace("/", "of "), value: e.v || "", onChange: (v) => put(m.id, { v }) }))));
+                React.createElement(Field, { label: "Right", unit: String(m.unit || "").replace("/", "of "), value: e.r || "", onChange: (v) => put(m.id, { r: v }) })))) : (React.createElement(Field, { label: "Score", unit: String(m.unit || "").replace("/", "of "), value: e.v || "", onChange: (v) => put(m.id, { v }) })),
+        React.createElement(ExerciseNote, { value: e.note, onChange: (v) => put(m.id, { note: v }) })));
 }
 function MobilitySheet({ data, setData, coach, close }) {
     const wk = coach.ws;
@@ -8132,9 +8213,13 @@ function MobilityDoor({ coach, setSheet }) {
         React.createElement(Btn, { kind: coach.mobDue ? "signal" : "quiet", onClick: () => setSheet({ kind: "mobility" }) }, coach.mobDaysAgo === null ? "Do it for the first time" : coach.mobDue ? "Do this week's" : "Open it")));
 }
 /* Ten minutes after a session, chosen by what the tests say is short. */
-function DrillsCard({ coach, setSheet }) {
+function DrillsCard({ coach, setSheet, data, setData }) {
     if (!coach.dailyDrills.list.length)
         return null;
+    const notes = (data && data.logs && data.logs[coach.t] && data.logs[coach.t].drillNotes) || {};
+    const putNote = (id, v) => setData && setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+            [coach.t]: { ...((d.logs || {})[coach.t] || {}),
+                drillNotes: { ...(((d.logs || {})[coach.t] || {}).drillNotes || {}), [id]: v } } } }));
     return (React.createElement(Card, { style: { background: C.mint } },
         React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 } },
             React.createElement(Eyebrow, { color: C.moss }, "Your ten minutes"),
@@ -8177,8 +8262,17 @@ function DrillsCard({ coach, setSheet }) {
             d.suggested && !d.fromReview && (React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Chosen from the words of your goal, until you pick better ones or the coach writes them.")),
             (() => {
                 const secs = drillSeconds(d);
-                return secs ? React.createElement(Timer, { key: d.id + ":t", seconds: secs, label: d.label, compact: true }) : null;
+                if (!secs)
+                    return null;
+                /* a two-sided drill is done one side at a time, so it gets a
+                   clock each — the same rule as the battery */
+                if (d.side || d.bilateral)
+                    return (React.createElement("div", null,
+                        React.createElement(Timer, { key: d.id + ":tL", seconds: secs, label: `${d.label} — left`, compact: true }),
+                        React.createElement(Timer, { key: d.id + ":tR", seconds: secs, label: `${d.label} — right`, compact: true })));
+                return React.createElement(Timer, { key: d.id + ":t", seconds: secs, label: d.label, compact: true });
             })(),
+            setData && (React.createElement(ExerciseNote, { value: notes[d.id], onChange: (v) => putNote(d.id, v) })),
             React.createElement("div", { style: { marginTop: 6 } },
                 React.createElement(HowTo, { f: d })))))));
 }
@@ -8519,7 +8613,7 @@ function Today({ data, setData, coach, setSheet }) {
                     coach.agenda.length,
                     ")"))))),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
-        isToday && coach.dailyDrills.goalCount > 0 && (React.createElement(DrillsCard, { coach: coach, setSheet: setSheet })),
+        isToday && coach.dailyDrills.goalCount > 0 && (React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData })),
         isToday && coach.openGoals.length === 0 && (React.createElement(Card, { style: { background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, "Start here"),
             React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginBottom: 12 } }, "The ten minutes after every session is built from what you want to be able to do \u2014 so it needs one of those first. Write it in your own words: something you want to be able to do and cannot yet, or can only just. The app picks the work for it straight away, and you score it once a week by trying it."),
@@ -8808,7 +8902,7 @@ function Today({ data, setData, coach, setSheet }) {
                 { id: "drills", title: "Today's ten minutes",
                     count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
                     node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
-                        ? React.createElement(DrillsCard, { coach: coach, setSheet: setSheet }) : null },
+                        ? React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData }) : null },
                 { id: "body", title: "Body work",
                     node: React.createElement(BodyWorkCard, { log: log, write: write, isToday: isToday }) },
             ] })),
@@ -12778,6 +12872,45 @@ ${recentDays.map((d) => { var _a; const w = (_a = data.logs[d]) === null || _a =
   If one is sitting here, say so warmly and specifically — what she can do now that she could not,
   and where it started. Then ask whether to close it, because there is no point building towards
   something she can already do. Never close it yourself and never push.
+- WHAT SHE WROTE AGAINST A PARTICULAR EXERCISE, most recent first. A problem named against the
+  exercise it happened on — read it before saying anything about that exercise:
+  ${(() => {
+            var _a, _b;
+            const pool = [...(((_a = data.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []), ...(((_b = data.fields) === null || _b === void 0 ? void 0 : _b.monthly) || [])];
+            const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+            const out = [];
+            [["weekly", data.weekly], ["monthly", data.monthly]].forEach(([which, store]) => {
+                Object.keys(store || {}).sort().reverse().forEach((k) => {
+                    const e = store[k] || {};
+                    Object.keys(e).forEach((key) => {
+                        if (!/__note$/.test(key))
+                            return;
+                        const v = String(e[key] || "").trim();
+                        if (v)
+                            out.push(`${k} ${name(key.replace(/__note$/, ""))}: "${v}"`);
+                    });
+                });
+            });
+            Object.keys(data.mobility || {}).sort().reverse().forEach((k) => {
+                const e = data.mobility[k] || {};
+                Object.keys(e).forEach((id) => {
+                    var _a;
+                    const v = e[id] && typeof e[id] === "object" ? String(e[id].note || "").trim() : "";
+                    if (v)
+                        out.push(`${k} ${((_a = (coach.mobTests || []).find((m) => m.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+                });
+            });
+            Object.keys(data.logs || {}).sort().reverse().forEach((date) => {
+                const dn = (data.logs[date] || {}).drillNotes || {};
+                Object.keys(dn).forEach((id) => {
+                    var _a;
+                    const v = String(dn[id] || "").trim();
+                    if (v)
+                        out.push(`${date} ${((_a = (data.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+                });
+            });
+            return out.slice(0, 20).join(" | ") || "nothing yet";
+        })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
             var _a, _b;
@@ -13016,10 +13149,11 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                more weight, more reps, whichever your body offers that day. */
             const prev = ((_a = m.reading) === null || _a === void 0 ? void 0 : _a.sub) || "";
             return {
-                last: `${Math.round(m.now)} kg total${prev ? ` (${prev})` : ""}`,
+                last: `${Math.round(m.now)} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`,
                 aim: frozen ? "hold what you did — shoulder"
                     : sore ? "hold what you did — your shoulder was uncomfortable this week"
-                        : `beat ${Math.round(raw)} kg total — more weight or more reps`,
+                        : loadIsMass(f) ? `beat ${Math.round(raw)} kg total — more weight or more reps`
+                            : `beat ${Math.round(raw)} — a heavier band or more reps`,
             };
         }
         return { last: fmt(m.now), aim: (frozen || sore) ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
