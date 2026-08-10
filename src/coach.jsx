@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 84";
+const BUILD = "10 August 2026 · 85";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3272,8 +3272,25 @@ async function loadData() {
                   d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
             : SEED_WEEKLY,
+          /* ---- WHERE BODY COMPOSITION WENT ---------------------------
+             HER REPORT, 10 August: "Body composition all of a sudden
+             disappeared from my monthly measurements. I was going to log it
+             in. The two boxes disappeared — muscle mass and fat mass."
+
+             The weekly list has been repaired on every load since build 62:
+             anything in the seed that is missing from her copy is added back
+             by `addNewFields`. The monthly list never got that call. So a
+             row that left her monthly list for any reason — an edit, an old
+             file, a half-finished migration — could never come back, and
+             muscle and body fat are monthly rows.
+
+             Same treatment as the weekly now. It only ever ADDS what the seed
+             has and she does not; nothing she wrote is touched (rule 20). */
           monthly: d.fields?.monthly?.length
-            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"])
+            ? addNewFields(
+                fillFromSeed(d.fields.monthly, SEED_MONTHLY,
+                  ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
+                SEED_MONTHLY, false)
             : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
@@ -9684,6 +9701,10 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                           Session logged — {coach.weekDone} of {coach.seasonTarget} this week
                         </span>
                       </div>
+                      {/* ONE carry-on on this page, and it is the one at the
+                          top. Her words with a marker pen: "why do I have 2
+                          carry on buttons... I only need the carry on button."
+                          This card states the fact and sends her nowhere. */}
                       {(() => {
                         const isMonthly = /benchmark/i.test(String(log?.type || ""));
                         const isWeeklyM = /measurement|weekly check/i.test(String(log?.type || ""));
@@ -9692,18 +9713,9 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         const shut = isMonthly ? coach.monthlyDone : coach.weeklyDone;
                         if (shut || !pr || !pr.total) return null;
                         return (
-                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
-                            padding: "12px 14px", borderRadius: 12, background: C.pist }}>
-                            <span style={{ flex: 1, fontSize: 13, color: C.ink, lineHeight: 1.45 }}>
-                              The {isMonthly ? "benchmark" : "weekly check"} itself is not finished —
-                              {" "}{pr.left} still to enter, {pr.pct}% done. The session is logged; the
-                              numbers are not.
-                            </span>
-                            <button onClick={() => setSheet({ kind: isMonthly ? "monthly" : "weekly",
-                              key: isMonthly ? coach.mk : coach.ws })} className="tap" style={{
-                              padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
-                              fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
-                              fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>carry on</button>
+                          <div className="mono" style={{ fontSize: 10.5, color: C.clay, marginTop: 8 }}>
+                            the tick is the session — the {isMonthly ? "benchmark" : "weekly check"} numbers are
+                            {" "}{pr.pct}% in, {pr.left} still to enter
                           </div>
                         );
                       })()}
@@ -9833,18 +9845,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
                         <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
                       </div>
+                      {/* ONE carry-on, not two. Her words with a marker pen:
+                          "why do I have 2 carry on buttons... I only need the
+                          carry on button." The card above already says it and
+                          already offers the way in; saying it twice on one
+                          screen is the same fault as saying it nowhere. */}
                       {openBattery && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8,
-                          padding: "10px 12px", borderRadius: 10, background: C.pist }}>
-                          <span style={{ flex: 1, fontSize: 12, color: C.ink, lineHeight: 1.45 }}>
-                            The tick is the session, not the numbers. The {isMonthly ? "benchmark" : "weekly check"} is
-                            {" "}incomplete — {pr.left} still to enter, {pr.pct}% done.
-                          </span>
-                          <button onClick={() => setSheet({ kind: isMonthly ? "monthly" : "weekly",
-                            key: isMonthly ? coach.mk : coach.ws })} className="tap" style={{
-                            padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontSize: 12,
-                            fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
-                            fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>carry on</button>
+                        <div className="mono" style={{ fontSize: 10, color: C.clay, marginTop: 6 }}>
+                          numbers not finished — {pr.pct}% in
                         </div>
                       )}
                     </div>
@@ -16441,10 +16449,32 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         );
         const cards = [];
         if (started && left.length) {
+          /* ---- WHERE BODY COMPOSITION WENT ------------------------------
+             HER REPORT, 10 August: "Body composition all of a sudden
+             disappeared from my monthly measurements. The two boxes
+             disappeared — muscle mass and fat mass."
+
+             They were never removed. Hoisting the unfinished rows to the top
+             (her instruction, earlier the same day) threw away the headings
+             they used to sit under, so a row she knew as "body composition"
+             was now in an undifferentiated pile called Still to do, and from
+             where she was standing it had gone. The headings come with them. */
           cards.push(
             <Card key="__left" style={{ marginBottom: 12, borderLeft: `3px solid ${C.signal}` }}>
               <Eyebrow color={C.signal}>Still to do</Eyebrow>
-              {left.map(row)}
+              {[...CAPS, ""].map((cap) => {
+                const group = left.filter((f) => (f.cap || "") === cap);
+                if (!group.length) return null;
+                return (
+                  <div key={cap || "feel"}>
+                    <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
+                      textTransform: "uppercase", color: C.muted, margin: "12px 0 4px" }}>
+                      {cap ? capLabel(cap) : "how the week felt"}
+                    </div>
+                    {group.map(row)}
+                  </div>
+                );
+              })}
             </Card>
           );
         }
