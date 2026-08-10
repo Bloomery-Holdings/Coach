@@ -1280,6 +1280,34 @@ const sittingFields = (data, which, key) => {
   return { fields: [...kept, ...added], out, pool, base };
 };
 
+/* ============================================================================
+   HOW FAR THROUGH A SITTING SHE ACTUALLY IS
+   ---------------------------------------------------------------------------
+   HER REPORT, 10 August: "Any incomplete benchmark should show in the Needs
+   you card. It cannot say that it is done on the landing page while it's not.
+   It should show me how many exercises are missing and the percentage of
+   completion."
+
+   Both rows were marked done on `!!entry` — the existence of ANY object for
+   the period. Since build 71 writes that object on her first keystroke, one
+   number typed marked the whole benchmark finished and the row disappeared.
+   Done is what the button says, and until then the row stays and counts.
+   ==========================================================================*/
+const sittingProgress = (data, which, key) => {
+  const e = (data[which] || {})[key] || {};
+  const tests = sittingFields(data, which, key).fields
+    .filter((f) => f.type !== "note" && f.type !== "scale");
+  const filled = tests.filter((f) => {
+    if (f.type === "weightreps") return String(e[f.id + "__w"] || "").trim() !== "";
+    if (f.bilateral) return String(e[f.id + "__L"] || "").trim() !== "";
+    return String(e[f.id] || "").trim() !== "";
+  });
+  const total = tests.length, done = filled.length;
+  return { total, done, left: total - done,
+    pct: total ? Math.round((done / total) * 100) : 0,
+    names: tests.filter((f) => !filled.includes(f)).map((f) => f.label) };
+};
+
 /* The next door down from whatever was just declined. Persistence lives in the
    offering, never in the asking: one rung at a time, and never back up. */
 
@@ -2904,7 +2932,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 75";
+const BUILD = "10 August 2026 · 76";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6348,6 +6376,9 @@ function useCoach(data, day, clock) {
        browser storage while it is being described */
     const backupDueRow = (() => { try { return backupDue(data); } catch (e) { return false; } })();
 
+    const weeklyProgress = sittingProgress(data, "weekly", ws);
+    const monthlyProgress = sittingProgress(data, "monthly", mk);
+
     const capture = (() => {
       const l = logs[t] || {};
       const mg = morning?.[t] || {};
@@ -6409,26 +6440,34 @@ function useCoach(data, day, clock) {
         }
       }
       add("battery", "week",
-        weeklyToday ? "Today is your measurement day"
+        weeklyProgress.done > 0 && !weeklyDone
+          ? `This week's measurements — ${weeklyProgress.left} still to enter, ${weeklyProgress.pct}% done`
+          : weeklyToday ? "Today is your measurement day"
           : weeklyLate ? `This week's measurements — ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late`
           : "This week's measurements",
-        !!wkEntry,
+        weeklyDone,
         `Every target the coach sets comes out of these numbers. It rides on the first training day of the week — ${prettyShort(weeklyAssessDay)} — because you are already changed, already warm, already in the room.`,
         weeklyToday
           ? "Today is your measurement day — about ten minutes at the end of the session, mobility last. It stays here until it is done, and then it is gone until next week."
           : weeklyLate
           ? `This week's measurements are ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late. Ten minutes and the week has something to compare against.`
+          : weeklyProgress.done > 0
+          ? `You are ${weeklyProgress.pct}% through this week's measurements — ${weeklyProgress.left} still to enter, and all of it is saved.`
           : "This week's measurements are still open. Every target I set comes out of them.");
       add("benchmark", "month",
-        monthlyToday ? "Today is your benchmark day"
+        monthlyProgress.done > 0 && !monthlyDone
+          ? `Monthly benchmark — ${monthlyProgress.left} exercise${monthlyProgress.left === 1 ? "" : "s"} still to enter, ${monthlyProgress.pct}% done`
+          : monthlyToday ? "Today is your benchmark day"
           : monthlyLate ? `This month's benchmark — ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late`
           : "This month's benchmark",
-        !!moEntry,
+        monthlyDone,
         `Body composition and the heavier tests, on the first training day of the month — ${prettyShort(monthlyAssessDay)}. Without two of these, nothing can be compared to anything.`,
         monthlyToday
           ? "Today is your benchmark day — every test you have, mobility last, plus body composition. Allow about forty minutes. It stays here until it is done, then it is gone until next month."
           : monthlyLate
           ? `The month's benchmark is ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late. Without two of these there is nothing to compare.`
+          : monthlyProgress.done > 0
+          ? `You are ${monthlyProgress.pct}% through the benchmark — ${monthlyProgress.left} still to enter. Everything you typed is saved; pick it up where you left off.`
           : "This month's benchmark is still open. It is the one that lets me see change rather than noise.");
       add("whoop", "week",
         whoopDaysLate > 1 ? `WHOOP export — ${whoopDaysLate} days since ${DAY_FULL[whoopDay]}` : `WHOOP export — it's ${DAY_FULL[whoopDay]}`,
@@ -6920,7 +6959,7 @@ function useCoach(data, day, clock) {
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
-      batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
