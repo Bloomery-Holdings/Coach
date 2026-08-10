@@ -986,14 +986,35 @@ const sameIssue = (a, b) => {
    change, so renaming keeps the history. */
 const SEED_MOBILITY = [
   /* ---- LEGS: one test per muscle group, which is what she asked for ---- */
-  { id: "fold", mins: 0.75, inWeekly: true, label: "Standing forward fold", unit: "cm", better: "lower", side: false,
-    how: "Stand, feet together, knees straight but not locked, and fold forward. Measure the gap from fingertips to floor in centimetres. Fingertips touching the floor is 0; if your palms go flat, measure how far past the floor line your wrists reach and log it as a negative number.",
-    why: "Hamstrings, calves and lower back together — the whole back of you in one number. You said this is the one that makes sense, so it is the one that comes every week.",
+  /* 10 August: "centimetres doesn't make sense — I won't have a measure next
+     to me while I'm working." She is right, and a number she cannot take is
+     worse than no number. Named steps instead, in her own words, and each one
+     is unmistakable from the inside: you either have half a palm down or you
+     do not. Steps are scored 0 upward, so this one goes UP. */
+  { id: "fold", mins: 0.75, inWeekly: true, label: "Standing forward fold",
+    type: "steps", unit: "step", better: "higher", side: false, max: 6,
+    steps: ["Hands reach my knees",
+            "Hands reach my shins",
+            "Fingertips reach my ankles",
+            "Fingertips touch the floor",
+            "Half of each palm is flat on the floor",
+            "Both palms flat on the floor",
+            "Arms wrapped round my legs, head against my shins"],
+    how: "Stand, feet together, knees straight but not locked, and fold forward. Go to the furthest place you can hold for three calm breaths without bending your knees or bouncing — then tap the step that describes where you got to. If you are between two, take the lower one. No tape measure, no guessing.",
+    why: "Hamstrings, calves and lower back together — the whole back of you in one score. You said this is the one that makes sense, so it is the one that comes every week.",
     needs: ["legs", "back"], drills: ["hamstring", "calf", "catcow"] },
 
-  { id: "seatfold", mins: 0.75, inWeekly: false, label: "Seated forward fold", unit: "cm", better: "lower", side: false,
-    how: "Sit on the floor, legs straight together, toes up. Hinge from the hips and reach along your legs. Measure from fingertips to toes: short of the toes is a positive number, past them is negative.",
-    why: "The same muscles as the standing fold with your balance and your calves taken out of it, so the number moves for one reason only. Standing and seated moving differently tells you which of the two is actually short.",
+  { id: "seatfold", mins: 0.75, inWeekly: false, label: "Seated forward fold",
+    type: "steps", unit: "step", better: "higher", side: false, max: 6,
+    steps: ["Hands reach my knees",
+            "Hands reach my shins",
+            "Fingertips reach my ankles",
+            "Fingertips reach my toes",
+            "Hands hold round my feet",
+            "Forearms down my shins, chest on my thighs",
+            "Head to my shins, arms wrapped round my feet"],
+    how: "Sit on the floor, legs straight together, toes up. Hinge from the hips and reach along your legs — hold the furthest place for three calm breaths without rounding hard or bouncing, then tap the step that describes it. Between two, take the lower one.",
+    why: "The same muscles as the standing fold with your balance and your calves taken out of it, so the score moves for one reason only. Standing and seated moving differently tells you which of the two is actually short.",
     needs: ["legs", "back"], drills: ["hamstring", "catcow"] },
 
   { id: "slr", mins: 1, inWeekly: false, label: "Straight-leg raise", unit: "°", better: "higher", side: true,
@@ -1653,13 +1674,21 @@ const reviewPayload = (data, coach) => {
     return keys.map((k) => {
       const e = mb[k] || {};
       const vals = (d.mobTests || []).map((tst) => {
-        if (tst.bilateral) {
-          const l = e[tst.id + "_l"], r = e[tst.id + "_r"];
-          if (l === undefined && r === undefined) return null;
-          return `${tst.label}: left ${l ?? "—"}, right ${r ?? "—"}${tst.unit ? " " + tst.unit : ""}`;
+        const o = e[tst.id];
+        if (!o || typeof o !== "object") return null;
+        const say = (x) => {
+          if (x === undefined || x === null || x === "") return null;
+          if (tst.type === "steps" && (tst.steps || [])[Number(x)])
+            return `step ${x} of ${tst.steps.length - 1} — "${tst.steps[Number(x)]}"`;
+          return `${x}${tst.unit ? " " + tst.unit : ""}`;
+        };
+        if (tst.side) {
+          const l = say(o.l), r = say(o.r);
+          if (!l && !r) return null;
+          return `${tst.label}: left ${l || "—"}, right ${r || "—"}`;
         }
-        const v = e[tst.id];
-        return v === undefined || v === "" ? null : `${tst.label}: ${v}${tst.unit ? " " + tst.unit : ""}`;
+        const v = say(o.v);
+        return v ? `${tst.label}: ${v}` : null;
       }).filter(Boolean).join(", ");
       return `Week of ${k} — ${vals || "empty"}`;
     }).join("\n");
@@ -1719,10 +1748,28 @@ const reviewPayload = (data, coach) => {
       ...arc(d.weekly, d.fields?.weekly, "weekly"),
       ...arc(d.monthly, d.fields?.monthly, "monthly"),
     ];
-    const mobDefs = (d.mobTests || []).flatMap((x) => x.bilateral
-      ? [{ id: x.id + "_l", label: x.label + " (left)", unit: x.unit }, { id: x.id + "_r", label: x.label + " (right)", unit: x.unit }]
-      : [{ id: x.id, label: x.label, unit: x.unit }]);
-    out.push(...arc(d.mobility, mobDefs, "mobility"));
+    /* mobility is stored one object per test, so it has to be flattened into
+       the same shape the batteries use before an arc can be read off it. It
+       never was, and the whole mobility arc came back empty every time. */
+    const mobDefs = (d.mobTests || []).flatMap((x) => x.side
+      ? [{ id: x.id + "_l", label: x.label + " (left)", unit: x.unit, lower: x.better === "lower" },
+         { id: x.id + "_r", label: x.label + " (right)", unit: x.unit, lower: x.better === "lower" }]
+      : [{ id: x.id, label: x.label, unit: x.unit, lower: x.better === "lower" }]);
+    const mobFlat = {};
+    Object.keys(d.mobility || {}).forEach((k) => {
+      const e = d.mobility[k] || {};
+      const row = {};
+      (d.mobTests || []).forEach((m) => {
+        const o = e[m.id];
+        if (!o || typeof o !== "object") return;
+        if (m.side) {
+          if (o.l !== undefined && o.l !== "") row[m.id + "_l"] = o.l;
+          if (o.r !== undefined && o.r !== "") row[m.id + "_r"] = o.r;
+        } else if (o.v !== undefined && o.v !== "") row[m.id] = o.v;
+      });
+      mobFlat[k] = row;
+    });
+    out.push(...arc(mobFlat, mobDefs, "mobility"));
     if (!out.length) return "nothing measured more than once yet — there is no arc to read";
     return out.join("\n");
   }));
@@ -2845,7 +2892,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 71";
+const BUILD = "10 August 2026 · 73";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2931,7 +2978,7 @@ const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "ellip
    migration exactly once. The two constants below stay only to record when
    each retirement was introduced.
 ========================================================================== */
-const SEED_VERSION = 62;
+const SEED_VERSION = 73;
 const BATTERY_TIDY = 56;        /* build that retired the first five rows      */
 const MOBILITY_REBUILD = 62;    /* build that rebuilt mobility by muscle length */
 
@@ -3147,7 +3194,8 @@ async function loadData() {
           ? addNewFields(
               retireMobTests(
                 fillFromSeed(d.mobTests, SEED_MOBILITY,
-                  ["how", "why", "mins", "inWeekly", "label", "unit", "better", "side", "needs", "drills"]),
+                  ["how", "why", "mins", "inWeekly", "label", "unit", "better", "side", "needs", "drills",
+                   "type", "steps", "max"]),
                 d.mobility, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
               SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
           : SEED_MOBILITY,
@@ -3917,8 +3965,11 @@ function useCoach(data, day, clock) {
           const l = Number(o.l), r = Number(o.r);
           return l > 0 && r > 0 ? (l + r) / 2 : (l > 0 ? l : r > 0 ? r : null);
         }
+        /* a step scale starts at 0 and 0 is a real answer, not a blank */
+        if (o.v === undefined || o.v === null || o.v === "") return null;
         const v = Number(o.v);
-        return v > 0 || (v === 0 && m.better === "lower") ? v : null;
+        if (!Number.isFinite(v)) return null;
+        return v > 0 || m.type === "steps" || m.better === "lower" ? v : null;
       };
       const now = val(cur), then = val(old);
       const gap = m.side && cur && Number(cur.l) > 0 && Number(cur.r) > 0
@@ -4101,7 +4152,7 @@ function useCoach(data, day, clock) {
         if (!m.max || !mob) return;
         const e = mob[m.id];
         if (!e) return;
-        const vals = m.side ? [Number(e.L), Number(e.R)] : [Number(e.score ?? e.v ?? e)];
+        const vals = m.side ? [Number(e.l ?? e.L), Number(e.r ?? e.R)] : [Number(e.score ?? e.v ?? e)];
         if (!vals.length || vals.some((v) => !Number.isFinite(v) || v < Number(m.max))) return;
         out.push({ id: m.id, label: m.label, value: Number(m.max), max: Number(m.max),
           kind: "mobility", rungs: [], rung: 0 });
@@ -7932,7 +7983,25 @@ function MobRow({ m, e, put }) {
         </span>
       </div>
       <HowTo f={m} />
-      {m.side ? (
+      {m.type === "steps" && (m.steps || []).length ? (
+        <div style={{ display: "grid", gap: 6 }}>
+          {m.steps.map((label, i) => {
+            const on = String(e.v ?? "") === String(i);
+            return (
+              <button key={i} className="tap" onClick={() => put(m.id, { v: String(i) })} style={{
+                display: "flex", alignItems: "center", gap: 10, textAlign: "left", width: "100%",
+                padding: "10px 12px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+                fontSize: 13.5, lineHeight: 1.4,
+                border: on ? "none" : `1px solid ${C.line}`,
+                background: on ? C.signal : "transparent",
+                color: on ? C.chalk : C.ink }}>
+                <span className="mono" style={{ fontSize: 11, opacity: 0.7, flexShrink: 0 }}>{i}</span>
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : m.side ? (
         <div style={{ display: "flex", gap: 10 }}>
           <span style={{ flex: 1 }}>
             <Field label="Left" unit={String(m.unit || "").replace("/", "of ")} value={e.l || ""}
@@ -7954,12 +8023,24 @@ function MobRow({ m, e, put }) {
 
 function MobilitySheet({ data, setData, coach, close }) {
   const wk = coach.ws;
-  const [entry, setEntry] = useState(() => ({ ...(data.mobility?.[wk] || {}) }));
-  const [open, setOpen] = useState(null);
-
-  const put = (id, patch) => setEntry((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }));
+  /* HER REPORT, 10 August: "I inputted the standing fold and the seated fold
+     and they both couldn't save. I don't see them anywhere. And again, no
+     saving." This sheet kept everything in a local draft and only wrote it
+     when Save this week was tapped — so a sheet closed, a phone locked or a
+     reload took the lot. Every keystroke is written straight to her file now,
+     the same fix the battery got in 71. Nothing waits for a button. */
+  const entry = (data.mobility && data.mobility[wk]) || {};
+  const put = (id, patch) => setData((d) => {
+    const week = (d.mobility || {})[wk] || {};
+    return { ...d, mobility: { ...(d.mobility || {}),
+      [wk]: { ...week, started: week.started || coach.t,
+        [id]: { ...(week[id] || {}), ...patch } } } };
+  });
   const save = () => {
-    setData((d) => ({ ...d, mobility: { ...(d.mobility || {}), [wk]: entry } }));
+    setData((d) => {
+      const week = (d.mobility || {})[wk] || {};
+      return { ...d, mobility: { ...(d.mobility || {}), [wk]: { ...week, on: coach.t, finished: true } } };
+    });
     close();
   };
 
@@ -7978,8 +8059,12 @@ function MobilitySheet({ data, setData, coach, close }) {
         <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put} />
       ))}
 
-      <Btn kind="signal" onClick={save}>Save this week</Btn>
-      <div style={{ marginTop: 8 }}><Btn kind="quiet" onClick={close}>Close without saving</Btn></div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
+        Everything you tap or type here is already saved. This button only closes the week off
+        so the app stops asking for it.
+      </div>
+      <Btn kind="signal" onClick={save}>Done — close this week's mobility</Btn>
+      <div style={{ marginTop: 8 }}><Btn kind="quiet" onClick={close}>Close and come back to it</Btn></div>
     </div>
   );
 }
@@ -12780,6 +12865,11 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
   const sk = monthly ? coach.monthlyKey : coach.weeklyKey;
   const late = monthly ? coach.monthlyLate : coach.weeklyLate;
   const moveTo = monthly ? coach.monthlyMoveTo : coach.weeklyMoveTo;
+  /* 10 August: "what if I stopped midway one day and want to finish the rest
+     the following day?" The card used to disappear the moment anything was
+     typed, which left no way back in. It stays now, and says which it is. */
+  const wasStarted = monthly ? coach.monthlyStarted : coach.weeklyStarted;
+  const wasDone = monthly ? coach.monthlyDone : coach.weeklyDone;
   const { fields, pool } = sittingFields(data, which, periodKey);
   /* a note or a scale is a feeling, not a test — nothing to decline */
   const tests = fields.filter((f) => f.type !== "note" && f.type !== "scale");
@@ -12894,11 +12984,18 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
               This is also this week's weekly — one sitting, not two.
             </span>
           )}
+          {(wasStarted || wasDone) && (
+            <span style={{ display: "block", fontWeight: 400, fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+              {wasDone
+                ? "You closed this off — open it again to change anything or add what is missing."
+                : "Started. Carry on where you left off — everything you entered is saved."}
+            </span>
+          )}
         </span>
         <button onClick={() => setSheet({ kind: which, key: periodKey })} className="tap" style={{
           padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
           border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit",
-          whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
+          whiteSpace: "nowrap", flexShrink: 0 }}>{wasStarted || wasDone ? "carry on" : "open"}</button>
       </div>
       <button onClick={() => setStep("which")} className="tap" style={{
         border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
