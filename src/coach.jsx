@@ -1654,7 +1654,7 @@ const reviewPayload = (data, coach) => {
       const dn = (d.logs[date] || {}).drillNotes || {};
       Object.keys(dn).forEach((id) => {
         const v = String(dn[id] || "").trim();
-        if (v) out.push(`${date} ten minutes — ${(d.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
+        if (v) out.push(`${date} ten minutes — ${bwNoteName(d, id) || (d.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
       });
     });
     if (!out.length) return "she has not written anything against an individual exercise";
@@ -1854,11 +1854,15 @@ const reviewPayload = (data, coach) => {
     return out.join("\n");
   }));
 
-  S("CONVERSATIONS", rvSafe(() =>
-    (d.chats || []).slice(-6).map((ch) =>
+  S("CONVERSATIONS — every one from the last five weeks, in full. What she says\n"
+    + "here is instruction, not commentary: if she asked for something, changed her\n"
+    + "mind, or told you how she wants to be coached, it binds the month you design.",
+    rvSafe(() =>
+    (d.chats || []).filter((ch) => !ch.date || parse(ch.date) >= parse(t) - 35 * 86400000)
+      .map((ch) =>
       `--- ${ch.date || ""}${ch.about ? ` — ${ch.about}` : ""}\n`
-      + (ch.messages || ch.msgs || []).slice(-14).map((m) =>
-        `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || m.content || "").slice(0, 600)}`).join("\n")
+      + (ch.messages || ch.msgs || []).map((m) =>
+        `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || m.content || "").slice(0, 1500)}`).join("\n")
     ).join("\n")));
 
   /* THE CLOSED WORLD. The block can only ever be delivered by what is in
@@ -2973,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 87";
+const BUILD = "10 August 2026 · 88";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7812,6 +7816,18 @@ function HowTo({ f }) {
    `skip` is the sitting she is in right now: today's words are on screen
    already and do not belong in the history of themselves.
    ==========================================================================*/
+/* a note keyed bw:<prog>:<exercise> has a real name — every reader resolves
+   it, so the coach reads "Band external rotation · shoulders", not a raw id */
+function bwNoteName(data, id) {
+  const m = String(id).match(/^bw:([^:]+):(.+)$/);
+  if (!m) return null;
+  const pg = (data.bodywork || []).find((x) => x.id === m[1]);
+  if (!pg) return String(id);
+  const ex = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))]
+    .flatMap((l) => l.exercises || []).find((x) => x.id === m[2]);
+  return `${ex ? ex.name : "an exercise"} · ${pg.area}`;
+}
+
 function noteHistory(data, kind, id, skip) {
   const d = data || {};
   const out = [];
@@ -11931,6 +11947,8 @@ function FieldEditor({ which, data, setData, close, focus }) {
                   }}>Left / right separately{f.bilateral ? " ✓" : ""}</button>
                 </div>
                 {f.type === "scale" && <Field label="Highest value" unit="" value={f.max || 5} onChange={(v) => patch(f.id, { max: Number(v) || 5 })} />}
+                <Field label="Minutes it takes" unit="min" value={f.mins ?? ""}
+                  onChange={(v) => patch(f.id, { mins: v === "" ? undefined : Number(v) || 0, minsEdited: true })} />
                 {f.type !== "note" && (
                   <>
                     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Direction of progress</div>
@@ -14437,6 +14455,24 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             <>
               <Field label="Unit" unit="cm, /10, seconds…" type="text" value={item.unit || ""}
                 onChange={(v) => patchTest(item.id, { unit: v })} />
+              {item.type === "steps" && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>The steps, one per line</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                    <AutoText rows={4} value={(item.steps || []).join("\n")}
+                      onChange={(v) => patchTest(item.id, { steps: v.split("\n"),
+                        max: Math.max(1, v.split("\n").filter((x) => x.trim()).length - 1) })}
+                      style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.5, fontSize: 12.5 }} />
+                    <MicButton onText={(v) => patchTest(item.id, { steps: v.split("\n"),
+                      max: Math.max(1, v.split("\n").filter((x) => x.trim()).length - 1) })}
+                      current={(item.steps || []).join("\n")} />
+                  </div>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.45 }}>
+                    Scored 0 for the first line upward. Reword them, add a harder one at the bottom,
+                    or take one out — the top line stays the easiest.
+                  </div>
+                </div>
+              )}
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Which way is progress?</div>
               <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
                 {[["higher", "Higher is better"], ["lower", "Lower is better"]].map(([v, l]) => (
@@ -15907,7 +15943,7 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
       const dn = (data.logs[date] || {}).drillNotes || {};
       Object.keys(dn).forEach((id) => {
         const v = String(dn[id] || "").trim();
-        if (v) out.push(`${date} ${(data.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
+        if (v) out.push(`${date} ${bwNoteName(data, id) || (data.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
       });
     });
     return out.slice(0, 20).join(" | ") || "nothing yet";
