@@ -2942,7 +2942,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 64";
+const BUILD = "10 August 2026 · 65";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -8330,6 +8330,11 @@ function Today({ data, setData, coach, setSheet }) {
                     coach.agenda.length,
                     ")"))))),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
+        isToday && coach.dailyDrills.goalCount > 0 && (React.createElement(DrillsCard, { coach: coach, setSheet: setSheet })),
+        isToday && coach.openGoals.length === 0 && (React.createElement(Card, { style: { background: C.pist } },
+            React.createElement(Eyebrow, { color: C.signal }, "Start here"),
+            React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginBottom: 12 } }, "The ten minutes after every session is built from what you want to be able to do \u2014 so it needs one of those first. Write it in your own words: something you want to be able to do and cannot yet, or can only just. The app picks the work for it straight away, and you score it once a week by trying it."),
+            React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "goals" }) }, "Tell it what you want to be able to do"))),
         isToday && !(log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.state) !== "moved" && !restDay
             && coach.moodToday && coach.moodToday !== "good" && (React.createElement(LadderCard, { data: data, setData: setData, coach: coach })),
         isToday && measureDue && (React.createElement(MeasureDueCard, { data: data, setData: setData, coach: coach, setSheet: setSheet, monthly: showMonthlyCall })),
@@ -8609,8 +8614,11 @@ function Today({ data, setData, coach, setSheet }) {
                 { id: "mobility", title: "Mobility battery",
                     count: coach.mobDue ? 1 : 0,
                     node: React.createElement(MobilityDoor, { coach: coach, setSheet: setSheet }) },
-                { id: "drills", title: "Today's ten minutes", count: coach.dailyDrills.list.length,
-                    node: coach.dailyDrills.list.length
+                /* Only the mobility-only version lives down here — anything with
+                   goal work in it is a card on the page above (rule 11). */
+                { id: "drills", title: "Today's ten minutes",
+                    count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
+                    node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
                         ? React.createElement(DrillsCard, { coach: coach, setSheet: setSheet }) : null },
                 { id: "body", title: "Body work",
                     node: React.createElement(BodyWorkCard, { log: log, write: write, isToday: isToday }) },
