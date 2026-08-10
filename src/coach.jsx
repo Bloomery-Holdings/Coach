@@ -2799,7 +2799,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 66";
+const BUILD = "10 August 2026 · 67";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7249,6 +7249,15 @@ const secondsFor = (f) => {
   return null;
 };
 
+/* Her drills and her prescribed goal work carry MINUTES. The battery carries
+   seconds. This is the one place that knows the difference. */
+const drillSeconds = (d) => {
+  if (!d) return null;
+  const m = Number(d.mins);
+  if (Number.isFinite(m) && m > 0) return Math.round(m * 60);
+  return secondsFor(d);
+};
+
 function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
   /* seconds: count DOWN from this. null: count UP. */
   const [ms, setMs] = useState(seconds ? seconds * 1000 : 0);
@@ -8220,6 +8229,20 @@ function DrillsCard({ coach, setSheet }) {
           The next monthly read writes the work for it — or pick the drills yourself from the goal.
         </div>
       )}
+      {/* A CLOCK ON THE WORK ITSELF.
+          Her instruction, 10 August: the timer has to be beside the thing she
+          is doing. It went into the battery and not here — and this is the
+          half she does every single training day. One for the whole set, and
+          one per exercise counting down from what that exercise asks for. */}
+      <div style={{ padding: "2px 0 10px", borderBottom: `1px solid ${C.line}`, marginBottom: 4 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <span className="mono" style={{ fontSize: 10, letterSpacing: "0.1em",
+            textTransform: "uppercase", color: C.muted }}>The whole set</span>
+          <span className="mono" style={{ fontSize: 10, color: C.muted }}>counts up</span>
+        </div>
+        <Timer compact />
+      </div>
+
       {coach.dailyDrills.list.map((d, i) => (
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
@@ -8248,6 +8271,10 @@ function DrillsCard({ coach, setSheet }) {
               Chosen from the words of your goal, until you pick better ones or the coach writes them.
             </div>
           )}
+          {(() => {
+            const secs = drillSeconds(d);
+            return secs ? <Timer key={d.id + ":t"} seconds={secs} label={d.label} compact /> : null;
+          })()}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
         </div>
       ))}
