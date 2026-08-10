@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 81";
+const BUILD = "10 August 2026 · 82";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3181,6 +3181,7 @@ const BLANK = {
   issues: [],
   /* Every conversation, kept. The coach reads them before it answers. */
   chats: [],
+  chatDraft: "",   /* a half-said thing, kept until it is sent */
   /* What the coach has come to believe about her. Never deleted, always
      visible, always correctable. Entries she wrote herself carry hers: true
      and outrank anything inferred. */
@@ -12878,56 +12879,54 @@ function useDictation(onText) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
   const [problem, setProblem] = useState(null);
+  /* The constructor, and the session running right now. They are separate on
+     purpose — see the comment on `begin` below. */
+  const SRRef = useRef(null);
   const recRef = useRef(null);
-  /* The callback has to live in a ref. The effect below runs once, so binding
-     onResult directly would permanently capture the FIRST version of onText —
-     which is how dictation ends up writing to yesterday's log. */
+  /* The callback has to live in a ref. The handlers are wired once per
+     session, so binding onText directly would capture whichever version
+     existed when that session started — which is how dictation ends up
+     writing to yesterday's log. */
   const cb = useRef(onText);
   useEffect(() => { cb.current = onText; });
+
   /* ---- WHY IT KEPT CUTTING OUT AFTER A SECOND -------------------------
      Chrome on Android ends the recognition session at the first pause,
      whatever `continuous` says. The old onend just switched the button off,
-     so a sentence with a breath in it needed five taps.
-
-     It restarts itself now, and keeps restarting until she taps stop. Two
-     guards, because an auto-restart is exactly the kind of thing that spins:
-     nothing restarts after a real error (a refused microphone, no network),
-     and if the browser ends the session immediately several times in a row
-     it gives up rather than thrashing. */
+     so a sentence with a breath in it needed five taps. It restarts itself
+     now, and keeps restarting until she taps stop — with two guards, because
+     an auto-restart is exactly the kind of thing that spins: nothing restarts
+     after a real error, and a session that dies instantly several times in a
+     row gives up rather than thrashing. */
   const wants = useRef(false);          /* does she still intend to be talking */
   const shortEnds = useRef(0);          /* consecutive sessions that died instantly */
   const startedAt = useRef(0);
-  /* ---- WHY ONLY THE LAST PART OF A SENTENCE SURVIVED -------------------
-     10 August: "it keeps recording, but the write-up comes out fragmented,
-     and it only records the last part of what I said and neglects the rest."
-
-     The auto-restart above is what did it. Every restart is a NEW recognition
-     session and a new session starts with an EMPTY results list — so onresult,
-     which rebuilds the text from that list, rebuilt it from nothing but the
-     newest burst and wrote over everything said before the pause. The longer
-     she talked the more restarts there were, so the more of it vanished, and
-     what survived was always the tail.
-
-     "carried" holds everything completed in earlier bursts of the same
-     dictation. What she is saying right now is added to it, never instead
-     of it. */
   const everRan = useRef(false);        /* has it ever actually started here   */
   const recovering = useRef(false);     /* mid-repair; onend must not restart  */
+  /* ---- WHY ONLY THE LAST PART OF A SENTENCE SURVIVED -------------------
+     Every restart is a NEW session, and a new session starts with an EMPTY
+     results list — so onresult, which rebuilds the text from that list, was
+     rebuilding it from nothing but the newest burst and writing over
+     everything said before the pause. `carried` holds the finished bursts of
+     this dictation; what she is saying now is added to it, never instead. */
   const carried = useRef("");           /* bursts already finished, this run   */
   const heardNow = useRef("");          /* the burst in progress               */
 
-  useEffect(() => {
-    const SR = typeof window !== "undefined" &&
-      (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SR) { setProblem("This browser has no dictation. Chrome on Android or Safari on iOS both do."); return; }
-    /* Speech recognition needs a secure context. Opened from a file:// path it
-       is silently unavailable, which is not obvious from the outside. */
-    const secure = typeof window !== "undefined" &&
-      (window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost");
-    if (!secure) { setProblem("Dictation needs the app served over https. Opened from a downloaded file it can't run — it will work once the app is installed properly."); return; }
+  /* ---- WHY IT HUNG AND NEVER CAME BACK ---------------------------------
+     HER REPORT, 10 August: "the microphone hanged, it is not working again."
 
-    setSupported(true);
-    const r = new SR();
+     One recognition object was built at mount and reused for the life of the
+     app. Chrome on Android does not survive that: once a session has been
+     killed underneath it — the screen sleeping, another app taking the
+     microphone, a network drop mid-session — that OBJECT is finished. start()
+     on it either throws forever or resolves into a session that never fires a
+     single event. No amount of stopping, aborting or waiting brings it back;
+     only a new object does, which is why closing and reopening the app
+     "fixed" it.
+
+     So every start builds a fresh one. It costs nothing, and it means the
+     microphone cannot be permanently poisoned by one bad session. */
+  const wire = (r) => {
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-GB";
@@ -12953,7 +12952,7 @@ function useDictation(onText) {
       /* bank the burst that just ended — the next session starts empty */
       carried.current = joinSpeech(carried.current, heardNow.current);
       heardNow.current = "";
-      try { r.start(); } catch (err) { wants.current = false; setListening(false); }
+      if (!begin()) { wants.current = false; setListening(false); }
     };
     r.onerror = (e) => {
       /* no-speech fires on any silence and aborted fires on our own restart.
@@ -12967,30 +12966,64 @@ function useDictation(onText) {
       if (e?.error === "not-allowed" || e?.error === "service-not-allowed")
         /* The same error code covers "she said no" and "the phone took the
            microphone away" — a screen that slept mid-sentence is the second,
-           and telling her she refused it is both wrong and irritating. If the
-           session had been running, say what actually happened. */
+           and telling her she refused it is both wrong and irritating. */
         setProblem(everRan.current
-          ? "The phone took the microphone back — usually the screen going to sleep. Tap the mic and carry on; everything you had already said is still in the box."
+          ? "The phone took the microphone back — usually the screen going to sleep, or another app using it. Tap the mic and carry on; everything you had already said is still in the box."
           : "The microphone is blocked for this site. Allow it in your browser settings — in Chrome, the padlock beside the address, then Permissions.");
       else if (e?.error === "audio-capture")
-        setProblem("The microphone stopped responding. Tap it again — and if it keeps happening, close the app and reopen it.");
+        setProblem("The microphone stopped responding. Tap it again — it builds a fresh one each time, so it should come straight back.");
       else if (e?.error === "network") setProblem("Dictation needs a connection. It's the one part of the app that does.");
       else if (e?.error) setProblem(`Dictation stopped: ${e.error}`);
     };
+    return r;
+  };
+
+  /* Throw away whatever was running and start a brand new session. Returns
+     whether it actually started, so every caller can say something honest. */
+  const begin = () => {
+    const SR = SRRef.current;
+    if (!SR) return false;
+    const old = recRef.current;
+    if (old) {
+      /* silence the corpse first — a dead object can still fire onend, and
+         that onend would try to restart on top of the one we are opening */
+      old.onend = null; old.onerror = null; old.onresult = null; old.onstart = null;
+      try { old.abort ? old.abort() : old.stop(); } catch (e) { /* already gone */ }
+    }
+    let r;
+    try { r = wire(new SR()); } catch (e) { return false; }
     recRef.current = r;
-    return () => { try { r.stop(); } catch (err) { /* already stopped */ } };
+    try { r.start(); return true; } catch (e) { return false; }
+  };
+
+  useEffect(() => {
+    const SR = typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { setProblem("This browser has no dictation. Chrome on Android or Safari on iOS both do."); return; }
+    /* Speech recognition needs a secure context. Opened from a file:// path it
+       is silently unavailable, which is not obvious from the outside. */
+    const secure = typeof window !== "undefined" &&
+      (window.isSecureContext || location.protocol === "https:" || location.hostname === "localhost");
+    if (!secure) { setProblem("Dictation needs the app served over https. Opened from a downloaded file it can't run — it will work once the app is installed properly."); return; }
+    SRRef.current = SR;
+    setSupported(true);
+    return () => {
+      wants.current = false;
+      const r = recRef.current;
+      if (r) { r.onend = null; r.onerror = null; try { r.abort ? r.abort() : r.stop(); } catch (e) { /* gone */ } }
+    };
   }, []);
 
   const toggle = () => {
-    const r = recRef.current;
-    if (!r) return;
+    if (!SRRef.current) return;
     /* Decided from the INTENT, not from the rendered flag. After the phone
-       slept, the rendered flag could say false while a session was still open — so
-       a tap read as "start", start() threw, and the button did nothing at all.
-       `wants` is the truth about whether she means to be talking. */
+       slept, the rendered flag could say false while a session was still
+       open — so a tap read as "start", start() threw, and the button did
+       nothing at all. */
     if (wants.current) {
       wants.current = false;
-      try { r.stop(); } catch (err) { /* already stopped */ }
+      const r = recRef.current;
+      if (r) { try { r.stop(); } catch (err) { /* already stopped */ } }
       setListening(false);
     } else {
       wants.current = true;
@@ -12998,25 +13031,17 @@ function useDictation(onText) {
       carried.current = "";
       heardNow.current = "";
       setProblem(null);            /* a new tap clears the last complaint */
-      /* THE PHONE WENT TO SLEEP AND THE SESSION WAS LEFT HALF-OPEN.
-         start() then throws "already started", which used to be swallowed —
-         so the button did nothing at all and the old message stayed on screen,
-         saying permission was refused when it never was. Close it properly and
-         try once more. */
-      try { r.start(); setListening(true); }
-      catch (err) {
-        recovering.current = true;
-        try { r.abort && r.abort(); } catch (e2) { /* nothing to close */ }
-        setTimeout(() => {
-          recovering.current = false;
-          if (!wants.current) return;
-          try { r.start(); setListening(true); setProblem(null); }
-          catch (e3) {
-            wants.current = false; setListening(false);
-            setProblem("The microphone is stuck — close the app and open it again, and it will come back. Nothing you have typed is lost.");
-          }
-        }, 350);
-      }
+      if (begin()) { setListening(true); return; }
+      /* One retry, a beat later — Android sometimes needs the old session's
+         teardown to finish before it will hand the microphone over again. */
+      recovering.current = true;
+      setTimeout(() => {
+        recovering.current = false;
+        if (!wants.current) return;
+        if (begin()) { setListening(true); setProblem(null); return; }
+        wants.current = false; setListening(false);
+        setProblem("The microphone will not start. Close the app and open it again — nothing you have typed is lost, and it comes back every time.");
+      }, 350);
     }
   };
   return { listening, supported, toggle, problem };
@@ -15489,9 +15514,29 @@ function Briefing({ coach, setSheet, close }) {
 }
 
 function CoachChat({ data, setData, coach, close, seed, about }) {
-  const [msgs, setMsgs] = useState(data.chat || []);
-  const sessionId = useRef(newId());
-  const [draft, setDraft] = useState(seed || "");
+  /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
+     HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
+     have been processed or acted upon."
+
+     It WAS processed — every message is written to `data.chats` before the
+     reply is even asked for, and the coach reads the last six conversations
+     in its briefing. But this line read `data.chat`, singular, which has
+     never existed. So the screen opened blank every single time, and from
+     where she was standing everything she had said had vanished.
+
+     It resumes today's conversation now, under the same id, so carrying on
+     later in the day adds to it rather than starting a second one. */
+  const priorToday = (() => {
+    const mine = (data.chats || []).filter((c) => c.date === coach.t
+      && (c.about || "open chat") === (about || "open chat"));
+    return mine[mine.length - 1] || null;
+  })();
+  const [msgs, setMsgs] = useState(
+    (priorToday?.messages || []).map((m) => ({ role: m.role, content: m.text })));
+  const sessionId = useRef(priorToday?.id || newId());
+  /* And the half-typed message survives too. Dictating three sentences and
+     losing them to a screen that slept is the same loss by another route. */
+  const [draft, setDraft] = useState(seed || data.chatDraft || "");
   const [busy, setBusy] = useState(false);
   /* which of her own messages she is correcting, and the text of the correction */
   const [editing, setEditing] = useState(null);
@@ -15820,6 +15865,7 @@ Two or three sentences unless she asks for more.`;
     if (!text || busy) return;
     const next = [...msgs, { role: "user", content: text }];
     setMsgs(next); setDraft(""); setBusy(true);
+    setData((d) => ({ ...d, chatDraft: "" }));
     /* Save what SHE said before anything can fail. */
     persist(next);
     try {
@@ -15933,11 +15979,12 @@ Two or three sentences unless she asks for more.`;
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <AutoText value={draft} onChange={setDraft}
+        <AutoText value={draft} onChange={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Say it, or hold the mic"
           style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
-        <MicButton onText={setDraft} current={draft} />
+        <MicButton onText={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
+          current={draft} />
         <button onClick={send} disabled={busy || !draft.trim()} className="tap" style={{
           padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
           background: draft.trim() && !busy ? C.signal : C.line, color: C.chalk,
@@ -17431,7 +17478,8 @@ function BodyWork({ data, setData, coach, setSheet }) {
   const [step, setStep] = useState("");
   const build = async () => {
     const want = area.trim();
-    if (!want || busy) return;      /* one at a time, whatever she taps */
+    if (busy) return;               /* one at a time, whatever she taps */
+    if (!want) { setErr("Tell me which part of you needs the work first — tap one of the chips above, or say it in your own words."); return; }
     setBusy(true); setErr(null); setStep("");
     try {
       const out = await designBodyWork({
@@ -17550,14 +17598,40 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
           Say which part of you needs work, in your own words — "stronger shoulders", "my lower back",
           "the whole of my hips". The coach writes ten lists from it.
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
+        {/* HER REPORT, 10 August: "this function is not working, the tab is
+            dimmed." The button was greyed out because the box was empty — and
+            the box LOOKED full, because the placeholder is set in the same
+            mono face as her own typing. She was reading the example as text
+            she had already entered.
+
+            So: the examples are chips she can tap, the box says plainly when
+            it is still empty, and the button is never dead without saying
+            why. */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {["Stronger shoulders", "My lower back", "The whole of my hips",
+            "Knees", "Deep core", "Neck and upper back"].map((x) => (
+            <button key={x} onClick={() => setArea(x)} className="tap" style={{
+              padding: "7px 11px", borderRadius: 999, cursor: "pointer", fontSize: 11.5,
+              fontFamily: "inherit", whiteSpace: "nowrap",
+              border: `1.5px solid ${area.trim() === x ? C.signal : C.line}`,
+              background: area.trim() === x ? C.signal : "transparent",
+              color: area.trim() === x ? C.chalk : C.muted,
+            }}>{x}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 6 }}>
           <AutoText value={area} onChange={setArea}
-            placeholder="Stronger shoulders, all the small muscles too"
-            style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
+            placeholder="…or say it in your own words"
+            style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45,
+              border: `1.5px solid ${area.trim() ? C.signal : C.line}` }} />
           <MicButton onText={setArea} current={area} />
         </div>
+        <div className="mono" style={{ fontSize: 10, marginBottom: 10,
+          color: area.trim() ? C.moss : C.clay }}>
+          {area.trim() ? `asking for: ${area.trim()}` : "nothing chosen yet — tap one above, or type"}
+        </div>
         <Field label="Minutes per list" unit="min" value={mins} onChange={setMins} />
-        <Btn kind="signal" onClick={build} disabled={busy || !area.trim()}>
+        <Btn kind="signal" onClick={build} disabled={busy}>
           {busy ? (step || "Writing your ten lists…") : "Design ten lists"}
         </Btn>
         {busy && (
