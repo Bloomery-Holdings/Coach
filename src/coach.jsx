@@ -87,6 +87,17 @@ const FORMULA_DEFAULTS = {
   mdcTime: 10,         /* timed holds      */
   mdcReps: 15,         /* rep counts       */
   mdcBalance: 20,      /* balance tests    */
+  /* BODY COMPOSITION HAD NO FLOOR OF ITS OWN, so it fell through to the rep
+     floor: her body fat had to move 15% RELATIVE — 27.5% down to 23.4% —
+     before the app would call it a change at all. Nothing she could plausibly
+     do in a year would clear that, which made muscle and body fat numbers she
+     could log and never see move.
+
+     A consumer bioimpedance scale repeats to roughly one percentage point
+     under the same conditions. On numbers in the twenties and thirties that
+     is about 4% relative, so 5 is a conservative floor that still refuses to
+     call scale noise a change. Editable from Settings like every other. */
+  mdcBody: 5,          /* muscle % and body fat %, same scales, same hour */
 
   /* Left-right gap worth naming, as a percentage. Two different tests, two
      different bars: a mobility range test tolerates more side-to-side spread
@@ -115,7 +126,16 @@ const REGIONS = [
   { id: "core",      label: "Core",      note: "Trunk and deep stabilisers. What lets everything else transmit force." },
   { id: "heart",     label: "Heart",     note: "Aerobic work. The system your resting heart rate has already been reporting on." },
 ];
-const CAPS = ["lower", "push", "pull", "core", "cardio", "mobility", "balance"];
+const CAPS = ["lower", "push", "pull", "core", "cardio", "mobility", "balance", "body"];
+
+/* WHERE HER WEIGHT WENT, 10 August. Her words: "there is no place to enter my
+   weight!!!!" It was there — filed under the empty capacity, which renders on
+   the battery under the heading "How the week felt", between confidence and
+   biggest win. Nobody looks for their weight in a group about feelings, and
+   muscle and body fat were in the same place. Body composition is now its own
+   capacity with its own heading. */
+const CAP_LABELS = { body: "body composition" };
+const capLabel = (c) => CAP_LABELS[c] || c;
 
 /* Default share of work per region, by what a class is for. Used only when a
    class carries no body map of its own — which is every class she adds until
@@ -1092,9 +1112,30 @@ const LADDER = [
       line: `${c.drills.list.map((d) => d.label).join(", ")}. Chosen from your own mobility scores.`,
     } : null) },
 
-  { id: "walk", load: false, kind: "moved",
-    make: () => ({ label: "A walk", mins: 20,
-      line: "Outside, no pace, no plan. It counts as a day you moved." }) },
+  /* THE WALK CAME OFF THIS LADDER, 10 August.
+
+     Her words: the coach "just goes down to do a walk in the open air". She
+     is right that it was wrong. A walk is not in her library, it is not a
+     session, and offered as the answer to a flat morning it reads as being
+     brushed off rather than coached. Every rung below is now either her own
+     class, her own drills, or the floor — nothing sends her outside instead
+     of training her. Her Recovery Walk stays in the library, where she put
+     it, as an add-on she chooses. */
+
+  /* WHAT TOOK THE WALK'S PLACE. Her own gentlest add-on — the lowest-effort
+     mobility thing in her library, on a mat, indoors, chosen by her. It is an
+     add-on, so it logs as a day she moved rather than a session, exactly as
+     an add-on always has. Null when her library has nothing like it, and then
+     the ladder simply steps past. */
+  { id: "gentlest", load: false, kind: "moved",
+    make: (c) => {
+      const pool = (c.library || []).filter((w) => w.addon && w.goal === "mobility");
+      if (!pool.length) return null;
+      const w = pool.slice().sort((a, b) => (a.intensity || 9) - (b.intensity || 9))[0];
+      if (!w || (c.easiest && w.name === c.easiest.name) || (c.prescribed && w.name === c.prescribed.name)) return null;
+      return { label: w.name, mins: (w.durations || [15])[0],
+        line: `${w.cue || "Yours, and the smallest thing on your own list."} It logs as a day you moved, not a session.` };
+    } },
 
   { id: "floor", load: false, kind: "moved",
     make: () => ({ label: "Five minutes on the floor", mins: 5,
@@ -1111,6 +1152,64 @@ const ladderFor = (ctx) => LADDER
   .filter((r) => !(ctx.physical && r.load))
   .map((r) => { const m = r.make(ctx); return m ? { id: r.id, kind: r.kind, load: r.load, ...m } : null; })
   .filter(Boolean);
+
+/* ============================================================================
+   DECLINING A MEASUREMENT
+   ---------------------------------------------------------------------------
+   Her instruction, 10 August. Saying no to the measurements is NOT saying no
+   to training, and it must never be answered by walking down the session
+   ladder. Before this, "not today" had no path at all — it fell through to
+   the smaller-door card and she was offered a walk, which is both wrong and
+   insulting: she had not declined the session, she had declined a test.
+
+   So the coach asks WHICH PART, and both answers stay inside measuring:
+
+     the whole thing -> it MOVES to the next training day it can reach. It is
+                        not cancelled and it does not leave its own week or
+                        month. The late count then runs from the moved day,
+                        so choosing to move it is never held against her
+                        (rule 24).
+
+     one of them     -> that test comes out of this sitting, and if another
+                        measure of the same capacity exists that this sitting
+                        is not already asking for, that one is offered in its
+                        place. When there is nothing honest to offer it says
+                        so and drops the row (rule 23).
+
+   Nothing here deletes anything. A deferral is a date and a skip is a list;
+   both are visible inside the battery and both can be undone (rules 12, 20).
+========================================================================== */
+
+/* The stand-in for a test she takes out: another measure of the same capacity
+   that this sitting is not already asking for. Null when there is nothing to
+   offer, which is a real answer. */
+const standInFor = (f, sitting, pool) => {
+  if (!f) return null;
+  const already = new Set((sitting || []).map((x) => x.id));
+  return (pool || []).find((x) => x && x.id !== f.id
+    && (x.cap || "") === (f.cap || "")
+    && !already.has(x.id)
+    && x.type !== "note" && x.type !== "scale") || null;
+};
+
+/* The rows a sitting actually asks for, after what she took out and what she
+   put in its place. One function so the card that offers the swap and the
+   battery that renders it can never disagree about what is being measured. */
+const sittingKey = (which, key) => which + ":" + key;
+const sittingFields = (data, which, key) => {
+  const sk = sittingKey(which, key);
+  const out = (data.skips || {})[sk] || [];
+  const swapped = Object.values((data.standIns || {})[sk] || {});
+  const base = which === "weekly"
+    ? (data.fields?.weekly || []).filter((f) => f.inWeekly !== false)
+    : [...(data.fields?.monthly || []), ...(data.fields?.weekly || [])];
+  const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
+  const kept = base.filter((f) => !out.includes(f.id));
+  const added = swapped
+    .map((id) => pool.find((f) => f.id === id))
+    .filter((f) => f && !kept.some((k) => k.id === f.id));
+  return { fields: [...kept, ...added], out, pool, base };
+};
 
 /* The next door down from whatever was just declined. Persistence lives in the
    offering, never in the asking: one rung at a time, and never back up. */
@@ -1412,8 +1511,26 @@ const reviewPayload = (data, coach) => {
       const e = wk[k] || {};
       const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
         .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
-      return `Week of ${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
+      return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
+  }));
+
+  S("WHAT SHE DECLINED, AND WHEN", rvSafe(() => {
+    const sk = d.skips || {}, df = d.deferrals || {}, si = d.standIns || {};
+    const pool = [...(d.fields?.weekly || []), ...(d.fields?.monthly || [])];
+    const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+    const out = [];
+    Object.keys(df).sort().forEach((k) => out.push(`${k} — she moved the whole battery to ${df[k]}`));
+    Object.keys(sk).sort().forEach((k) => {
+      const ids = sk[k] || []; if (!ids.length) return;
+      out.push(`${k} — she took out ${ids.map((i) => `${name(i)}${(si[k] || {})[i] ? ` and measured ${name((si[k] || {})[i])} instead` : ""}`).join(", ")}`);
+    });
+    if (!out.length) return "she has not moved or dropped a measurement";
+    return out.join("\n") + `
+  This is information, never an accusation. A measurement she moved is not a
+  session she missed and must never be counted as one. If the same test keeps
+  coming out, that is worth naming gently — it usually means the test is wrong
+  for her, not that she is avoiding it, and it can be replaced (rule 13).`;
   }));
 
   S("EVERY MONTHLY BENCHMARK, EVERY MEASUREMENT", rvSafe(() => {
@@ -2169,6 +2286,7 @@ const formatReading = (f, e) => {
 const noiseFloorFor = (f, F = FORMULA_DEFAULTS) =>
   f.type === "time" ? F.mdcTime
   : f.cap === "balance" ? F.mdcBalance
+  : f.cap === "body" ? (F.mdcBody ?? FORMULA_DEFAULTS.mdcBody)
   : f.type === "weightreps" ? F.mdcLoad : F.mdcReps;
 
 const analyseMeasure = (f, store, F = FORMULA_DEFAULTS) => {
@@ -2205,17 +2323,38 @@ const analyseMeasure = (f, store, F = FORMULA_DEFAULTS) => {
     : (first.v ? ((now.v - first.v) / first.v) * 100 * (up ? 1 : -1) : null);
   const outOf10 = best.v ? Math.round(Math.max(0, Math.min(10, (up ? now.v / best.v : best.v / now.v) * 10))) : null;
 
+  /* A MEASURE WITH NO BETTER DIRECTION IS STILL A MEASURE.
+
+     Her weight carries better: null, correctly — she is not chasing a number
+     in either direction, and calling a kilo up "declining" would be both
+     wrong and unkind. But the analysis list filtered on `better`, so weight
+     was not just unjudged, it was absent: no trend, no history, nothing to
+     look at. Her words, 10 August: "there is no place to enter my weight!!!!
+     or follow it up!!!!"
+
+     So it is followed like everything else and simply never given a verdict.
+     Direction is "tracked", there is no score out of ten, and no best to be
+     beaten — but the series, the change and the chart are all there. */
+  const neutral = !f.better;
+
   return {
     id: f.id, label: f.label, cap: f.cap, unit: f.unit, better: f.better, type: f.type,
     reading: formatReading(f, store[now.k]),
     prevReading: prev ? formatReading(f, store[prev.k]) : null,
-    now: now.v, prev: prev?.v ?? null, best: best.v, first: first.v,
-    pct, sinceStart, outOf10, isBest: now.v === best.v && series.length > 1,
+    now: now.v, prev: prev?.v ?? null, best: neutral ? null : best.v, first: first.v,
+    /* every reading with the period it belongs to, oldest first — this is what
+       a chart is drawn from, and it is the same series the verdict came from */
+    series: series.map((x) => ({ k: x.k, v: x.v })),
+    pct: neutral ? (prev && prev.v ? ((now.v - prev.v) / prev.v) * 100 : null) : pct,
+    sinceStart: neutral ? (first.v ? ((now.v - first.v) / first.v) * 100 : null) : sinceStart,
+    outOf10: neutral ? null : outOf10,
+    isBest: neutral ? false : now.v === best.v && series.length > 1,
     points: series.length,
     rung: rungNow, rungMoved,
     /* A rung change is judged by the rung. Otherwise, only past its own error
-       floor does a move get a direction. */
-    direction: rungMoved ? (rungNow > rungPrev ? "up" : "down")
+       floor does a move get a direction. And a neutral measure never gets one. */
+    direction: neutral ? "tracked"
+      : rungMoved ? (rungNow > rungPrev ? "up" : "down")
       : pct === null ? "new"
       : pct >= noiseFloorFor(f, F) ? "up"
       : pct <= -noiseFloorFor(f, F) ? "down" : "flat",
@@ -2402,10 +2541,11 @@ const SEED_WEEKLY = [
     how: "Thirty seconds a side. Stand on one leg and reach the other foot as far forward as you can, tap lightly, and come back without putting weight on it.",
     why: "Balance while moving rather than balance while still. Closer to what actually goes wrong on a kerb." },
 
-  /* ---- HOW THE WEEK FELT ---- */
-  { id: "weight", mins: 0.2,     cap: "",        label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true ,
+  /* ---- BODY COMPOSITION ---- */
+  { id: "weight", mins: 0.2,     cap: "body",    label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true ,
     how: "Same scales, same time of day, ideally first thing. One reading a week, not a daily one.",
     why: "On its own it says very little — it moves with water, food and the time of day. It is here because the body-composition percentages need it to mean anything." },
+  /* ---- HOW THE WEEK FELT ---- */
   { id: "confidence", mins: 0.2, cap: "",        label: "Confidence",       role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: "up", inWeekly: true ,
     how: "How confident you feel about your training right now, 1 to 10. First answer, not a considered one.",
     why: "It is one of the five signals behind the weekly call. Low confidence means simplify — fewer variables, cleaner sessions — rather than push." },
@@ -2421,10 +2561,10 @@ const SEED_WEEKLY = [
 ];
 
 const SEED_MONTHLY = [
-  { id: "muscle", cap: "", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: false ,
+  { id: "muscle", cap: "body", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: false ,
     how: "Same scales, same conditions as your weight. Log the percentage the scales report.",
     why: "Maintaining muscle through your fifties is the whole point of the training. It moves slowly, so only a change beyond the measurement error counts as a change at all." },
-  { id: "fat",    cap: "", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: false ,
+  { id: "fat",    cap: "body", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: false ,
     how: "Same scales, same conditions, same time of day.",
     why: "Read alongside muscle rather than on its own. Consumer scales are not accurate in absolute terms, but they are reasonably consistent, which is what makes the direction usable." },
 ];
@@ -2577,7 +2717,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 57";
+const BUILD = "10 August 2026 · 59";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2701,6 +2841,13 @@ const BLANK = {
   journal: [],    /* free entries: { id, date, text } */
   notes: {},      /* date -> { text, kept } */
   notesUsed: [],  /* pool indices already spent, so nothing repeats */
+  /* Declining a measurement, 10 August. A deferral is the date a battery is
+     not asked for before; a skip is the rows she took out of one sitting; a
+     stand-in is what went in their place. All three are keyed by sitting and
+     none of them ever deletes anything (rules 12, 20). */
+  deferrals: {},
+  skips: {},
+  standIns: {},
   plan: { startDate: today(), themes: { week: {}, month: {}, quarter: {} } },
   logs: {}, weekly: {}, monthly: {},
   /* Things she wants to be able to do, in her words. Each one becomes a real
@@ -2800,12 +2947,12 @@ async function loadData() {
           weekly: d.fields?.weekly?.length
             ? addNewFields(
                 retireFields(
-                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"]),
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"]),
                   d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
-            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"])
+            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"])
             : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
@@ -3428,8 +3575,13 @@ function useCoach(data, day, clock) {
       recoveryOk: recAvg === null ? true : recAvg >= recBaseline - 5,
       shoulderIssue: settings.shoulderInjury && lowComfort > 0,
     };
-    const analysis = fields.weekly
-      .filter((f) => f.type !== "note" && f.better)
+    /* Every number she logs, including the ones with no right direction. The
+       monthly rows come too, so body composition is analysed and charted the
+       same as everything else rather than living in a corner. */
+    const analysed = [...fields.weekly, ...fields.monthly]
+      .filter((f) => f.type !== "note" && f.type !== "scale")
+      .filter((f, i, all) => all.findIndex((x) => x.id === f.id) === i);
+    const analysis = analysed
       .map((f) => {
         const m = analyseMeasure(f, { ...weekly, ...monthly }, FX);
         return m ? { ...m, why: explainChange(m, ctx), next: nextStepFor(m, ctx) } : null;
@@ -3439,9 +3591,27 @@ function useCoach(data, day, clock) {
     const improving = analysis.filter((m) => m.direction === "up");
     const declining = analysis.filter((m) => m.direction === "down");
     const holding = analysis.filter((m) => m.direction === "flat");
-    const overall = analysis.length
-      ? Math.round((analysis.reduce((a, m) => a + (m.outOf10 ?? 0), 0) / analysis.length) * 10) / 10
+    /* Followed, never judged. Kept out of every verdict below on purpose. */
+    const tracked = analysis.filter((m) => m.direction === "tracked");
+    /* A measure with no direction cannot contribute to a score about direction
+       — averaging it in as a zero would drag the whole thing down for no
+       reason (rule 23). */
+    const scored = analysis.filter((m) => m.outOf10 !== null && m.outOf10 !== undefined);
+    const overall = scored.length
+      ? Math.round((scored.reduce((a, m) => a + m.outOf10, 0) / scored.length) * 10) / 10
       : null;
+
+    /* Every reading of a WHOOP number with the day it belongs to, oldest
+       first, so the same charts she gets from WHOOP exist here too. */
+    const morningSeries = (key, days = 90) => {
+      const out = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = addDays(t, -i);
+        const v = Number(morning?.[d]?.[key]);
+        if (v > 0) out.push({ k: d, v });
+      }
+      return out;
+    };
 
     /* ---- the coach speaks first, without being asked ---- */
     /* the weight in a bet is one she has actually handled, not a guess */
@@ -4123,15 +4293,38 @@ function useCoach(data, day, clock) {
     const nextWeekDays = Array.from({ length: 7 }, (_, i) => addDays(ws, 7 + i));
     const nextAssessDay = weekly[ws] ? firstTrainingDay(nextWeekDays) : weeklyAssessDay;
 
+    /* ---- WHEN SHE HAS MOVED ONE ---------------------------------------
+       A deferral is a date this battery is not asked for before. It never
+       takes the battery out of its own week or month; it only moves the day
+       it lands on. Everything downstream measures lateness from the moved
+       day, so moving it on purpose is not a debt (rule 24). */
+    const weeklyKey = sittingKey("weekly", ws);
+    const monthlyKey = sittingKey("monthly", mk);
+    const deferrals = data.deferrals || {};
+    const laterOf = (a, b) => (a && b ? (a > b ? a : b) : a || b);
+    const weeklyFrom = laterOf(weeklyAssessDay, deferrals[weeklyKey]);
+    const monthlyFrom = laterOf(monthlyAssessDay, deferrals[monthlyKey]);
+    /* the next day it could reasonably land on: the next training day inside
+       the same week or month, or failing that simply tomorrow */
+    const nextMeasureDay = (from, days) => {
+      const after = (days || []).filter((d) => d > from);
+      return after.find((d) => isScheduled(d)) || after[0] || addDays(from, 1);
+    };
+
     /* due the moment its day arrives, and it stays due until it's done */
-    const weeklyDue = !weekly[ws] && t >= weeklyAssessDay;
-    const monthlyDue = !monthly[mk] && t >= monthlyAssessDay;
-    const weeklyToday = !weekly[ws] && t === weeklyAssessDay;
-    const monthlyToday = !monthly[mk] && t === monthlyAssessDay;
-    const weeklyLate = weeklyDue && t > weeklyAssessDay
-      ? Math.round((parse(t) - parse(weeklyAssessDay)) / 86400000) : 0;
-    const monthlyLate = monthlyDue && t > monthlyAssessDay
-      ? Math.round((parse(t) - parse(monthlyAssessDay)) / 86400000) : 0;
+    const weeklyDue = !weekly[ws] && t >= weeklyFrom;
+    const monthlyDue = !monthly[mk] && t >= monthlyFrom;
+    const weeklyToday = !weekly[ws] && t === weeklyFrom;
+    const monthlyToday = !monthly[mk] && t === monthlyFrom;
+    const weeklyLate = weeklyDue && t > weeklyFrom
+      ? Math.round((parse(t) - parse(weeklyFrom)) / 86400000) : 0;
+    const monthlyLate = monthlyDue && t > monthlyFrom
+      ? Math.round((parse(t) - parse(monthlyFrom)) / 86400000) : 0;
+    /* what she has taken out of each sitting, and where a moved one lands */
+    const weeklySkips = (data.skips || {})[weeklyKey] || [];
+    const monthlySkips = (data.skips || {})[monthlyKey] || [];
+    const weeklyMoveTo = nextMeasureDay(t, calendarWeek);
+    const monthlyMoveTo = nextMeasureDay(t, monthDays);
 
     /* Was a battery filled in today, or in the last couple of days? A reading
        is worth saying while it is still the thing she just did. */
@@ -4447,6 +4640,7 @@ function useCoach(data, day, clock) {
       prescribed: prescribed || null,
       easiest,
       drills: dailyDrills,
+      library: data.library || [],
       physical: physicalSignal,
     });
     const ladderWhy = physicalSignal
@@ -6279,6 +6473,8 @@ function useCoach(data, day, clock) {
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
       batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
+      tracked, morningSeries,
     };
   }, [data, day, clock]);
 }
@@ -6532,6 +6728,135 @@ const Tag = ({ children, tone }) => (
     color: tone === "warn" ? C.clay : C.muted, whiteSpace: "nowrap",
   }}>{children}</span>
 );
+
+/* ============================================================================
+   A CHART
+   ---------------------------------------------------------------------------
+   Her instruction, 10 August: "I need to have graphs like the one you give me
+   for whoop readings." Until now the app had no chart of any kind — every
+   number was a figure and a percentage, which is fine for a verdict and
+   useless for seeing a shape.
+
+   Hand-drawn SVG, no library, no dependency, works offline like everything
+   else. It draws exactly the points it was given and never interpolates a
+   value it does not have (rule 23): gaps are gaps, and a single reading draws
+   a dot rather than pretending to be a line.
+
+   Colour carries no judgement by default. A measure only goes green or clay
+   when it HAS a better direction — weight is drawn in ink, because up is not
+   worse and down is not better.
+   ==========================================================================*/
+const Spark = ({ points, better, height = 64, band = null, label = "" }) => {
+  const pts = (points || []).filter((p) => p && isFinite(Number(p.v)));
+  if (!pts.length) return null;
+  const W = 300, H = height, PAD = 6;
+  const vals = pts.map((p) => Number(p.v));
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi === lo) { hi = lo + Math.max(1, Math.abs(lo) * 0.02); lo = lo - Math.max(1, Math.abs(lo) * 0.02); }
+  /* a little air, so the highest point is not welded to the top edge */
+  const pad = (hi - lo) * 0.12;
+  lo -= pad; hi += pad;
+  const x = (i) => PAD + (pts.length === 1 ? (W - PAD * 2) / 2 : (i / (pts.length - 1)) * (W - PAD * 2));
+  const y = (v) => H - PAD - ((v - lo) / (hi - lo)) * (H - PAD * 2);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(Number(p.v)).toFixed(1)}`).join(" ");
+  const area = `${line} L${x(pts.length - 1).toFixed(1)} ${H - PAD} L${x(0).toFixed(1)} ${H - PAD} Z`;
+  const first = Number(pts[0].v), last = Number(pts[pts.length - 1].v);
+  const moved = last - first;
+  const tone = !better ? C.ink
+    : (better === "down" ? moved < 0 : moved > 0) ? C.moss
+    : moved === 0 ? C.muted : C.clay;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none"
+      role="img" aria-label={`${label} from ${pts[0].k} to ${pts[pts.length - 1].k}`}
+      style={{ display: "block", overflow: "visible" }}>
+      {band && isFinite(band.lo) && isFinite(band.hi) && (
+        <rect x={PAD} y={y(band.hi)} width={W - PAD * 2} height={Math.max(1, y(band.lo) - y(band.hi))}
+          fill={C.pist} opacity="0.7" />
+      )}
+      <path d={area} fill={tone} opacity="0.10" />
+      <path d={line} fill="none" stroke={tone} strokeWidth="2"
+        strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      {pts.map((p, i) => (
+        <circle key={p.k + ":" + i} cx={x(i)} cy={y(Number(p.v))}
+          r={i === pts.length - 1 ? 3.5 : 2} fill={i === pts.length - 1 ? tone : C.card}
+          stroke={tone} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
+  );
+};
+
+/* A chart with everything around it that makes it readable: what it is, what
+   it is measured in, where it started and where it is now. One component so
+   no two charts in the app can disagree about how to present themselves. */
+const ChartCard = ({ title, unit, points, better, note, height, band, right }) => {
+  const pts = (points || []).filter((p) => p && isFinite(Number(p.v)));
+  const first = pts.length ? Number(pts[0].v) : null;
+  const last = pts.length ? Number(pts[pts.length - 1].v) : null;
+  const fmt = (v) => (v === null ? "—" : Math.round(v * 10) / 10);
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{title}</span>
+        <span className="mono" style={{ fontSize: 10, color: C.muted }}>{right || unit}</span>
+      </div>
+      {pts.length >= 2 ? (
+        <>
+          <Spark points={pts} better={better} height={height} band={band} label={title} />
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
+            <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{fmt(first)} · {pts[0].k}</span>
+            <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{fmt(last)} · now</span>
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, padding: "10px 0" }}>
+          {pts.length === 1
+            ? `One reading so far: ${fmt(last)}${unit ? " " + unit : ""}. A second one draws the line.`
+            : "Nothing logged yet, so there is nothing to draw."}
+        </div>
+      )}
+      {note && <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>{note}</div>}
+    </div>
+  );
+};
+
+/* ============================================================================
+   WHICH CALCULATIONS CAN BE DRAWN
+   ---------------------------------------------------------------------------
+   A chart needs a stored series. Some of these numbers have one — every
+   morning WHOOP writes a value and it is kept — and those get drawn exactly
+   as WHOOP draws them. Others are a single figure computed from a window and
+   there is no honest history to plot; those say so rather than showing a
+   flat line that means nothing (rule 23).
+
+   A list, so a chart can be added to any calculation later without touching
+   anything that draws one (rule 13). Keys are the fields the WHOOP import
+   writes into `morning`.
+   ==========================================================================*/
+const VITAL_CHARTS = {
+  readiness: [{ label: "Recovery", key: "recovery", unit: "%", better: "up" }],
+  autonomic: [{ label: "HRV", key: "hrv", unit: "ms", better: "up" },
+              { label: "Resting heart rate", key: "rhr", unit: "bpm", better: "down" }],
+  sleep: [{ label: "Time asleep", key: "asleep", unit: "minutes", better: "up" }],
+  sleepquality: [{ label: "Deep sleep", key: "deep", unit: "minutes", better: "up" },
+                 { label: "REM sleep", key: "rem", unit: "minutes", better: "up" },
+                 { label: "Sleep efficiency", key: "sleepEff", unit: "%", better: "up" }],
+  sleepdebt: [{ label: "Sleep debt", key: "sleepDebt", unit: "minutes", better: "down" }],
+  cardiac: [{ label: "Average heart rate in sessions", key: "avgHr", unit: "bpm", better: "down" },
+            { label: "Peak heart rate", key: "maxHr", unit: "bpm", better: null }],
+  illness: [{ label: "Skin temperature", key: "skinTemp", unit: "°", better: null },
+            { label: "Breathing rate", key: "respiratory", unit: "breaths/min", better: null },
+            { label: "Blood oxygen", key: "spo2", unit: "%", better: "up" }],
+};
+
+/* And the calculations whose series is a battery measure rather than a
+   morning reading — same treatment, drawn from what she logged. */
+const VITAL_MEASURES = {
+  muscle: ["muscle", "fat", "weight"],
+  realchange: ["squat", "pushup", "plank"],
+  asymmetry: ["splitsq"],
+  mobility: [],
+};
 
 const Btn = ({ children, onClick, kind = "solid", style = {} }) => {
   const base = { width: "100%", padding: "14px 16px", borderRadius: 11, cursor: "pointer", fontSize: 15, fontWeight: 600, fontFamily: "'IBM Plex Sans', sans-serif" };
@@ -7949,23 +8274,8 @@ function Today({ data, setData, coach, setSheet }) {
                Her instruction: "then benchmark day before the sessions." On a
                day it is due it IS the session, so it has to be read first. */}
       {isToday && measureDue && (
-        <Card style={{ background: C.pist, padding: "14px 16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.ink }}>
-              {showMonthlyCall ? "Monthly benchmark" : "Weekly measurements"}
-              {(showMonthlyCall ? coach.monthlyLate : coach.weeklyLate) > 0 && (
-                <span style={{ fontWeight: 400, color: C.muted }}>
-                  {" — "}{showMonthlyCall ? coach.monthlyLate : coach.weeklyLate} days late
-                </span>
-              )}
-            </span>
-            <button onClick={() => setSheet({ kind: showMonthlyCall ? "monthly" : "weekly",
-              key: showMonthlyCall ? coach.mk : coach.ws })} className="tap" style={{
-                padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
-                border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit",
-                whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
-          </div>
-        </Card>
+        <MeasureDueCard data={data} setData={setData} coach={coach} setSheet={setSheet}
+          monthly={showMonthlyCall} />
       )}
 
 
@@ -8705,7 +9015,9 @@ function Today({ data, setData, coach, setSheet }) {
           <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
             {coach.weeklyDue
               ? "Squat, push-up, cable row, plank, elliptical, reach, balance — about ten minutes. This is what every chart and every score is built from."
-              : "You've filled in the weekly battery. Open it again any time to correct a number."}
+              : data.weekly?.[coach.ws]?.fromMonthly
+                ? "Filled in from the monthly benchmark — the weekly is part of it, so you don't do the same exercises twice. Open it any time to correct a number."
+                : "You've filled in the weekly battery. Open it again any time to correct a number."}
           </div>
           <Btn kind={coach.weeklyDue ? "signal" : "ghost"} onClick={() => setSheet({ kind: "weekly", key: coach.ws })}>
             {coach.weeklyDue ? "Enter this week's measurements" : "Review this week's measurements"}
@@ -10256,7 +10568,7 @@ function FieldEditor({ which, data, setData, close }) {
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Capability</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
                   {[...CAPS, ""].map((c) => (
-                    <button key={c || "none"} onClick={() => patch(f.id, { cap: c })} className="tap mono" style={{
+                    <button key={c || "none"} onClick={() => patch(f.id, { cap: c, capEdited: true })} className="tap mono" style={{
                       padding: "7px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 500,
                       border: `1.5px solid ${(f.cap || "") === c ? C.ink : C.line}`,
                       background: (f.cap || "") === c ? C.ink : "transparent",
@@ -10405,6 +10717,7 @@ function Formulas({ data, setData, close }) {
     { title: "Real change, not noise", note: "Every measurement carries error. A change is only called real above these thresholds — below them the word is holding, never declining. Percentages.",
       rows: [["mdcLoad", "Weight × reps"], ["mdcTime", "Timed holds"],
              ["mdcReps", "Rep counts"], ["mdcBalance", "Balance"],
+             ["mdcBody", "Muscle % and body fat %"],
              ["asymmetryPct", "Left-right gap worth naming (mobility)"],
              ["bilateralPct", "Left-right gap worth naming (strength)"]] },
   ];
@@ -10441,6 +10754,9 @@ function Analysis({ coach, close, setSheet }) {
     { key: "up", label: "Improving", items: coach.improving, tint: C.mint, tone: C.moss },
     { key: "flat", label: "Holding", items: coach.holding, tint: C.chalk, tone: C.muted },
     { key: "down", label: "Needs attention", items: coach.declining, tint: "rgba(194,84,47,0.08)", tone: C.clay },
+    /* Followed without a verdict. Weight lives here, and anything else she
+       adds that has no right direction. */
+    { key: "tracked", label: "Followed, not judged", items: coach.tracked || [], tint: C.chalk, tone: C.muted },
   ];
 
   return (
@@ -10466,6 +10782,43 @@ function Analysis({ coach, close, setSheet }) {
           </div>
         </Card>
       )}
+
+      {/* BODY COMPOSITION, WHERE SHE CAN SEE IT.
+          Her weight, her muscle and her body fat drawn together, because the
+          only thing any of them means is what the other two are doing at the
+          same time. Weight is drawn in ink and given no verdict — up is not
+          worse and down is not better, and the app must not imply otherwise
+          (rules 23, 24). */}
+      {(() => {
+        const body = ["weight", "muscle", "fat"]
+          .map((id) => coach.analysis.find((m) => m.id === id))
+          .filter(Boolean);
+        if (!body.length) return null;
+        return (
+          <Card style={{ marginBottom: 16 }}>
+            <Eyebrow color={C.signal}>Body composition</Eyebrow>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
+              Weight on its own says very little — it moves with water, food and the hour. It is here
+              because muscle and fat need it to mean anything, and the three together are the picture.
+            </div>
+            {body.map((m) => (
+              <div key={m.id} style={{ paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+                <ChartCard title={m.label} unit={m.unit} points={m.series} better={m.better}
+                  right={`${m.reading ? m.reading.main : m.now} ${m.unit || ""}`}
+                  note={m.direction === "tracked"
+                    ? "Followed, not judged. There is no better direction for this one."
+                    : m.why} />
+              </div>
+            ))}
+            <div style={{ marginTop: 14 }}>
+              <Btn kind="quiet" onClick={() => setSheet({ kind: "chat", about: "my body composition",
+                seed: "Read my weight, muscle and body fat together — what are they actually saying?" })}>
+                Ask your coach to read these three together
+              </Btn>
+            </div>
+          </Card>
+        );
+      })()}
 
       {coach.analysis.length === 0 && (
         <Card>
@@ -10499,6 +10852,20 @@ function Analysis({ coach, close, setSheet }) {
                   )}
                 </span>
               </div>
+
+              {m.series && m.series.length > 1 && (
+                <div style={{ marginTop: 12 }}>
+                  <Spark points={m.series} better={m.better} height={52} label={m.label} />
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                    <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+                      {Math.round(m.first * 10) / 10} · {m.series[0].k}
+                    </span>
+                    <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+                      {m.series.length} readings
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
                 {[[m.type === "weightreps" ? "total load vs last" : "vs last",
@@ -11481,6 +11848,138 @@ function MicButton({ onText, current }) {
 /* The whole programme, and every part of it editable. The coach wrote the
    first draft; she owns it from here. Tap any day to change what it is, drag
    phase lengths, move the start date. */
+
+/* ============================================================================
+   DECLINING A MEASUREMENT, ON SCREEN
+   ---------------------------------------------------------------------------
+   "Not today" on the battery. It does not go down the session ladder and it
+   does not touch the day's class. It asks which part she is declining, and
+   every answer it can give stays inside measuring.
+   ==========================================================================*/
+function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
+  /* null -> the plain call | "which" -> the question | "one" -> pick a test */
+  const [step, setStep] = useState(null);
+  const [done, setDone] = useState(null);
+
+  const which = monthly ? "monthly" : "weekly";
+  const periodKey = monthly ? coach.mk : coach.ws;
+  const sk = monthly ? coach.monthlyKey : coach.weeklyKey;
+  const late = monthly ? coach.monthlyLate : coach.weeklyLate;
+  const moveTo = monthly ? coach.monthlyMoveTo : coach.weeklyMoveTo;
+  const { fields, pool } = sittingFields(data, which, periodKey);
+  /* a note or a scale is a feeling, not a test — nothing to decline */
+  const tests = fields.filter((f) => f.type !== "note" && f.type !== "scale");
+
+  const moveWhole = () => {
+    setData((d) => ({ ...d, deferrals: { ...(d.deferrals || {}), [sk]: moveTo } }));
+    setDone({ kind: "moved" });
+  };
+  const takeOut = (f) => {
+    const stand = standInFor(f, fields, pool);
+    setData((d) => ({ ...d,
+      skips: { ...(d.skips || {}), [sk]: [...(((d.skips || {})[sk]) || []), f.id] } }));
+    setDone({ kind: "out", label: f.label, stand });
+  };
+  const putInstead = (out, stand) => {
+    setData((d) => ({ ...d,
+      standIns: { ...(d.standIns || {}),
+        [sk]: { ...(((d.standIns || {})[sk]) || {}), [out]: stand.id } } }));
+    setDone((x) => ({ ...x, took: stand.label }));
+  };
+
+  if (done) {
+    return (
+      <Card style={{ background: C.mint }}>
+        <Eyebrow color={C.moss}>{done.kind === "moved" ? "Moved" : "Taken out"}</Eyebrow>
+        <div style={{ fontSize: 14, lineHeight: 1.55, color: C.ink }}>
+          {done.kind === "moved"
+            ? `Fine. It's on ${prettyShort(moveTo)} instead, and nothing about today changes — your class is still your class.`
+            : done.took
+              ? `${done.label} is out and ${done.took} is in its place. Everything else is unchanged.`
+              : `${done.label} is out of this one. Everything else is unchanged, and you can put it back from inside the battery whenever you want.`}
+        </div>
+        {done.kind === "out" && done.stand && !done.took && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
+              {done.stand.label} measures the same thing and isn't in this one. Want it instead?
+            </div>
+            <Btn kind="ghost" onClick={() => {
+              const outId = (((data.skips || {})[sk]) || []).slice(-1)[0];
+              if (outId) putInstead(outId, done.stand);
+            }}>Measure {done.stand.label} instead</Btn>
+          </div>
+        )}
+        {done.kind === "out" && !done.stand && (
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
+            There's nothing else on your list that measures the same thing, so this sitting is one
+            row shorter rather than swapped. Not a problem — it just means that number has a gap.
+          </div>
+        )}
+      </Card>
+    );
+  }
+
+  if (step === "one") {
+    return (
+      <Card style={{ background: C.pist }}>
+        <Eyebrow color={C.signal}>Which one?</Eyebrow>
+        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
+          Tap the one you'd rather not do. The rest of the battery stays as it is.
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {tests.map((f) => (
+            <button key={f.id} onClick={() => takeOut(f)} className="tap" style={{
+              padding: "9px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+              border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+              fontFamily: "inherit" }}>{f.label}</button>
+          ))}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <Btn kind="quiet" onClick={() => setStep("which")}>Back</Btn>
+        </div>
+      </Card>
+    );
+  }
+
+  if (step === "which") {
+    return (
+      <Card style={{ background: C.pist }}>
+        <Eyebrow color={C.signal}>Not today</Eyebrow>
+        <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.55, marginBottom: 14 }}>
+          All of it, or one of them? Either is fine — this is measuring, not training, and skipping
+          it costs you nothing.
+        </div>
+        <Btn kind="ghost" onClick={moveWhole}>All of it — move it to {prettyShort(moveTo)}</Btn>
+        <div style={{ marginTop: 8 }}>
+          <Btn kind="ghost" onClick={() => setStep("one")}>Just one of them</Btn>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <Btn kind="quiet" onClick={() => setStep(null)}>Actually, I'll do it</Btn>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={{ background: C.pist, padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.ink }}>
+          {monthly ? "Monthly benchmark" : "Weekly measurements"}
+          {late > 0 && (
+            <span style={{ fontWeight: 400, color: C.muted }}>{" — "}{late} days late</span>
+          )}
+        </span>
+        <button onClick={() => setSheet({ kind: which, key: periodKey })} className="tap" style={{
+          padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+          border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit",
+          whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
+      </div>
+      <button onClick={() => setStep("which")} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
+        fontSize: 12, color: C.muted, fontFamily: "inherit" }}>Not today</button>
+    </Card>
+  );
+}
 
 /* ============================================================================
    THE SMALLER DOOR, ON SCREEN
@@ -12871,6 +13370,43 @@ function VitalDetail({ id, coach, setSheet }) {
         </div>
       </Card>
 
+      {/* THE SHAPE OF IT, NOT JUST TODAY'S FIGURE.
+          Her instruction, 10 August: "I need to have graphs like the one you
+          give me for whoop readings." Where a real series exists it is drawn.
+          Where one does not, the card says so plainly instead of drawing a
+          line that means nothing. */}
+      {(() => {
+        const whoop = (VITAL_CHARTS[v.id] || [])
+          .map((c) => ({ ...c, points: coach.morningSeries ? coach.morningSeries(c.key, 90) : [] }))
+          .filter((c) => c.points.length > 1);
+        const measures = (VITAL_MEASURES[v.id] || [])
+          .map((id) => (coach.analysis || []).find((m) => m.id === id))
+          .filter((m) => m && m.series && m.series.length > 1);
+        if (!whoop.length && !measures.length) return null;
+        return (
+          <Card style={{ marginBottom: 14 }}>
+            <Eyebrow>The shape of it</Eyebrow>
+            <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
+              {whoop.length ? "Every reading kept, oldest on the left. Gaps are days with no reading — nothing is filled in for you."
+                : "Every reading you have logged, oldest on the left."}
+            </div>
+            {whoop.map((c) => (
+              <div key={c.key} style={{ paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+                <ChartCard title={c.label} unit={c.unit} points={c.points} better={c.better}
+                  right={`${c.points.length} days · ${c.unit}`} />
+              </div>
+            ))}
+            {measures.map((m) => (
+              <div key={m.id} style={{ paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+                <ChartCard title={m.label} unit={m.unit} points={m.series} better={m.better}
+                  right={`${m.series.length} readings · ${m.unit || ""}`}
+                  note={m.direction === "tracked" ? "Followed, not judged — there is no better direction for this one." : null} />
+              </div>
+            ))}
+          </Card>
+        );
+      })()}
+
       {v.how && (
         <Card style={{ marginBottom: 14 }}>
           <Eyebrow>How it's worked out</Eyebrow>
@@ -13627,6 +14163,19 @@ ${about ? `- She tapped "${about}" and came here to ask about it. Answer that fi
   as an accounting; use it so she does not have to explain the same thing twice:
 ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w.reason || "?"}${(w.answers || []).length ? ` (${(w.answers || []).join(", ")})` : ""}${w.words ? ` — she wrote: "${w.words}"` : ""}` : null; }).filter(Boolean).join("\n") || "  nothing in the last fortnight"}
 - Last battery: ${battery}
+- MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
+    const sk = data.skips || {}, df = data.deferrals || {};
+    const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
+    const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+    const bits = [];
+    Object.keys(df).forEach((k) => bits.push(`${k} moved to ${df[k]}`));
+    Object.keys(sk).forEach((k) => { if ((sk[k] || []).length) bits.push(`${k}: ${sk[k].map(name).join(", ")} taken out`); });
+    return bits.length ? bits.join(" | ") : "none";
+  })()}
+  A battery is not a session. If she says she does not want to do the measurements, do NOT offer her
+  a smaller session and do NOT treat the day as declined — ask whether it is the whole battery or one
+  exercise, and say plainly that either is fine and neither costs her anything. Her class is
+  unaffected either way. Never make her feel accounted for over a test.
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
 - Overall standing against her own bests: ${coach.overall ?? "not enough data"}/10
@@ -13658,9 +14207,13 @@ When she arrives frustrated, flat, low, or saying she cannot face it:
 - Normalise it. Most people who train for years have exactly these mornings. Feeling like this is
   not evidence of a character problem and not evidence that this will not work.
 - Only once she has been properly heard, and only if it seems welcome, offer the smallest possible
-  next step — genuinely small. Ten minutes. A walk. Getting changed and seeing how it feels. Or
-  nothing at all today, said warmly and meant, because a rest day chosen on purpose is not a failure
-  and treating it as one is how people quit.
+  next step — genuinely small, and taken from HER OWN LIBRARY or her own mobility drills. Ten
+  minutes of the gentlest class she owns. Five minutes on the floor. Getting changed and seeing how
+  it feels. Or nothing at all today, said warmly and meant, because a rest day chosen on purpose is
+  not a failure and treating it as one is how people quit.
+- NEVER offer a walk, fresh air, or going outside as the alternative to training, and never as the
+  answer to a flat morning. She has said plainly that it reads as being brushed off. If the smallest
+  honest thing is nothing, say nothing — do not reach for a walk to fill the gap.
 - Never bargain, guilt, or invoke what she will lose. Never mention consistency or what the numbers
   will do. That pressure is exactly what turns a bad morning into a bad month.
 
@@ -13898,9 +14451,22 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
      which one it is, and the monthly marks the rows the weekly never asks
      for — the difference is legible while she is standing there doing it,
      which is the only place it was ever needed. */
-  const fields = isWeekly
-    ? data.fields.weekly.filter((f) => f.inWeekly !== false)
-    : [...data.fields.monthly, ...data.fields.weekly];
+  /* And what she took out of THIS sitting when she said not today, plus
+     whatever went in its place. A skip is a list, never a deletion — the row
+     is still on her list and still in every chart it has ever been in. */
+  const sit = sittingFields(data, which, key);
+  const fields = sit.fields;
+  const tookOut = sit.out
+    .map((id) => sit.pool.find((f) => f.id === id))
+    .filter(Boolean);
+  const putBack = (id) => setData((d) => {
+    const sk = sittingKey(which, key);
+    const skips = { ...(d.skips || {}) };
+    skips[sk] = (skips[sk] || []).filter((x) => x !== id);
+    const standIns = { ...(d.standIns || {}) };
+    if (standIns[sk]) { const m = { ...standIns[sk] }; delete m[id]; standIns[sk] = m; }
+    return { ...d, skips, standIns };
+  });
   const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
   const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
   const [form, setForm] = useState(data[which][key] || {});
@@ -13929,7 +14495,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px", lineHeight: 1.45 }}>
         {isWeekly
           ? `The short version — ${weeklyCount} of your ${data.fields.weekly.length} tests, about ten minutes. Same list as the monthly, just the quick end of it. Skip anything you didn't test; partial entries are fine.`
-          : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for.`}
+          : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for. Doing this covers this week's weekly check as well — you never do the same exercise twice in a week.`}
       </p>
 
       {/* THE BATTERY IS HERS (rule 12), AND HAS TO LOOK IT (rule 11).
@@ -13949,12 +14515,32 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         Change what's measured — add, remove, rename, reorder →
       </button>
 
+      {/* Rule 12: what she took out is visible and reversible from where she
+          is standing, not buried in a settings fold. */}
+      {tookOut.length > 0 && (
+        <Card style={{ marginBottom: 12 }}>
+          <Eyebrow>Out of this one</Eyebrow>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 9 }}>
+            You took {tookOut.length === 1 ? "this" : "these"} out. Still on your list, still in
+            every chart — just not being asked for today.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {tookOut.map((f) => (
+              <button key={f.id} onClick={() => putBack(f.id)} className="tap" style={{
+                padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+                border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+                fontFamily: "inherit" }}>{f.label} — put it back</button>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {[...CAPS, ""].map((cap) => {
         const group = fields.filter((f) => (f.cap || "") === cap);
         if (!group.length) return null;
         return (
           <Card key={cap || "feel"} style={{ marginBottom: 12 }}>
-            <Eyebrow>{cap || "How the week felt"}</Eyebrow>
+            <Eyebrow>{cap ? capLabel(cap) : "How the week felt"}</Eyebrow>
             {group.map((f) => (
               <div key={f.id}>
                 {onlyMonthly(f) && (
@@ -13996,6 +14582,32 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           const next = { ...data, [which]: { ...data[which], [key]: stamped } };
           /* one button, both stores — she did it in one sitting, it saves as one */
           if (Object.keys(mob).length) next.mobility = { ...(data.mobility || {}), [coach.ws]: { ...mob, on: coach.t } };
+          /* THE MONTHLY FILLS THE WEEKLY.
+
+             Her instruction, 10 August: "the weekly filled as part of the
+             monthly battery test. So I wouldn't have to do the same exercises
+             twice." The monthly IS the weekly plus more — every row the
+             weekly asks for is already in this form — so those readings are
+             written into this week's store as well and the weekly stops being
+             due. Any row she took out of this sitting simply isn't there to
+             copy, which is correct.
+
+             It never overwrites a weekly she has already filled in (rule 20),
+             and it carries fromMonthly so nothing downstream has to guess
+             where the numbers came from. */
+          if (!isWeekly && isCurrent && !data.weekly[coach.ws]) {
+            const weeklyIds = new Set((data.fields.weekly || [])
+              .filter((f) => f.inWeekly !== false).map((f) => f.id));
+            const carried = {};
+            Object.keys(form).forEach((k) => {
+              const base = String(k).split("__")[0];
+              if (weeklyIds.has(base) && form[k] !== undefined && form[k] !== "") carried[k] = form[k];
+            });
+            if (Object.keys(carried).length) {
+              next.weekly = { ...data.weekly,
+                [coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
+            }
+          }
           /* The benchmark is thirty-odd minutes under load — it counts as the
              day's session, so the week isn't punished for measuring. */
           if (!isWeekly && isCurrent && !data.logs[coach.t]?.type) {
