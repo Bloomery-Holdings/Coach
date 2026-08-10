@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 86";
+const BUILD = "10 August 2026 · 87";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -17675,6 +17675,21 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                 <BodyWorkExercise key={ex.id} prog={prog} list={live} ex={ex}
                   data={data} setData={setData} coach={coach} setSheet={setSheet} />
               ))}
+              {/* HER INSTRUCTION, 10 August: "make sure I can edit any set of
+                  exercises... or the area of the body exercises." Editing and
+                  removing existed; adding did not. It does now, and the new
+                  row opens straight into its own editor. */}
+              <button onClick={() => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+                  pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
+                    ls.id !== live.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
+                      id: newId(), name: "New exercise", tool: "", dose: "3 x 10", mins: 2,
+                      how: "", targets: "", label: "New exercise", search: "", video: "" }] }) }) }))}
+                className="tap" style={{
+                  border: `1.5px dashed ${C.line}`, borderRadius: 10, background: "transparent",
+                  cursor: "pointer", padding: "10px 0", width: "100%", marginTop: 10,
+                  fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                + add an exercise to this list
+              </button>
               <div style={{ marginTop: 12 }}>
                 <Btn kind="signal" onClick={markDone}>Done — move to the next list</Btn>
               </div>
