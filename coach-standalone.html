@@ -3141,7 +3141,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 82";
+const BUILD = "10 August 2026 · 83";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -13257,6 +13257,7 @@ function Briefing({ coach, setSheet, close }) {
         React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "chat" }) }, "Talk to your coach about any of it")));
 }
 function CoachChat({ data, setData, coach, close, seed, about }) {
+    var _a;
     /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
        HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
        have been processed or acted upon."
@@ -13269,13 +13270,26 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
   
        It resumes today's conversation now, under the same id, so carrying on
        later in the day adds to it rather than starting a second one. */
-    const priorToday = (() => {
-        const mine = (data.chats || []).filter((c) => c.date === coach.t
-            && (c.about || "open chat") === (about || "open chat"));
-        return mine[mine.length - 1] || null;
-    })();
-    const [msgs, setMsgs] = useState(((priorToday === null || priorToday === void 0 ? void 0 : priorToday.messages) || []).map((m) => ({ role: m.role, content: m.text })));
-    const sessionId = useRef((priorToday === null || priorToday === void 0 ? void 0 : priorToday.id) || newId());
+    /* ---- AND WHY IT WAS STILL EMPTY AFTER THE FIRST FIX ------------------
+       "It still doesn't show what I talked about with my coach. I said I
+       started flat but later I was fine and enjoyed my class, and he replied
+       that that's actually great. Where is all this?"
+  
+       Because the resume was matched on `about` as well as the date, and
+       `about` is whichever door she came through — a card about her mood, an
+       exercise, or nothing at all. Come back through a different door and it
+       was a different conversation, so the screen was blank again.
+  
+       It is ONE conversation a day now, whatever she opened it from. Every
+       session logged today is gathered into it in the order it was said, and
+       the day's entry is written back as one — so nothing is duplicated and
+       nothing is dropped. Yesterday and before are below, read-only. */
+    const todayChats = (data.chats || []).filter((c) => c.date === coach.t);
+    const earlier = (data.chats || []).filter((c) => c.date !== coach.t)
+        .sort((a, b) => (a.date < b.date ? 1 : -1));
+    const [msgs, setMsgs] = useState(todayChats.flatMap((c) => (c.messages || []).map((m) => ({ role: m.role, content: m.text }))));
+    const sessionId = useRef(((_a = todayChats[0]) === null || _a === void 0 ? void 0 : _a.id) || newId());
+    const [showOld, setShowOld] = useState(false);
     /* And the half-typed message survives too. Dictating three sentences and
        losing them to a screen that slept is the same loss by another route. */
     const [draft, setDraft] = useState(seed || data.chatDraft || "");
@@ -13597,10 +13611,14 @@ Two or three sentences unless she asks for more.`;
        lost. It used to be saved only on success, inside the try — so a failed
        call, a missing key or a thrown prompt took her words with it. */
     const persist = (all) => setData((d) => {
-        const chats = [...(d.chats || [])];
-        const idx = chats.findIndex((c) => c.id === sessionId.current);
         const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
             messages: all.map((m) => ({ role: m.role, text: m.content })) };
+        /* Everything said today lives in ONE entry. The other same-day entries
+           are already gathered into `all` above, so dropping them here loses no
+           word she has ever said — it stops the same exchange being stored twice
+           and read back to the coach twice. */
+        const chats = [...(d.chats || [])].filter((c) => c.date !== coach.t || c.id === sessionId.current);
+        const idx = chats.findIndex((c) => c.id === sessionId.current);
         if (idx >= 0)
             chats[idx] = entry;
         else
@@ -13653,6 +13671,18 @@ Two or three sentences unless she asks for more.`;
         React.createElement(Eyebrow, { color: C.ochre }, "Talk to your coach"),
         React.createElement("h1", { className: "disp", style: { fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" } }, "Ask me anything"),
         React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 } }, "I can see your week, your battery and the call I made. Argue with it if you think I'm wrong."),
+        earlier.length > 0 && (React.createElement("div", { style: { marginBottom: 14 } },
+            React.createElement("button", { onClick: () => setShowOld((v) => !v), className: "tap", style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
+                    fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
+                } }, showOld ? "Hide earlier conversations" : `Earlier conversations (${earlier.length} day${earlier.length === 1 ? "" : "s"})`),
+            showOld && (React.createElement("div", { style: { marginTop: 8, borderLeft: `2px solid ${C.line}`, paddingLeft: 10 } }, earlier.map((c) => (React.createElement("div", { key: c.id, style: { marginBottom: 12 } },
+                React.createElement("div", { className: "mono", style: { fontSize: 10, color: C.muted, marginBottom: 4 } }, dayAndMonth(c.date)),
+                (c.messages || []).map((m, i) => (React.createElement("div", { key: i, style: { fontSize: 12.5, lineHeight: 1.55, marginBottom: 5,
+                        color: m.role === "user" ? C.ink : C.muted } },
+                    React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.moss } }, m.role === "user" ? "you" : "coach"),
+                    " ",
+                    m.text)))))))))),
         msgs.length === 0 && coach.leading.length > 0 && (React.createElement("div", { style: { display: "flex", justifyContent: "flex-start", marginBottom: 14 } },
             React.createElement("div", { style: { maxWidth: "88%", padding: "12px 15px", borderRadius: 16,
                     background: C.mint, fontSize: 14.5, lineHeight: 1.5, color: C.ink } },
