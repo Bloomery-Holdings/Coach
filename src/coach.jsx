@@ -2799,7 +2799,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 64";
+const BUILD = "10 August 2026 · 65";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -8619,6 +8619,39 @@ function Today({ data, setData, coach, setSheet }) {
           for her — and only while the day is still hers to read. */}
       {isToday && <AchievedCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
+      {/* YOUR TEN MINUTES, ON THE PAGE.
+
+          Her words, 10 August: "I can't see them for today. I want to start
+          today." She could not, and she was right. The card existed but it was
+          a folded one-line row at the very bottom of Today, inside the quiet
+          things — so the work that is supposed to happen after every single
+          session was the least visible thing on the page. Rule 11: if the app
+          names something she should do, the means to do it is right there.
+
+          It comes up as a real card whenever any of it is for a goal. Pure
+          mobility filler stays folded below, because that changes with the
+          scores and does not need announcing every day. */}
+      {isToday && coach.dailyDrills.goalCount > 0 && (
+        <DrillsCard coach={coach} setSheet={setSheet} />
+      )}
+
+      {/* And when there is no goal at all, the ten minutes cannot exist — so
+          the app says that plainly instead of showing nothing (rule 23). */}
+      {isToday && coach.openGoals.length === 0 && (
+        <Card style={{ background: C.pist }}>
+          <Eyebrow color={C.signal}>Start here</Eyebrow>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginBottom: 12 }}>
+            The ten minutes after every session is built from what you want to be able to do — so it
+            needs one of those first. Write it in your own words: something you want to be able to do
+            and cannot yet, or can only just. The app picks the work for it straight away, and you
+            score it once a week by trying it.
+          </div>
+          <Btn kind="signal" onClick={() => setSheet({ kind: "goals" })}>
+            Tell it what you want to be able to do
+          </Btn>
+        </Card>
+      )}
+
       {/* ---- THE SMALLER DOOR, WHERE SHE SAID SHE IS ---------------------
           Rule 4 as amended, and her instruction of 8 August: if she has just
           said she is flat, frustrated or wiped, the coach must not go on to
@@ -9258,8 +9291,11 @@ function Today({ data, setData, coach, setSheet }) {
           { id: "mobility", title: "Mobility battery",
             count: coach.mobDue ? 1 : 0,
             node: <MobilityDoor coach={coach} setSheet={setSheet} /> },
-          { id: "drills", title: "Today's ten minutes", count: coach.dailyDrills.list.length,
-            node: coach.dailyDrills.list.length
+          /* Only the mobility-only version lives down here — anything with
+             goal work in it is a card on the page above (rule 11). */
+          { id: "drills", title: "Today's ten minutes",
+            count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
+            node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
               ? <DrillsCard coach={coach} setSheet={setSheet} /> : null },
           { id: "body", title: "Body work",
             node: <BodyWorkCard log={log} write={write} isToday={isToday} /> },
