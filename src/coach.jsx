@@ -1580,6 +1580,42 @@ const reviewPayload = (data, coach) => {
     }).join("\n");
   }));
 
+  S("WHAT SHE WROTE BESIDE A PARTICULAR EXERCISE", rvSafe(() => {
+    const pool = [...(d.fields?.weekly || []), ...(d.fields?.monthly || [])];
+    const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+    const out = [];
+    [["weekly", d.weekly], ["monthly", d.monthly]].forEach(([which, store]) => {
+      Object.keys(store || {}).sort().forEach((k) => {
+        const e = store[k] || {};
+        Object.keys(e).forEach((key) => {
+          if (!/__note$/.test(key)) return;
+          const v = String(e[key] || "").trim();
+          if (v) out.push(`${k} ${which} — ${name(key.replace(/__note$/, ""))}: "${v}"`);
+        });
+      });
+    });
+    Object.keys(d.mobility || {}).sort().forEach((k) => {
+      const e = d.mobility[k] || {};
+      Object.keys(e).forEach((id) => {
+        const v = e[id] && typeof e[id] === "object" ? String(e[id].note || "").trim() : "";
+        if (v) out.push(`${k} mobility — ${(d.mobTests || []).find((m) => m.id === id)?.label || id}: "${v}"`);
+      });
+    });
+    Object.keys(d.logs || {}).sort().forEach((date) => {
+      const dn = (d.logs[date] || {}).drillNotes || {};
+      Object.keys(dn).forEach((id) => {
+        const v = String(dn[id] || "").trim();
+        if (v) out.push(`${date} ten minutes — ${(d.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
+      });
+    });
+    if (!out.length) return "she has not written anything against an individual exercise";
+    return out.join("\n") + `
+  This is the most specific thing in this whole read: a problem named against
+  the exercise it happened on. Where the same exercise keeps collecting the
+  same complaint, that is a test that does not fit her, not a failure of hers —
+  say so, and offer to change it.`;
+  }));
+
   S("WHAT SHE DECLINED, AND WHEN", rvSafe(() => {
     const sk = d.skips || {}, df = d.deferrals || {}, si = d.standIns || {};
     const pool = [...(d.fields?.weekly || []), ...(d.fields?.monthly || [])];
@@ -2279,6 +2315,12 @@ const phaseFor = (t, gymDate) => {
 /* Total load: kilograms times repetitions. 10 kg x 15 beats 10 kg x 12, and it
    also beats 6.5 kg x 20 — which weight alone gets wrong in both directions.
    Bilateral lifts sum both sides, so a weak side pulls the total down honestly. */
+const loadUnit = (f) => (f && f.loadLabel) || "kg";
+/* A load in kilograms multiplies out to a total that means something — kilos
+   moved. A band level does not: level 3 for ten reps is not "30" of anything.
+   So the arithmetic only speaks where the unit is mass. */
+const loadIsMass = (f) => loadUnit(f) === "kg";
+
 const loadOf = (entry, f) => {
   const w = Number(entry[f.id + "__w"]);
   if (isNaN(w) || w <= 0) return NaN;
@@ -2325,7 +2367,7 @@ const formatReading = (f, e) => {
     const reps = f.bilateral
       ? `${w} kg × ${e[f.id + "__L"] ?? "—"} left · ${e[f.id + "__R"] ?? "—"} right`
       : `${w} kg × ${e[f.id] ?? "—"} reps`;
-    return { main: isNaN(load) ? `${w} kg` : `${Math.round(load)} kg total`, sub: reps };
+    return { main: isNaN(load) || !loadIsMass(f) ? `${w} ${loadUnit(f)}` : `${Math.round(load)} kg total`, sub: reps };
   }
   if (f.type === "time") {
     const v = readMeasure(e, f);
@@ -2476,7 +2518,7 @@ const bestEntryFor = (f, stores) => {
 
   if (f.type === "weightreps") {
     const w = Number(e[f.id + "__w"]);
-    main = `${w} kg`;
+    main = `${w} ${loadUnit(f)}`;
     if (f.bilateral) {
       const L = e[f.id + "__L"], R = e[f.id + "__R"];
       sub = `${L ?? "—"} left · ${R ?? "—"} right`;
@@ -2566,8 +2608,12 @@ const SEED_WEEKLY = [
   { id: "cablerow", mins: 1.5, cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. Log the weight and the reps in the minute. Same seat height and same handle every time.",
     why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
-  { id: "bandrow", mins: 1.25, cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
-    how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band every time or the number means nothing.",
+  /* Her report, 10 August: "band row also needs kilograms. It doesn't have it,
+     it only has reps." Right — a band has a resistance and the rep count means
+     nothing without it, exactly like every other loaded row. Bands are rated
+     in kilograms on the band itself; log that number. */
+  { id: "bandrow", mins: 1.25, cap: "pull",     label: "Band row",         role: "rotating", type: "weightreps", unit: "level x reps in 60s", loadLabel: "level", better: "up", inWeekly: true ,
+    how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Log which band level you used and the reps you got in the minute. If your bands are not numbered, number them yourself lightest to heaviest and keep to it — the reps mean nothing without knowing which band they were done on.",
     why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
   { id: "latpull", mins: 1.5, cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. Log the weight and the reps in the minute.",
@@ -2799,7 +2845,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 67";
+const BUILD = "10 August 2026 · 70";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3071,12 +3117,12 @@ async function loadData() {
           weekly: d.fields?.weekly?.length
             ? addNewFields(
                 retireFields(
-                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"]),
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
                   d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
-            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap"])
+            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"])
             : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
@@ -7513,6 +7559,27 @@ function HowTo({ f }) {
 }
 
 /* renders one battery exercise according to its shape */
+/* One box, wherever an exercise is done. Folded until she wants it, so a
+   battery of twenty rows is not a wall of empty text areas — and it says it is
+   optional, because a box that feels compulsory is friction (rule 24). */
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?" }) {
+  const has = !!String(value || "").trim();
+  const [open, setOpen] = useState(has);
+  if (!open) return (
+    <button onClick={() => setOpen(true)} className="tap" style={{
+      border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
+      fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>+ {label}</button>
+  );
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" }}>
+      <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
+        placeholder="What went wrong, what hurt, what you changed. Optional."
+        style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 }} />
+      <MicButton onText={onChange} current={value || ""} />
+    </div>
+  );
+}
+
 const AssessInput = ({ f, form, set, pb, target }) => {
   if (f.type === "note") return (
     <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
@@ -7539,10 +7606,10 @@ const AssessInput = ({ f, form, set, pb, target }) => {
   const loadNow = f.type === "weightreps" ? loadOf(form, f) : NaN;
   const cells = f.type === "weightreps"
     ? (f.bilateral
-        ? [{ ph: "kg", value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
+        ? [{ ph: loadUnit(f), value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
            { ph: "L reps", value: form[f.id + "__L"], onChange: (v) => { set(f.id + "__L", v); set(f.id, v); } },
            { ph: "R reps", value: form[f.id + "__R"], onChange: (v) => set(f.id + "__R", v) }]
-        : [{ ph: "kg", value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
+        : [{ ph: loadUnit(f), value: form[f.id + "__w"], onChange: (v) => set(f.id + "__w", v) },
            { ph: "reps", value: form[f.id], onChange: (v) => set(f.id, v) }])
     : f.bilateral
       ? [{ ph: "left", value: form[f.id + "__L"], onChange: (v) => { set(f.id + "__L", v); set(f.id, v); } },
@@ -7556,7 +7623,7 @@ const AssessInput = ({ f, form, set, pb, target }) => {
           last {target.last} → {f.type === "weightreps" ? target.aim : `aim for ${target.aim}`}
         </div>
       )}
-      {f.type === "weightreps" && !isNaN(loadNow) && (
+      {f.type === "weightreps" && !isNaN(loadNow) && loadIsMass(f) && (
         <div className="mono" style={{ fontSize: 10.5, color: C.moss, marginTop: 5 }}>
           that's {Math.round(loadNow)} kg moved
         </div>
@@ -7572,18 +7639,48 @@ const AssessInput = ({ f, form, set, pb, target }) => {
           Her instruction, 10 August. A row with a window counts down to an
           alarm; a hold counts up and the reading goes straight into the box.
           A row with neither gets nothing, because a timer on an untimed test
-          would just be clutter. */}
+          would just be clutter.
+
+          A TWO-SIDED TEST GETS A CLOCK PER SIDE. Her instruction, later the
+          same day: "when I go to a side, that is right and left, and I have to
+          do each independently. I need each side to be calculated
+          independently altogether, so the stopwatch will run at each one."
+          One shared timer cannot do that — she does the left, writes it down,
+          then does the right, and the second one has to start from the top. */}
       {(() => {
         const secs = secondsFor(f);
+        const twoSided = !!(f.bilateral || f.side);
+        if (secs && twoSided) return (
+          <div>
+            <Timer key={f.id + ":L"} seconds={secs} label={`${f.label} — left`} compact />
+            <Timer key={f.id + ":R"} seconds={secs} label={`${f.label} — right`} compact />
+          </div>
+        );
         if (secs) return (
           <Timer key={f.id + ":down"} seconds={secs} label={f.label} compact />
         );
-        if (f.type === "time" || /^sec/i.test(String(f.unit || ""))) return (
+        const isHold = f.type === "time" || /^sec/i.test(String(f.unit || ""));
+        if (isHold && twoSided) return (
+          <div>
+            <Timer key={f.id + ":upL"} compact label={`${f.label} — left`}
+              onStop={(v) => set(f.id + "__L", String(v))} />
+            <Timer key={f.id + ":upR"} compact label={`${f.label} — right`}
+              onStop={(v) => set(f.id + "__R", String(v))} />
+          </div>
+        );
+        if (isHold) return (
           <Timer key={f.id + ":up"} compact label={f.label}
             onStop={(v) => set(f.id, String(v))} />
         );
         return null;
       })()}
+      {/* A BOX ON EVERY EXERCISE.
+          Her instruction, 10 August: "I need a box on each — whether in the
+          monthly measurements or in the weekly or in the goal exercises — in
+          order to be able to tell you what was wrong, because on each one I
+          face a problem." A number cannot carry that, and the one note at the
+          bottom of the sitting cannot say WHICH exercise it was about. */}
+      <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)} />
       <HowTo f={f} />
     </div>
   );
@@ -7834,6 +7931,7 @@ function MobRow({ m, e, put }) {
         <Field label="Score" unit={String(m.unit || "").replace("/", "of ")} value={e.v || ""}
           onChange={(v) => put(m.id, { v })} />
       )}
+      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} />
     </Card>
   );
 }
@@ -8199,8 +8297,12 @@ function MobilityDoor({ coach, setSheet }) {
 }
 
 /* Ten minutes after a session, chosen by what the tests say is short. */
-function DrillsCard({ coach, setSheet }) {
+function DrillsCard({ coach, setSheet, data, setData }) {
   if (!coach.dailyDrills.list.length) return null;
+  const notes = (data && data.logs && data.logs[coach.t] && data.logs[coach.t].drillNotes) || {};
+  const putNote = (id, v) => setData && setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+    [coach.t]: { ...((d.logs || {})[coach.t] || {}),
+      drillNotes: { ...(((d.logs || {})[coach.t] || {}).drillNotes || {}), [id]: v } } } }));
   return (
     <Card style={{ background: C.mint }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
@@ -8273,8 +8375,20 @@ function DrillsCard({ coach, setSheet }) {
           )}
           {(() => {
             const secs = drillSeconds(d);
-            return secs ? <Timer key={d.id + ":t"} seconds={secs} label={d.label} compact /> : null;
+            if (!secs) return null;
+            /* a two-sided drill is done one side at a time, so it gets a
+               clock each — the same rule as the battery */
+            if (d.side || d.bilateral) return (
+              <div>
+                <Timer key={d.id + ":tL"} seconds={secs} label={`${d.label} — left`} compact />
+                <Timer key={d.id + ":tR"} seconds={secs} label={`${d.label} — right`} compact />
+              </div>
+            );
+            return <Timer key={d.id + ":t"} seconds={secs} label={d.label} compact />;
           })()}
+          {setData && (
+            <ExerciseNote value={notes[d.id]} onChange={(v) => putNote(d.id, v)} />
+          )}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
         </div>
       ))}
@@ -8816,7 +8930,7 @@ function Today({ data, setData, coach, setSheet }) {
           mobility filler stays folded below, because that changes with the
           scores and does not need announcing every day. */}
       {isToday && coach.dailyDrills.goalCount > 0 && (
-        <DrillsCard coach={coach} setSheet={setSheet} />
+        <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} />
       )}
 
       {/* And when there is no goal at all, the ten minutes cannot exist — so
@@ -9480,7 +9594,7 @@ function Today({ data, setData, coach, setSheet }) {
           { id: "drills", title: "Today's ten minutes",
             count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
             node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
-              ? <DrillsCard coach={coach} setSheet={setSheet} /> : null },
+              ? <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} /> : null },
           { id: "body", title: "Body work",
             node: <BodyWorkCard log={log} write={write} isToday={isToday} /> },
         ]} />
@@ -14979,6 +15093,38 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
   If one is sitting here, say so warmly and specifically — what she can do now that she could not,
   and where it started. Then ask whether to close it, because there is no point building towards
   something she can already do. Never close it yourself and never push.
+- WHAT SHE WROTE AGAINST A PARTICULAR EXERCISE, most recent first. A problem named against the
+  exercise it happened on — read it before saying anything about that exercise:
+  ${(() => {
+    const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
+    const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
+    const out = [];
+    [["weekly", data.weekly], ["monthly", data.monthly]].forEach(([which, store]) => {
+      Object.keys(store || {}).sort().reverse().forEach((k) => {
+        const e = store[k] || {};
+        Object.keys(e).forEach((key) => {
+          if (!/__note$/.test(key)) return;
+          const v = String(e[key] || "").trim();
+          if (v) out.push(`${k} ${name(key.replace(/__note$/, ""))}: "${v}"`);
+        });
+      });
+    });
+    Object.keys(data.mobility || {}).sort().reverse().forEach((k) => {
+      const e = data.mobility[k] || {};
+      Object.keys(e).forEach((id) => {
+        const v = e[id] && typeof e[id] === "object" ? String(e[id].note || "").trim() : "";
+        if (v) out.push(`${k} ${(coach.mobTests || []).find((m) => m.id === id)?.label || id}: "${v}"`);
+      });
+    });
+    Object.keys(data.logs || {}).sort().reverse().forEach((date) => {
+      const dn = (data.logs[date] || {}).drillNotes || {};
+      Object.keys(dn).forEach((id) => {
+        const v = String(dn[id] || "").trim();
+        if (v) out.push(`${date} ${(data.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
+      });
+    });
+    return out.slice(0, 20).join(" | ") || "nothing yet";
+  })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
     const sk = data.skips || {}, df = data.deferrals || {};
@@ -15245,10 +15391,11 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
          more weight, more reps, whichever your body offers that day. */
       const prev = m.reading?.sub || "";
       return {
-        last: `${Math.round(m.now)} kg total${prev ? ` (${prev})` : ""}`,
+        last: `${Math.round(m.now)} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`,
         aim: frozen ? "hold what you did — shoulder"
         : sore ? "hold what you did — your shoulder was uncomfortable this week"
-        : `beat ${Math.round(raw)} kg total — more weight or more reps`,
+        : loadIsMass(f) ? `beat ${Math.round(raw)} kg total — more weight or more reps`
+          : `beat ${Math.round(raw)} — a heavier band or more reps`,
       };
     }
     return { last: fmt(m.now), aim: (frozen || sore) ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
