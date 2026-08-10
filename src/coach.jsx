@@ -2306,7 +2306,7 @@ const bestEntryFor = (f, stores) => {
 --------------------------------------------------------------------------- */
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
-  { id: "squat", mins: 1.25, cap: "lower",    label: "Bodyweight squat", role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
+  { id: "squat", mins: 1.5, cap: "lower",    label: "Squat",            role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: true,
     /* The ladder that put goblet squat and split squat on this card a second
        time, as chips, while both already had rows of their own. A rung ladder
        only works while the unit stays the same; kg x reps and per-side reps
@@ -2314,13 +2314,13 @@ const SEED_WEEKLY = [
        fillFromSeed skips a key the seed does not define, so a missing line
        would leave the ladder on her device forever. */
     rungs: [], rung: 0 ,
-    how: "Sixty seconds. Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. Count only the reps that reach that depth — when the depth goes, stop counting even if the clock is still running.",
+    how: "Sixty seconds, holding a weight. Dumbbell or kettlebell at your chest, or a barbell on your back — whatever you have, but the SAME thing every time. Feet hip-width. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. Count only the reps that reach that depth — when the depth goes, stop counting even if the clock is still running. Log the weight and the reps. If you genuinely have nothing to hold, log the weight as 0 and it still counts as a rep score.",
     why: "Legs are the biggest muscles you own and the first to go in your fifties. This is the one number on the whole battery most closely tied to still getting off the floor unaided in twenty years." },
   { id: "wallsit", mins: 1.25, cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false ,
     how: "Back flat to a wall, knees and hips at ninety degrees, thighs parallel to the floor, hands off your legs. Time it from the moment you are in position to the moment your hips start to rise.",
     why: "Endurance in the quads rather than peak strength — the thing that gives out on stairs and long descents. It also loads the knee joint with almost no shear, so it is safe to push hard on." },
-  { id: "splitsq", mins: 1.25, cap: "lower",    label: "Split squat",      role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
-    how: "Thirty seconds a side. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
+  { id: "splitsq", mins: 1.5, cap: "lower",    label: "Split squat",      role: "rotating", type: "weightreps", unit: "kg x reps in 30s each side", better: "up", inWeekly: false, bilateral: true ,
+    how: "Thirty seconds a side, holding a weight — same weight in each hand, or one at your chest, and the same setup every time. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately: the weight goes in once, the reps go in twice, left and right, because the gap between them is the thing this test exists to find.",
     why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
   { id: "goblet", mins: 1.5, cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. As many as you can with that weight — no clock here, because the weight is what stops you rather than the time, and putting a clock on it would turn a strength test into a fitness test.",
@@ -2577,7 +2577,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 55";
+const BUILD = "10 August 2026 · 56";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2781,11 +2781,11 @@ async function loadData() {
         fields: {
           weekly: d.fields?.weekly?.length
             ? retireFields(
-                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly"]),
+                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"]),
                 d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
-            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly"])
+            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type"])
             : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
