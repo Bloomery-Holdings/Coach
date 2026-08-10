@@ -1908,7 +1908,9 @@ Every profile claim must point at dated evidence in what you were given. A claim
 
 THE LIBRARY IS A CLOSED WORLD. She follows filmed classes. The block you design says what KIND each day is; the app then picks the actual class from HER library, which is listed below in full. You may never invent a class, never name one that is not in that list, and never replace a class with a written sets-and-reps session. If a kind of day cannot be delivered by anything she owns, choose a different kind.
 
-THE ONE EXCEPTION, AND IT IS NARROW. If something she has SAID she wants to be able to do needs a muscle or a range that no class in her library reaches, you may also write her a short set of exercises for it — named, with sets, reps, how often, and how to do it, the same way her battery tests are written. Use it only when the library genuinely cannot deliver it, say which goal it serves and what the library could not do, and keep it to a handful. It is an ADDITION to the month, done alongside her classes, never instead of one. If her library already covers it, do not prescribe anything — say which class covers it.
+HER TEN MINUTES AFTER EVERY SESSION. Alongside the classes, you also write the short set of exercises she does after every session she trains — named, with sets, reps, minutes, how often and how to do it, the same way her battery tests are written. Its job is to build the muscles and the ranges her stated goals need.
+
+This is NOT conditional on her library. Her instruction of 10 August is explicit: "a daily battery of ten minutes that would impact the muscles that need me to achieve my goals REGARDLESS of whether it is covered by classes or not." Do not check whether a class covers it and do not skip a goal because one does. EVERY open goal must be served by at least one exercise here. It is an ADDITION to the month, done alongside her classes, never instead of one, and the whole set must fit in ten minutes.
 
 SHE DOES NOT REPEAT CLASSES, SHE ALTERNATES. The same class may not come round for a fortnight, so anything that depends on the class rotation to reach a particular muscle will not be trained often enough to change anything. Work written for a goal must therefore be prescribed to happen AFTER EVERY SESSION SHE TRAINS, independently of what that session was. It is a few minutes attached to every training day, not a class.
 
@@ -1937,7 +1939,10 @@ Return ONLY a JSON object, no prose around it, no code fence:
   "horizons": [ { "goalId": "...", "weeks": "a realistic estimate, in weeks or months", "firstSigns": "what she notices first and roughly when", "thisMonth": "what should measurably move inside these four weeks" } ]
 }
 "prescription" is her ten minutes after every session and must cover EVERY open goal — never empty while she has one. It is not conditional on her library. The total must fit in ten minutes. "horizons" has one entry for every open goal.
-Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.`;
+Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.
+
+WHAT EACH KEY HAS TO CONTAIN:
+${Object.entries(REVIEW_SHAPE).map(([k, v]) => `  ${k}: ${v}`).join("\n")}`;
 };
 /* Pull the object out of whatever came back. A model asked for bare JSON
    usually returns bare JSON, and occasionally wraps it. Both are fine; a
@@ -2937,7 +2942,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 62";
+const BUILD = "10 August 2026 · 63";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5722,7 +5727,7 @@ function useCoach(data, day, clock) {
                         : mobWeakest.length ? `shortest: ${mobWeakest[0].label}` : "even",
                 color: mobScore === null ? C.muted : mobScore >= 75 ? C.moss : mobScore >= 50 ? C.ink : C.ochre,
                 plain: "How freely your body moves, across seven tests of range rather than strength.",
-                how: "Each test scored against a full range, averaged. Sit-to-rise, forward fold, overhead reach, behind-the-back reach, ankle to wall, seated rotation and cross-legged sit. Four are measured left and right.",
+                how: "Each test scored against its own full range, then averaged. Built from whatever is in your mobility battery — a length test per muscle group rather than a general movement screen: the standing and seated forward folds and the straight-leg raise for the hamstrings, legs-apart for the adductors, heel-to-bottom for the quads and hip flexors, overhead and behind-the-back reach for the shoulders, and seated rotation for the mid-back. Four are measured left and right, and an asymmetry counts against you even when both sides are good.",
                 meaning: `Strength keeps muscle; range keeps what you can do with it. These are the movements that quietly disappear without anyone noticing, because nothing tests them until the day you need one. ${mobWeakest.length ? `Your shortest right now is ${mobWeakest[0].label.toLowerCase()}, which is why it drives your daily ten minutes.` : ""}${mobAsym.length ? ` Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart side to side — closing that matters more than improving either side alone.` : ""}`,
                 need: mobScore === null ? "Take the mobility battery — about ten minutes." : null }),
             M({ group: "month", id: "swaps", label: "Coach vs you", scope: "how often you keep the pick",
