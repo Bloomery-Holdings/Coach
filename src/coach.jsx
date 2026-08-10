@@ -936,37 +936,37 @@ const sameIssue = (a, b) => {
    opinion of what should be measured. Ids never change once created, so
    renaming a test keeps every reading it has ever had (rule 12, rule 13). */
 const SEED_MOBILITY = [
-  { id: "sitrise", label: "Sit-to-rise", unit: "/10", better: "higher", max: 10,
+  { id: "sitrise", mins: 0.75, inWeekly: true, label: "Sit-to-rise", unit: "/10", better: "higher", max: 10,
     how: "Sit down cross-legged on the floor and stand back up. Start with 10 points: lose one for each hand, forearm, knee or side of leg you use for support, on the way down and on the way up. Half a point for wobbling.",
     why: "This is the single most-studied whole-body functional test there is — hip mobility, ankle range, single-leg strength and trunk control in one movement. It is also exactly the thing that quietly disappears in your fifties if nobody measures it.",
     needs: ["legs", "core"], drills: ["deepsquat", "hipopen", "ankle", "getup"] },
 
-  { id: "fold", label: "Forward fold", unit: "cm", better: "lower", side: false,
+  { id: "fold", mins: 0.75, inWeekly: false, label: "Forward fold", unit: "cm", better: "lower", side: false,
     how: "Stand, feet together, knees straight but not locked, and fold forward. Measure the gap from fingertips to floor in centimetres. Palms flat is 0; fingertips touching is about 0 too — go by fingertips.",
     why: "Posterior chain length: hamstrings, calves and lower back together. It is the one most people notice first, and the one that responds fastest to consistent work.",
     needs: ["legs", "back"], drills: ["hamstring", "calf", "catcow"] },
 
-  { id: "wallreach", label: "Overhead reach", unit: "cm", better: "lower", side: true,
+  { id: "wallreach", mins: 1, inWeekly: false, label: "Overhead reach", unit: "cm", better: "lower", side: true,
     how: "Stand with your back flat to a wall, lower back pressed in. Raise both arms overhead, thumbs to the wall, elbows straight. Measure the gap from wrist to wall on each side.",
     why: "Shoulder flexion and thoracic extension. Directly relevant to your right shoulder, and the asymmetry between sides is the number that matters more than either one alone.",
     needs: ["shoulders", "back"], drills: ["thoracic", "shoulderpass", "latstretch"] },
 
-  { id: "scratch", label: "Behind-the-back reach", unit: "cm", better: "lower", side: true,
+  { id: "scratch", mins: 1, inWeekly: false, label: "Behind-the-back reach", unit: "cm", better: "lower", side: true,
     how: "One hand over the shoulder and down your back, the other up from below. Measure the gap between fingertips. Score each side by which hand is on top.",
     why: "Shoulder internal and external rotation combined. The classic test for the shoulder capsule, and the one that tends to reveal a restriction before it starts to hurt.",
     needs: ["shoulders", "arms"], drills: ["shoulderpass", "sleeper", "doorway"] },
 
-  { id: "kneewall", label: "Ankle to wall", unit: "cm", better: "higher", side: true,
+  { id: "kneewall", mins: 1, inWeekly: false, label: "Ankle to wall", unit: "cm", better: "higher", side: true,
     how: "Kneel with one foot flat, toes a measured distance from a wall. Drive the knee forward to touch the wall without the heel lifting. The furthest distance that still works is the score.",
     why: "Ankle dorsiflexion. Under-measured and quietly decisive — it limits squat depth, it limits how you rise from the floor, and it is one of the first things to shorten from sitting.",
     needs: ["legs"], drills: ["ankle", "calf", "deepsquat"] },
 
-  { id: "rotate", label: "Seated rotation", unit: "/10", better: "higher", max: 10, side: true,
+  { id: "rotate", mins: 1, inWeekly: false, label: "Seated rotation", unit: "/10", better: "higher", max: 10, side: true,
     how: "Sit tall on a chair, arms crossed on your chest, and turn as far as you can each way without your hips moving. Score how far you get out of ten, judged against a full ninety degrees.",
     why: "Thoracic rotation. It protects the lower back and the shoulder by letting the mid-back do the work they otherwise take on.",
     needs: ["back", "core"], drills: ["thoracic", "catcow", "openbook"] },
 
-  { id: "hipopen", label: "Cross-legged sit", unit: "/10", better: "higher", max: 10,
+  { id: "hipopen", mins: 0.75, inWeekly: false, label: "Cross-legged sit", unit: "/10", better: "higher", max: 10,
     how: "Sit cross-legged on the floor, back unsupported. Score out of ten: can you sit tall without rounding, and for how long is it comfortable?",
     why: "Hip external rotation and adductor length. This is the position the sit-to-rise starts from, so it usually has to improve first.",
     needs: ["legs", "core"], drills: ["hipopen", "pigeon", "deepsquat"] },
@@ -1374,22 +1374,30 @@ const reviewPayload = (data, coach) => {
         if (l.shoulder) bits.push(`shoulder comfort ${l.shoulder}/5`);
         (l.extras || []).forEach((x) => bits.push(`plus ${x}`));
         (l.extraSessions || []).forEach((x) => bits.push(`plus ${x.type} ${x.minutes}min${x.note ? ` ("${x.note}")` : ""}`));
-      } else if (l && l.state === "moved") { bits.push("moved, did not train"); }
+      } else if (l && l.state === "moved") {
+        bits.push(`moved rather than trained: ${l.movedLabel || l.type || "something small"}${l.minutes ? ` ${l.minutes}min` : ""}`);
+      }
       else { bits.push("nothing logged"); }
       if ((d.dayPlan || {})[dt]) bits.push(`she had set this day to ${d.dayPlan[dt]}`);
-      if (l && l.why) bits.push(`why: ${l.why.reason || "?"}${l.why.words ? ` — she wrote: "${l.why.words}"` : ""}`);
+      if (l && l.why) bits.push(`why: ${l.why.reason || "?"}${(l.why.answers || []).length ? ` (${(l.why.answers || []).join(", ")})` : ""}${l.why.words ? ` — she wrote: "${l.why.words}"` : ""}`);
+      if (l && (l.therapy || []).length) bits.push(`body work: ${(l.therapy || []).join(", ")}`);
       if (l && l.sessionNote) bits.push(`her note: "${l.sessionNote}"`);
       if (l && l.did) bits.push(`she wrote: "${l.did}"`);
-      if (m) {
+      /* `m` is undefined on any day with no WHOOP row — which is every day she
+         only tapped a mood or typed her sleep. Reading through it threw, rvSafe
+         swallowed it, and the WHOLE day-by-day section came out as
+         "(nothing recorded)". */
+      const mg = m || {}, lg = l || {};
+      {
         const mb = [];
-        if (m.recovery) mb.push(`recovery ${m.recovery}%`);
-        if (m.sleep) mb.push(`slept ${m.sleep}h`);
-        if (m.hrv) mb.push(`HRV ${m.hrv}`);
-        if (m.rhr) mb.push(`RHR ${m.rhr}`);
-        if (m.strain) mb.push(`strain ${m.strain}`);
-        if (m.shoulderAM) mb.push(`shoulder woke at ${m.shoulderAM}/5`);
-        if (m.mood) mb.push(`mood ${m.mood}`);
-        if (mb.length) bits.push(`[morning: ${mb.join(", ")}]`);
+        if (mg.recovery) mb.push(`recovery ${mg.recovery}%`);
+        if (mg.sleep || lg.sleep) mb.push(`slept ${mg.sleep || lg.sleep}h`);
+        if (mg.hrv) mb.push(`HRV ${mg.hrv}`);
+        if (mg.rhr) mb.push(`RHR ${mg.rhr}`);
+        if (mg.strain) mb.push(`strain ${mg.strain}`);
+        if (mg.shoulderAM) mb.push(`shoulder woke at ${mg.shoulderAM}/5`);
+        if (mg.mood || lg.mood) mb.push(`mood ${mg.mood || lg.mood}`);
+        if (mb.length) bits.push(`[${mb.join(", ")}]`);
       }
       out.push(`${dt} ${wd} — ${bits.join("; ")}`);
     }
@@ -1444,8 +1452,16 @@ const reviewPayload = (data, coach) => {
       `${m.label}: ${m.display ?? "—"}${m.sub ? ` (${m.sub})` : ""}\n  how it is worked out: ${m.how || "—"}${m.need ? `\n  missing: ${m.need}` : ""}`
     ).join("\n")));
 
-  S("HOW THE WORK LANDED ACROSS HER BODY", rvSafe(() =>
-    (c.sets7 || []).map((r) => `${r.label}: ${r.sets} sets in 7 days${r.target ? ` against a target of ${r.target}` : ""}`).join("\n")));
+  /* `sets7` is keyed by region, not a list — mapping it threw, rvSafe swallowed
+     it, and every read said "(nothing recorded)" about her whole body. */
+  S("HOW THE WORK LANDED ACROSS HER BODY", rvSafe(() => {
+    const rows = (c.bodyRows || []);
+    if (rows.length) return rows.map((r) =>
+      `${r.label}: ${r.sets} sets in 7 days${r.target ? ` against a target of ${r.target}` : ""}${r.share !== undefined ? `, ${r.share}% of the week's work` : ""}`).join("\n");
+    const s7 = c.sets7 || {};
+    const keys = Object.keys(s7);
+    return keys.length ? keys.map((k) => `${k}: ${s7[k]} sets in 7 days`).join("\n") : "";
+  }));
 
   /* ---- WHAT MAKES IT ONE COACH RATHER THAN TWELVE ---------------------
      Her question, 9 August: "how will the coach know my learning curve and my
@@ -1521,7 +1537,11 @@ const reviewPayload = (data, coach) => {
 
   S("THE RECORD — EVERYTHING SHE HAS TOLD THE COACH", rvSafe(() =>
     (d.issues || []).slice(-40).map((i) => {
-      const tried = (i.tried || []).map((x) => `${x.date}: ${x.what}${x.worked ? ` (${x.worked})` : ""}`).join("; ");
+      const HELPED = ["no help", "barely", "some help", "helped", "resolved it"];
+      const tried = (i.tried || []).map((x) => {
+        const h = x.worked || HELPED[Number(x.helped) - 1] || "";
+        return `${x.date}: ${x.what}${h ? ` (${h})` : ""}`;
+      }).join("; ");
       return `${i.date} — ${i.text} [${i.status || "open"}]${tried ? `\n  tried: ${tried}` : ""}`;
     }).join("\n")));
 
@@ -1543,8 +1563,9 @@ const reviewPayload = (data, coach) => {
 
   S("CONVERSATIONS", rvSafe(() =>
     (d.chats || []).slice(-6).map((ch) =>
-      `--- ${ch.date || ""}\n` + (ch.msgs || []).slice(-14).map((m) =>
-        `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || "").slice(0, 600)}`).join("\n")
+      `--- ${ch.date || ""}${ch.about ? ` — ${ch.about}` : ""}\n`
+      + (ch.messages || ch.msgs || []).slice(-14).map((m) =>
+        `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || m.content || "").slice(0, 600)}`).join("\n")
     ).join("\n")));
 
   /* THE CLOSED WORLD. The block can only ever be delivered by what is in
@@ -1627,8 +1648,11 @@ Return ONLY a JSON object, no prose around it, no code fence:
   "reasoning": "3 to 6 short paragraphs: what you read, what changed, what you decided and why",
   "interpretation": "what her numbers actually did this month, plain language, naming what is real and what is noise",
   "profile": [ { "claim": "...", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "..." } ] } ],
-  "keptGoals": ["the id of every open goal you have kept in view"]
+  "keptGoals": ["the id of every open goal you have kept in view"],
+  "prescription": [ { "label": "...", "goalIds": ["every goal id this one movement serves"], "targets": "the muscles or ranges it reaches", "sets": "3", "reps": "8", "freq": "after every session you train", "how": "how to do it, in plain language", "why": "what no class in her library could do" } ],
+  "horizons": [ { "goalId": "...", "weeks": "a realistic estimate, in weeks or months", "firstSigns": "what she notices first and roughly when", "thisMonth": "what should measurably move inside these four weeks" } ]
 }
+"prescription" is [] unless a goal genuinely needs something her library cannot reach. "horizons" has one entry for every open goal.
 Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.`;
 };
 
@@ -2282,7 +2306,7 @@ const bestEntryFor = (f, stores) => {
 --------------------------------------------------------------------------- */
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
-  { id: "squat",     cap: "lower",    label: "Bodyweight squat", role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
+  { id: "squat", mins: 1.25, cap: "lower",    label: "Bodyweight squat", role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     /* The ladder that put goblet squat and split squat on this card a second
        time, as chips, while both already had rows of their own. A rung ladder
        only works while the unit stays the same; kg x reps and per-side reps
@@ -2292,59 +2316,59 @@ const SEED_WEEKLY = [
     rungs: [], rung: 0 ,
     how: "Sixty seconds. Feet hip-width, arms out in front for balance. Sit down until the crease of your hip is level with the top of your knee, stand all the way up, that is one. Count only the reps that reach that depth — when the depth goes, stop counting even if the clock is still running.",
     why: "Legs are the biggest muscles you own and the first to go in your fifties. This is the one number on the whole battery most closely tied to still getting off the floor unaided in twenty years." },
-  { id: "wallsit",   cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
+  { id: "wallsit", mins: 1.25, cap: "lower",    label: "Wall sit",         role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false ,
     how: "Back flat to a wall, knees and hips at ninety degrees, thighs parallel to the floor, hands off your legs. Time it from the moment you are in position to the moment your hips start to rise.",
     why: "Endurance in the quads rather than peak strength — the thing that gives out on stairs and long descents. It also loads the knee joint with almost no shear, so it is safe to push hard on." },
-  { id: "splitsq",   cap: "lower",    label: "Split squat",      role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
+  { id: "splitsq", mins: 1.25, cap: "lower",    label: "Split squat",      role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
     how: "Thirty seconds a side. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately and log the weaker one.",
     why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
-  { id: "goblet",    cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+  { id: "goblet", mins: 1.5, cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. As many as you can with that weight — no clock here, because the weight is what stops you rather than the time, and putting a clock on it would turn a strength test into a fitness test.",
     why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
-  { id: "pushup",    cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
+  { id: "pushup", mins: 1.25, cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
     how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
     why: "Upper-body pressing strength and trunk stiffness in one. Because it is your own bodyweight, it also quietly tracks any change in body composition." },
-  { id: "press",     cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true ,
+  { id: "press", mins: 1.5, cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. As many as you can with that weight, each arm counted separately. No clock: the weight is the limit, not the minute.",
     why: "Overhead pressing is the movement your right shoulder is most sensitive to, which is exactly why it is measured rather than avoided. The reps are capped by the shoulder, not the arm — if the right side lags, that is the reading." },
-  { id: "raise",     cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+  { id: "raise", mins: 1.5, cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. As many as you can with that weight, per side. No clock — the weight decides when you stop.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
-  { id: "dip",       cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
+  { id: "dip", mins: 1.25, cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
     why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
 
   /* ---- PULL ---- */
-  { id: "cablerow",  cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: true ,
+  { id: "cablerow", mins: 1.5, cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. As many as you can with that weight. No clock: with a real load on it, the load is the test.",
     why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
-  { id: "bandrow",   cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
+  { id: "bandrow", mins: 1.25, cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band every time or the number means nothing.",
     why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
-  { id: "latpull",   cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+  { id: "latpull", mins: 1.5, cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. As many as you can with that weight, no clock.",
     why: "Overhead pulling. It uses the shoulder in the opposite direction to a press, so together the two say more about the joint than either alone." },
-  { id: "facepull",  cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
+  { id: "facepull", mins: 1.5, cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
     how: "Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears. As many as you can with that weight, no clock.",
     why: "The upper back and the outside rotators of the shoulder. This is the single most useful movement for a shoulder that has been irritable, which is why it is measured and not just prescribed." },
 
   /* ---- CORE ---- */
-  { id: "plank",     cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true ,
+  { id: "plank", mins: 1.25, cap: "core",     label: "Plank hold",       role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true ,
     how: "Forearms and toes, elbows under your shoulders, hips level with your shoulders. Time it until your hips drop or lift — the moment your body stops being a line, the clock stops.",
     why: "Trunk endurance. Not glamorous, but it is what lets everything else transmit force, and it is the reading most sensitive to a week off." },
-  { id: "updown",    cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
+  { id: "updown", mins: 1.25, cap: "core",     label: "Plank up-downs",   role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Start on your forearms. Press up to your hands one arm at a time, then back down to your forearms. That is one. Alternate which arm leads.",
     why: "Trunk control while something is moving, which is much closer to real life than a static hold. It also loads the shoulder, so it is watched alongside pressing." },
-  { id: "sideplank", cap: "core",     label: "Side plank",       role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
+  { id: "sideplank", mins: 1.25, cap: "core",     label: "Side plank",       role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false, bilateral: true ,
     how: "On one forearm, body in a straight line, hips stacked. Time each side separately.",
     why: "The side of the trunk, the part a plank misses entirely. The difference between your two sides is the number worth watching." },
-  { id: "crunch",    cap: "core",     label: "Crunches",         role: "rotating", type: "number", unit: "reps in 30s", better: "up", inWeekly: false ,
+  { id: "crunch", mins: 1, cap: "core",     label: "Crunches",         role: "rotating", type: "number", unit: "reps in 30s", better: "up", inWeekly: false ,
     how: "Knees bent, feet flat, hands across your chest. Curl your shoulders off the floor and back down for thirty seconds. Count full repetitions only.",
     why: "A rate rather than a maximum, which makes it far less dependent on how motivated you feel on the day." },
-  { id: "deadbug",   cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
+  { id: "deadbug", mins: 1.25, cap: "core",     label: "Dead bug",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. On your back, arms up, knees over hips. Lower one arm and the opposite leg towards the floor without letting your lower back arch, then swap. Count each pair as one, and stop counting the moment your back lifts.",
     why: "Trunk control with the back protected. It is the safest core measure of the set, and the one to use on a day the back is complaining." },
 
@@ -2352,10 +2376,10 @@ const SEED_WEEKLY = [
   /* One kilometre, ONE machine. There used to be two rows here, elliptical and
      treadmill, and she was only ever going to do one of them — so the other sat
      blank forever and dragged every completeness figure down with it. */
-  { id: "burpees",   cap: "cardio",   label: "Burpees",          role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
+  { id: "burpees", mins: 1.25, cap: "cardio",   label: "Burpees",          role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Squat, hands down, feet back, chest to floor, feet in, stand and jump. Count full repetitions.",
     why: "The hardest sixty seconds in the battery, and the one that most reflects everything at once. Scale it by stepping the feet back rather than jumping." },
-  { id: "treadmill", cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true ,
+  { id: "treadmill", mins: 7, cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: false ,
     how: "One kilometre. Walking counts. Same machine, same incline or resistance, every single time — rename this row if you switch, because a kilometre on a treadmill and a kilometre on an elliptical are two different tests and comparing them tells you nothing.",
     why: "Aerobic fitness. Lower is better, and because the settings are fixed the time is a clean read on the heart and lungs." },
 
@@ -2367,31 +2391,31 @@ const SEED_WEEKLY = [
      because it measures two of them left and right and these never did. */
 
   /* ---- BALANCE ---- */
-  { id: "balance",   cap: "balance",  label: "Single-leg stand", role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true, bilateral: true,
+  { id: "balance", mins: 1.25, cap: "balance",  label: "Single-leg stand", role: "anchor",   type: "number", unit: "sec",  better: "up", inWeekly: true, bilateral: true,
     rungs: ["Free", "Eyes closed"], rung: 0 ,
     how: "Stand on one leg, hands on hips, the other foot off the floor and not touching your standing leg. Time each side until the foot touches down. Do it eyes-closed only once eyes-open is easy.",
     why: "Balance falls faster than strength after fifty and it responds quickly to being practised. Eyes-closed is a much harder test, which is why it is a separate rung rather than the same number." },
-  { id: "tandem",    cap: "balance",  label: "Tandem stance",    role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: true ,
+  { id: "tandem", mins: 1, cap: "balance",  label: "Tandem stance",    role: "rotating", type: "number", unit: "sec",  better: "up", inWeekly: false ,
     how: "Heel directly in front of toe, both feet in a line, arms folded. Time it until you have to step.",
     why: "A narrower base than standing normally but easier than one leg — useful while single-leg is still short." },
-  { id: "legreach",  cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
+  { id: "legreach", mins: 1.25, cap: "balance",  label: "Single-leg reach", role: "rotating", type: "number", unit: "reps in 30s each", better: "up", inWeekly: false, bilateral: true ,
     how: "Thirty seconds a side. Stand on one leg and reach the other foot as far forward as you can, tap lightly, and come back without putting weight on it.",
     why: "Balance while moving rather than balance while still. Closer to what actually goes wrong on a kerb." },
 
   /* ---- HOW THE WEEK FELT ---- */
-  { id: "weight",     cap: "",        label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true ,
+  { id: "weight", mins: 0.2,     cap: "",        label: "Weight",           role: "anchor",   type: "number", unit: "kg",   better: null, inWeekly: true ,
     how: "Same scales, same time of day, ideally first thing. One reading a week, not a daily one.",
     why: "On its own it says very little — it moves with water, food and the time of day. It is here because the body-composition percentages need it to mean anything." },
-  { id: "confidence", cap: "",        label: "Confidence",       role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: "up", inWeekly: true ,
+  { id: "confidence", mins: 0.2, cap: "",        label: "Confidence",       role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: "up", inWeekly: true ,
     how: "How confident you feel about your training right now, 1 to 10. First answer, not a considered one.",
     why: "It is one of the five signals behind the weekly call. Low confidence means simplify — fewer variables, cleaner sessions — rather than push." },
-  { id: "rpe",        cap: "",        label: "Average effort",   role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: null, inWeekly: true ,
+  { id: "rpe", mins: 0.2,        cap: "",        label: "Average effort",   role: "anchor",   type: "scale",  unit: "1–10", max: 10, better: null, inWeekly: true ,
     how: "Across the week as a whole, how hard did it feel, 1 to 10.",
     why: "It is the brake on progression. A week that felt like a 9 does not get made harder however good the other numbers look." },
-  { id: "win",        cap: "",        label: "Biggest win",      role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
+  { id: "win", mins: 0.4,        cap: "",        label: "Biggest win",      role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
     how: "Anything at all. A session you nearly skipped and did, a number that moved, a day you felt like yourself.",
     why: "Specific, self-referenced feedback is the form of encouragement that actually sustains training. Written in your own words, it is worth more than anything the app can compute." },
-  { id: "challenge",  cap: "",        label: "Biggest challenge",role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
+  { id: "challenge", mins: 0.4,  cap: "",        label: "Biggest challenge",role: "anchor",   type: "note",   unit: "",     better: null, inWeekly: true ,
     how: "What got in the way. Be blunt — this is the input that changes what next month looks like.",
     why: "It is read at the end of the block, alongside everything else, and it is mined for patterns across the year. Nothing you write here is decoration." },
 ];
@@ -2542,7 +2566,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 August 2026 · 50";
+const BUILD = "10 August 2026 · 54";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2744,11 +2768,11 @@ async function loadData() {
         fields: {
           weekly: d.fields?.weekly?.length
             ? retireFields(
-                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs"]),
+                fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly"]),
                 d.weekly, (d.settings?.batteryTidy || 0) >= BATTERY_TIDY)
             : SEED_WEEKLY,
           monthly: d.fields?.monthly?.length
-            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs"])
+            ? fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly"])
             : SEED_MONTHLY,
         },
         library: d.library?.length ? d.library : SEED_LIBRARY,
@@ -2760,7 +2784,7 @@ async function loadData() {
         reviews: Array.isArray(d.reviews) ? d.reviews : [],
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
-          ? fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why"]) : SEED_MOBILITY,
+          ? fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly"]) : SEED_MOBILITY,
         drills: Array.isArray(d.drills) && d.drills.length
           ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
         mobility: d.mobility || {},
@@ -3081,12 +3105,19 @@ function useCoach(data, day) {
     for (let i = 0; i < (FX.consistencyWindow || 28); i++) {
       const d = addDays(t, -i);
       if (firstSession && d < firstSession) continue;
+      /* today has not failed yet; it only counts once she has done it */
+      if (d === t && !done(d)) continue;
       if (isScheduled(d)) { sched++; if (done(d)) hit++; }
     }
     const consistency = sched ? Math.round((hit / sched) * 100) : 0;
 
     const ws = weekStart(t);
-    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+    /* the calendar week, kept for anything that has to line up with the store */
+    const calendarWeek = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
+    /* what she has actually just lived: the seven days ending today. Never
+       contains a day that has not happened, and cannot reset to nothing
+       because a new calendar week began this morning. */
+    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(t, -(6 - i)));
     const weekDone = weekDays.filter(done).length;
     const target = weeklyTargetOf(settings);
 
@@ -3453,8 +3484,15 @@ function useCoach(data, day) {
     const mobKeys = Object.keys(data.mobility || {}).sort();
     const lastMob = mobKeys.length ? data.mobility[mobKeys[mobKeys.length - 1]] : null;
     const prevMob = mobKeys.length > 1 ? data.mobility[mobKeys[mobKeys.length - 2]] : null;
-    const mobDaysAgo = mobKeys.length
-      ? Math.round((parse(t) - parse(mobKeys[mobKeys.length - 1])) / 86400000) : null;
+    /* from the day she actually did it — the key is a week start, not a date */
+    const mobLastDay = (() => {
+      if (!mobKeys.length) return null;
+      const k = mobKeys[mobKeys.length - 1];
+      const e = data.mobility[k];
+      return (e && e.on) || k;
+    })();
+    const mobDaysAgo = mobLastDay
+      ? Math.max(0, Math.round((parse(t) - parse(mobLastDay)) / 86400000)) : null;
     const mobDue = mobDaysAgo === null || mobDaysAgo >= 7;
 
     /* every test, scored, with its asymmetry and its direction of travel */
@@ -4010,7 +4048,7 @@ function useCoach(data, day) {
        nothing is scheduled at all, it falls on the first day. */
     const firstTrainingDay = (days) => days.find((d) => isScheduled(d)) || days[0];
 
-    const weeklyAssessDay = firstTrainingDay(weekDays);
+    const weeklyAssessDay = firstTrainingDay(calendarWeek);
     const monthDays = (() => {
       const first = mk + "-01";
       const out = [];
@@ -4046,9 +4084,16 @@ function useCoach(data, day) {
       const filledWeeks = Object.keys(weekly).sort();
       const filledMonths = Object.keys(monthly).sort();
       const isFirst = filledWeeks.length <= 1 && filledMonths.length <= 1;
-      /* only while it is fresh: the week it was taken */
-      const fresh = !!wEntry || !!mEntry;
-      if (!fresh) return null;
+      /* only while it is fresh — measured from the day it was actually taken,
+         not from whether an entry exists somewhere in this week or month */
+      const stamps = [wEntry && wEntry.on, mEntry && mEntry.on].filter(Boolean).sort();
+      const lastFilled = stamps.length ? stamps[stamps.length - 1]
+        /* written before the stamp existed: the week key is the closest honest
+           guess, and a monthly with no stamp does not get to lead at all */
+        : (wEntry ? ws : null);
+      if (!lastFilled) return null;
+      const ageDays = Math.round((parse(t) - parse(lastFilled)) / 86400000);
+      if (ageDays > 2) return null;
       return {
         first: isFirst,
         weeks: filledWeeks.length,
@@ -5671,7 +5716,7 @@ function useCoach(data, day) {
         !!wkEntry,
         `Every target the coach sets comes out of these numbers. It rides on the first training day of the week — ${prettyShort(weeklyAssessDay)} — because you are already changed, already warm, already in the room.`,
         weeklyToday
-          ? "Today is your measurement day. It rides on a training day because you are already warm and in the room."
+          ? "Today is your measurement day — about ten minutes at the end of the session, mobility last. It stays here until it is done, and then it is gone until next week."
           : weeklyLate
           ? `This week's measurements are ${weeklyLate} day${weeklyLate === 1 ? "" : "s"} late. Ten minutes and the week has something to compare against.`
           : "This week's measurements are still open. Every target I set comes out of them.");
@@ -5682,7 +5727,7 @@ function useCoach(data, day) {
         !!moEntry,
         `Body composition and the heavier tests, on the first training day of the month — ${prettyShort(monthlyAssessDay)}. Without two of these, nothing can be compared to anything.`,
         monthlyToday
-          ? "Today is your benchmark day — the full battery and body composition. About half an hour."
+          ? "Today is your benchmark day — every test you have, mobility last, plus body composition. Allow about forty minutes. It stays here until it is done, then it is gone until next month."
           : monthlyLate
           ? `The month's benchmark is ${monthlyLate} day${monthlyLate === 1 ? "" : "s"} late. Without two of these there is nothing to compare.`
           : "This month's benchmark is still open. It is the one that lets me see change rather than noise.");
@@ -5699,7 +5744,11 @@ function useCoach(data, day) {
          printed in full whether or not she had ever read it. One block of
          rows, each actionable where it sits (rule 11), each explaining
          itself only when asked. */
-      add("mobility", "week", "Mobility check", !mobDue,
+      /* MOBILITY IS NO LONGER A ROW OF ITS OWN. It is the last section of the
+         battery she is already being asked for, so asking again here would be
+         asking twice for one thing. Kept as a row only if she has done the
+         battery and somehow still has no mobility entry for the week. */
+      add("mobility", "week", "Mobility check", !mobDue || (weeklyDue && monthlyDue),
         "Seven tests, about ten minutes. The scores choose the ten minutes of drills you do after each session, so a stale battery means the drills are aimed at where you were, not where you are.",
         "The mobility battery is due. It is about ten minutes, and it is what chooses your drills for the week.");
       /* ---- the one she starts herself ---------------------------------
@@ -6124,8 +6173,14 @@ function useCoach(data, day) {
        with training, just one line later. */
     const leads = allLeads.filter((a) => a.lead === (allLeads[0] || {}).lead);
     const rest = agenda.filter((a) => !a.lead && !a.admin);
+    /* Only a lead about HER — how she is (1), or a break (2) — may quiet the
+       urgent lines. Anything less than that leads and then gets out of the
+       way. */
+    const quieting = leads.length && leads[0].lead <= 2;
     const leading = (leads.length
-      ? [...leads, ...rest.filter((a) => a.tone === "warm")]
+      ? (quieting
+          ? [...leads, ...rest.filter((a) => a.tone === "warm")]
+          : [...leads, rest.find((a) => a.tone === "firm"), rest.find((a) => a.tone === "push")])
       : [rest.find((a) => a.tone === "firm"),
          rest.find((a) => a.tone === "push"),
          rest.find((a) => a.tone === "warm")]
@@ -6147,7 +6202,7 @@ function useCoach(data, day) {
 
 
     return {
-      t, ws, mk, weekDays, done, isScheduled, consistency,
+      t, ws, mk, weekDays, calendarWeek, done, isScheduled, consistency,
       weekDone, target, monthDone, monthTarget, totalSessions,
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
@@ -6156,7 +6211,7 @@ function useCoach(data, day) {
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
-      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
     };
   }, [data, day]);
 }
@@ -6801,6 +6856,64 @@ function SetsTap({ value, onChange }) {
    and fed into the monthly design — not a wish list, an input. */
 /* The mobility battery. Every test carries its protocol and its reason, so
    she can do it properly without looking anything up. */
+/* ============================================================================
+   ONE MOBILITY ROW
+   ---------------------------------------------------------------------------
+   Her spec, 9 August: "they should all have strength, core, mobility. Mobility,
+   of course, comes at the end of the battery."
+
+   So the mobility tests are no longer somewhere else. They render at the end
+   of the battery she is already doing, from this one component, and they still
+   write to their own store — the drill picker, the weekly mobility score and
+   the asymmetry flags all read `data.mobility`, and moving that would throw
+   away the shape those calculations depend on for nothing she would see.
+========================================================================== */
+function MobRow({ m, e, put, open, setOpen }) {
+  const isOpen = open === m.id;
+  return (
+    <Card style={{ marginBottom: 11 }}>
+      <button className="tap" onClick={() => setOpen(isOpen ? null : m.id)} style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: 0,
+        width: "100%", textAlign: "left", display: "block", marginBottom: 10 }}>
+        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{m.label}</span>
+          <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+            {m.unit}{m.side ? " · L/R" : ""} {isOpen ? "▴" : "▾"}
+          </span>
+        </span>
+      </button>
+      {isOpen && (
+        <div style={{ marginBottom: 12, padding: "12px 14px", background: C.chalk, borderRadius: 11 }}>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 8 }}>{m.how}</div>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted }}>{m.why}</div>
+          <ExercisePhoto id={m.id} />
+          <div style={{ marginTop: 10 }}>
+            <a href={videoFor(m)} target="_blank" rel="noreferrer" style={{
+              fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
+              {m.video ? "watch it →" : "find it on video →"}
+            </a>
+          </div>
+        </div>
+      )}
+      {m.side ? (
+        <div style={{ display: "flex", gap: 10 }}>
+          <span style={{ flex: 1 }}>
+            <Field label="Left" unit={String(m.unit || "").replace("/", "of ")} value={e.l || ""}
+              onChange={(v) => put(m.id, { l: v })} />
+          </span>
+          <span style={{ flex: 1 }}>
+            <Field label="Right" unit={String(m.unit || "").replace("/", "of ")} value={e.r || ""}
+              onChange={(v) => put(m.id, { r: v })} />
+          </span>
+        </div>
+      ) : (
+        <Field label="Score" unit={String(m.unit || "").replace("/", "of ")} value={e.v || ""}
+          onChange={(v) => put(m.id, { v })} />
+      )}
+    </Card>
+  );
+}
+
 function MobilitySheet({ data, setData, coach, close }) {
   const wk = coach.ws;
   const [entry, setEntry] = useState(() => ({ ...(data.mobility?.[wk] || {}) }));
@@ -6823,56 +6936,9 @@ function MobilitySheet({ data, setData, coach, close }) {
         or the numbers won't compare. Tap any test for how to do it and why it matters.
       </div>
 
-      {(coach.mobTests || []).map((m) => {
-        const e = entry[m.id] || {};
-        const isOpen = open === m.id;
-        return (
-          <Card key={m.id} style={{ marginBottom: 11 }}>
-            <button className="tap" onClick={() => setOpen(isOpen ? null : m.id)} style={{
-              border: "none", background: "transparent", cursor: "pointer", padding: 0,
-              width: "100%", textAlign: "left", display: "block", marginBottom: 10 }}>
-              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <span style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>{m.label}</span>
-                <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-                  {m.unit}{m.side ? " · L/R" : ""} {isOpen ? "▴" : "▾"}
-                </span>
-              </span>
-            </button>
-
-            {isOpen && (
-              <div style={{ marginBottom: 12, padding: "12px 14px", background: C.chalk, borderRadius: 11 }}>
-                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 8 }}>{m.how}</div>
-                <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted }}>{m.why}</div>
-                {/* the mobility tests already explained themselves; they get the
-                    same photo and video as the strength battery */}
-                <ExercisePhoto id={m.id} />
-                <div style={{ marginTop: 10 }}>
-                  <a href={videoFor(m)} target="_blank" rel="noreferrer" style={{
-                    fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none" }}>
-                    {m.video ? "watch it →" : "find it on video →"}
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {m.side ? (
-              <div style={{ display: "flex", gap: 10 }}>
-                <span style={{ flex: 1 }}>
-                  <Field label="Left" unit={m.unit.replace("/", "of ")} value={e.l || ""}
-                    onChange={(v) => put(m.id, { l: v })} />
-                </span>
-                <span style={{ flex: 1 }}>
-                  <Field label="Right" unit={m.unit.replace("/", "of ")} value={e.r || ""}
-                    onChange={(v) => put(m.id, { r: v })} />
-                </span>
-              </div>
-            ) : (
-              <Field label="Score" unit={m.unit.replace("/", "of ")} value={e.v || ""}
-                onChange={(v) => put(m.id, { v })} />
-            )}
-          </Card>
-        );
-      })}
+      {(coach.mobTests || []).map((m) => (
+        <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put} open={open} setOpen={setOpen} />
+      ))}
 
       <Btn kind="signal" onClick={save}>Save this week</Btn>
       <div style={{ marginTop: 8 }}><Btn kind="quiet" onClick={close}>Close without saving</Btn></div>
@@ -7184,6 +7250,30 @@ function GoalsCard({ data, setData, coach, setSheet }) {
   );
 }
 
+/* The way in to the seven mobility tests, which used to exist only as a row
+   in Needs you on the days it was due. */
+function MobilityDoor({ coach, setSheet }) {
+  const n = (coach.mobTests || []).length;
+  const both = (coach.mobTests || []).filter((t) => t.side).length;
+  return (
+    <Card>
+      <Eyebrow>Mobility, flexibility and balance</Eyebrow>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, margin: "4px 0 12px" }}>
+        {n} tests, about ten minutes, {both} of them measured left and right. These are what choose
+        your ten minutes of drills after each session — so a stale battery aims the drills at where
+        you were rather than where you are.
+        {coach.mobDaysAgo === null
+          ? " You haven't done one yet."
+          : coach.mobDaysAgo === 0 ? " Done today."
+          : ` Last done ${coach.mobDaysAgo} day${coach.mobDaysAgo === 1 ? "" : "s"} ago.`}
+      </div>
+      <Btn kind={coach.mobDue ? "signal" : "quiet"} onClick={() => setSheet({ kind: "mobility" })}>
+        {coach.mobDaysAgo === null ? "Do it for the first time" : coach.mobDue ? "Do this week's" : "Open it"}
+      </Btn>
+    </Card>
+  );
+}
+
 /* Ten minutes after a session, chosen by what the tests say is short. */
 function DrillsCard({ coach, setSheet }) {
   if (!coach.dailyDrills.list.length) return null;
@@ -7422,7 +7512,7 @@ function Today({ data, setData, coach, setSheet }) {
   const [logDate, setLogDate] = useState(coach.t);
   /* how many weeks back the strip is showing. 0 is this week. */
   const [weekBack, setWeekBack] = useState(0);
-  const spineDays = weekBack === 0 ? coach.weekDays
+  const spineDays = weekBack === 0 ? coach.calendarWeek
     : Array.from({ length: 7 }, (_, i) => addDays(weekStart(addDays(coach.t, -weekBack * 7)), i));
   /* If midnight passes while the app is open, the page moves to the new day -
      but only if she was sitting on today. If she had deliberately opened an
@@ -7995,6 +8085,9 @@ function Today({ data, setData, coach, setSheet }) {
                     <DuringTap value={log?.during} onChange={(v) => write({ during: v })} />
                   )}
                   {log?.completed && log?.during && (
+                    <WhenTap value={log?.when} onChange={(v) => write({ when: v })} />
+                  )}
+                  {log?.completed && log?.during && (
                     <Scale label="How you felt afterwards" value={log?.energyAfter}
                       onChange={(v) => write({ energyAfter: v })} max={5} lo="wiped" hi="great" />
                   )}
@@ -8367,6 +8460,9 @@ function Today({ data, setData, coach, setSheet }) {
             node: <RecordCard data={data} setData={setData} coach={coach} setSheet={setSheet} /> },
           { id: "goals", title: "What you want to be able to do", count: coach.openGoals.length,
             node: <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} /> },
+          { id: "mobility", title: "Mobility battery",
+            count: coach.mobDue ? 1 : 0,
+            node: <MobilityDoor coach={coach} setSheet={setSheet} /> },
           { id: "drills", title: "Today's ten minutes", count: coach.dailyDrills.list.length,
             node: coach.dailyDrills.list.length
               ? <DrillsCard coach={coach} setSheet={setSheet} /> : null },
@@ -8955,9 +9051,9 @@ function Progress({ data, setData, coach, setSheet }) {
   const recentDays = Array.from({ length: daysBack }, (_, i) => addDays(coach.t, -i));
   const recentWeeks = Array.from({ length: weeksBack }, (_, i) => weekStart(addDays(coach.t, -i * 7)));
   const recentMonths = Array.from({ length: monthsBack }, (_, i) => {
-    const d = parse(coach.t + "");
-    d.setMonth(d.getMonth() - i);
-    return iso(d).slice(0, 7);
+    const [y, m] = coach.t.split("-").map(Number);
+    const total = y * 12 + (m - 1) - i;
+    return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
   });
 
   const filledCount = (obj, fields) => fields.filter((f) => obj[f.id] !== undefined && obj[f.id] !== "").length;
@@ -11848,7 +11944,7 @@ function MonthPlanCard({ data, setData, coach, setSheet }) {
   /* In the calibration block there is no plan to draw, so the seven boxes show
      what she actually did — filling in as the week goes, blank ahead of today.
      A shape she made is worth looking at; a shape nobody chose is not. */
-  const actual = coach.weekDays.map((d) => {
+  const actual = coach.calendarWeek.map((d) => {
     const l = data.logs?.[d];
     if (l?.completed) {
       const cls = (coach.allClasses || []).find((w) => w.name === l.type);
@@ -12844,6 +12940,10 @@ function ReviewSheet({ data, setData, coach, setSheet, close }) {
         id: "blk" + (pr.phases.length + 1),
         name: rec.block.name, weeks: 4, status: "live",
         line: rec.block.line, week: rec.block.week,
+        /* the order the kinds come round in on the days she trains — without
+           it the programme reverts to fixed weekdays and her rhythm stops
+           being hers */
+        sequence: (rec.block.week || []).filter((k) => k !== "rest"),
         basis: [rec.block.reasoning],
         fromReview: rec.id,
       });
@@ -13351,7 +13451,7 @@ ${coach.voicePatterns.length ? coach.voicePatterns.map((v) => `  * ${v.text}`).j
   say so plainly and help her plan for it rather than waiting for it to happen.
 - WHAT YOU HAVE TALKED ABOUT BEFORE (most recent conversations — read these so she never has to repeat
   herself, and so you can pick up threads she left open):
-${(data.chats || []).slice(-6).map((c) => `  * ${c.date} — ${c.about}: ${c.messages.slice(0, 6).map((m) => `${m.role === "user" ? "SHE" : "YOU"}: ${(m.text || "").slice(0, 200)}`).join(" | ")}`).join("\n") || "  no previous conversations"}
+${(data.chats || []).slice(-6).map((c) => `  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-6).map((m) => `${m.role === "user" ? "SHE" : "YOU"}: ${(m.text || "").slice(0, 200)}`).join(" | ")}`).join("\n") || "  no previous conversations"}
 - THE RECORD — everything she has told you that isn't a number. READ THIS BEFORE ANSWERING ANYTHING
   about how she feels, a pain, a tightness, or a question she has asked before. Never answer from
   scratch if it is already in here — refer back to it by date, say what she tried, and say whether it
@@ -13392,6 +13492,9 @@ ${about ? `- She tapped "${about}" and came here to ask about it. Answer that fi
 - THE LAST FOURTEEN DAYS, oldest first — every session with everything recorded about it. This is the
   window, not the calendar week: if she mentions something she did recently, it is in here.
   ${recent}
+- WHY SHE SKIPPED, SWAPPED OR CUT ONE SHORT, in her own words and her own taps. Never quote this back
+  as an accounting; use it so she does not have to explain the same thing twice:
+${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w.reason || "?"}${(w.answers || []).length ? ` (${(w.answers || []).join(", ")})` : ""}${w.words ? ` — she wrote: "${w.words}"` : ""}` : null; }).filter(Boolean).join("\n") || "  nothing in the last fortnight"}
 - Last battery: ${battery}
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
@@ -13615,13 +13718,24 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   const isWeekly = which === "weekly";
 
   /* the coach names a number to beat rather than leaving the page blank */
+  const settingsShoulder = !!data.settings?.shoulderInjury;
   const targetFor = (f) => {
     if (!f.better || f.type === "note" || f.type === "scale") return null;
     const m = (coach.analysis || []).find((x) => x.id === f.id);
     if (!m || !m.now) return null;
-    const frozen = coach.shoulderFrozen && SHOULDER_SENSITIVE.includes(f.id);
-    const step = frozen ? 0 : coach.verdict.key === "advance" ? 0.05 : coach.verdict.key === "reduce" ? -0.05 : 0.02;
-    const raw = m.better === "down" ? m.now * (1 - step) : m.now * (1 + step);
+    const overhead = SHOULDER_SENSITIVE.includes(f.id) && settingsShoulder;
+    const frozen = coach.shoulderFrozen && overhead;
+    /* one uncomfortable morning is enough to stop asking for more overhead */
+    const sore = overhead && coach.lowComfort > 0;
+    const step = frozen || sore ? 0
+      : coach.verdict.key === "advance" ? 0.05 : coach.verdict.key === "reduce" ? -0.05 : 0.02;
+    let raw = m.better === "down" ? m.now * (1 - step) : m.now * (1 + step);
+    /* and never more than half a kilo a week on anything overhead */
+    if (overhead && step > 0 && f.type === "weightreps") {
+      const ceiling = m.now + KG_STEP_SHOULDER * (Number(m.reps) || 1);
+      raw = Math.min(raw, m.now + KG_STEP_SHOULDER * Math.max(1, Math.round(m.now / Math.max(1, Number(m.weight) || 1))));
+      if (!isFinite(raw)) raw = m.now;
+    }
     const fmt = (v) => (f.type === "time"
       ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`
       : Math.round(v * 10) / 10);
@@ -13631,18 +13745,48 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       const prev = m.reading?.sub || "";
       return {
         last: `${Math.round(m.now)} kg total${prev ? ` (${prev})` : ""}`,
-        aim: frozen ? "hold what you did — shoulder" : `beat ${Math.round(raw)} kg total — more weight or more reps`,
+        aim: frozen ? "hold what you did — shoulder"
+        : sore ? "hold what you did — your shoulder was uncomfortable this week"
+        : `beat ${Math.round(raw)} kg total — more weight or more reps`,
       };
     }
-    return { last: fmt(m.now), aim: frozen ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
+    return { last: fmt(m.now), aim: (frozen || sore) ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
   };
   const key = periodKey || (isWeekly ? coach.ws : coach.mk);
   const isCurrent = key === (isWeekly ? coach.ws : coach.mk);
+  /* ONE LIST, TWO LENGTHS.
+     Her words, 9 August: "there is only one type of measurement. It's not
+     monthly or weekly. They are the same set of exercises."
+
+     She is describing the design correctly — the monthly IS the same list,
+     complete, and the weekly is the short version of it. What was wrong was
+     that nothing on either screen said so, so two sittings that differ by ten
+     rows read as the same screen twice and the distinction did no work.
+
+     So the list stays one list. What changes is that each sitting now says
+     which one it is, and the monthly marks the rows the weekly never asks
+     for — the difference is legible while she is standing there doing it,
+     which is the only place it was ever needed. */
   const fields = isWeekly
     ? data.fields.weekly.filter((f) => f.inWeekly !== false)
     : [...data.fields.monthly, ...data.fields.weekly];
+  const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
+  const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
   const [form, setForm] = useState(data[which][key] || {});
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  /* Mobility is the end of this battery, not a separate errand. It keeps its
+     own store because every mobility calculation reads that shape. */
+  const mobTests = (coach.mobTests || []).filter((m) => (isWeekly ? m.inWeekly !== false : true));
+  const [mob, setMob] = useState(() => ({ ...(data.mobility?.[coach.ws] || {}) }));
+  const [mobOpen, setMobOpen] = useState(null);
+  const putMob = (id, patch) => setMob((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }));
+
+  /* Her instruction: an estimate per exercise, so the sitting has a real
+     budget rather than a hopeful one. Everything carries its own minutes and
+     the total is arithmetic, not a promise. */
+  const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
+  const totalMins = Math.round(minsOf(fields) + minsOf(mobTests));
 
   return (
     <>
@@ -13654,8 +13798,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       </h2>
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px", lineHeight: 1.45 }}>
         {isWeekly
-          ? "About ten minutes. Anchors plus this week's rotators. Skip anything you didn't test — partial entries are fine."
-          : "The full battery, about thirty minutes, plus body composition. Four times more coverage than the weekly."}
+          ? `The short version — ${weeklyCount} of your ${data.fields.weekly.length} tests, about ten minutes. Same list as the monthly, just the quick end of it. Skip anything you didn't test; partial entries are fine.`
+          : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for.`}
       </p>
 
       {/* THE BATTERY IS HERS (rule 12), AND HAS TO LOOK IT (rule 11).
@@ -13663,6 +13807,11 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           button that said "Monthly · 8". From in here, where she is actually
           looking at the exercises, there was no sign the list could change at
           all, which is indistinguishable from it being hard-coded. */}
+      <div className="mono" style={{ fontSize: 10, color: C.signal, letterSpacing: "0.06em",
+        marginBottom: 14, textTransform: "uppercase" }}>
+        {fields.length + mobTests.length} rows · about {totalMins} minutes
+      </div>
+
       <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}
         className="tap" style={{
           border: "none", background: "transparent", cursor: "pointer", padding: "0 0 18px",
@@ -13677,17 +13826,46 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           <Card key={cap || "feel"} style={{ marginBottom: 12 }}>
             <Eyebrow>{cap || "How the week felt"}</Eyebrow>
             {group.map((f) => (
-              <AssessInput key={f.id} f={f} form={form} set={set}
-                target={targetFor(f)}
-                pb={f.better === "up" ? coach.pbs[f.id] : null} />
+              <div key={f.id}>
+                {onlyMonthly(f) && (
+                  <div className="mono" style={{ fontSize: 8.5, letterSpacing: "0.12em",
+                    textTransform: "uppercase", color: C.ochre, marginBottom: 2 }}>only here</div>
+                )}
+                <AssessInput f={f} form={form} set={set}
+                  target={targetFor(f)}
+                  pb={f.better === "up" ? coach.pbs[f.id] : null} />
+              </div>
             ))}
           </Card>
         );
       })}
 
+      {/* MOBILITY, LAST. "Mobility, of course, comes at the end of the
+          battery." It saves with everything else on the one button. */}
+      {mobTests.length > 0 && (
+        <Card style={{ marginBottom: 12, background: C.mint }}>
+          <Eyebrow color={C.moss}>Mobility — last</Eyebrow>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 12px" }}>
+            {isWeekly
+              ? "One test, warm, at the end. The long version comes with the monthly."
+              : `All ${mobTests.length}, warm, at the end. ${mobTests.filter((m) => m.side).length} of them measured left and right — an asymmetry is the thing a single number hides.`}
+            {" "}These choose your ten minutes of drills until the next one.
+          </div>
+          {mobTests.map((m) => (
+            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob} open={mobOpen} setOpen={setMobOpen} />
+          ))}
+        </Card>
+      )}
+
       <div style={{ marginTop: 14 }}>
         <Btn kind="signal" onClick={() => {
-          const next = { ...data, [which]: { ...data[which], [key]: form } };
+          /* the store is keyed by week start and by month; without this the
+             app cannot tell a battery taken this morning from one taken six
+             days ago, and a reading led her opening line for a month */
+          const stamped = { ...form, on: coach.t };
+          const next = { ...data, [which]: { ...data[which], [key]: stamped } };
+          /* one button, both stores — she did it in one sitting, it saves as one */
+          if (Object.keys(mob).length) next.mobility = { ...(data.mobility || {}), [coach.ws]: { ...mob, on: coach.t } };
           /* The benchmark is thirty-odd minutes under load — it counts as the
              day's session, so the week isn't punished for measuring. */
           if (!isWeekly && isCurrent && !data.logs[coach.t]?.type) {
@@ -13696,7 +13874,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           }
           setData(next); close();
         }}>
-          Save {isWeekly ? "weekly check" : "benchmark"}
+          Save {isWeekly ? "the weekly check" : "the benchmark"}{mobTests.length ? " and mobility" : ""}
         </Btn>
         <Btn kind="quiet" onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}>Edit which measures appear here</Btn>
         <Btn kind="quiet" onClick={close}>Cancel</Btn>
