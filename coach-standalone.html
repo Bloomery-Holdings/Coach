@@ -2942,7 +2942,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 63";
+const BUILD = "10 August 2026 · 64";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4151,14 +4151,32 @@ function useCoach(data, day, clock) {
            it rather than presenting ten minutes of unexplained homework. */
         const DAILY_BUDGET = 10;
         const dailyDrills = (() => {
-            /* goal -> its drills, in the order she set them */
+            /* goal -> its drills, in the order she set them.
+      
+               A GOAL GETS WORK THE MOMENT IT EXISTS. Until now a goal only produced
+               daily work once she had hand-picked drills for it or a monthly read
+               had written some — so a goal set this morning gave her nothing to do
+               this morning, which is the opposite of the point. During the
+               calibration month, when no read has run yet, that meant no goal work
+               at all.
+      
+               So where she has not chosen, the app chooses from the goal's own
+               words and says so. Provisional, editable, and replaced the moment the
+               coach writes something better (rules 12, 23). */
             const goalOf = {};
             const goalIds = [];
-            openGoals.forEach((g) => (g.drills || []).forEach((id) => {
-                if (!goalIds.includes(id))
-                    goalIds.push(id);
-                (goalOf[id] = goalOf[id] || []).push(g.text);
-            }));
+            const suggestedFor = {};
+            openGoals.forEach((g) => {
+                const own = (g.drills || []).filter(Boolean);
+                const ids = own.length ? own : suggestDrills(g.text, drills);
+                if (!own.length)
+                    ids.forEach((id) => { suggestedFor[id] = true; });
+                ids.forEach((id) => {
+                    if (!goalIds.includes(id))
+                        goalIds.push(id);
+                    (goalOf[id] = goalOf[id] || []).push(g.text);
+                });
+            });
             const mobIds = [];
             mobWeakest.forEach((r) => (r.drills || []).forEach((d) => { if (!goalIds.includes(d) && !mobIds.includes(d))
                 mobIds.push(d); }));
@@ -4171,7 +4189,7 @@ function useCoach(data, day, clock) {
                 const d = drillById(id, drills);
                 if (!d)
                     continue;
-                out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [] });
+                out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [], suggested: !!suggestedFor[id] });
                 mins += d.mins || 0;
                 goalMins += d.mins || 0;
             }
@@ -4189,6 +4207,7 @@ function useCoach(data, day, clock) {
             const uncovered = openGoals.filter((g) => !covered.has(g.text));
             return { list: out, mins: Math.round(mins * 10) / 10, goalMins: Math.round(goalMins * 10) / 10,
                 goalCount: out.filter((x) => x.forGoal).length,
+                suggestedCount: out.filter((x) => x.suggested).length,
                 budget: DAILY_BUDGET, over: mins > DAILY_BUDGET, uncovered };
         })();
         /* ---- THE THINGS SHE WANTS TO DO, SCORED ---------------------------
@@ -4210,6 +4229,98 @@ function useCoach(data, day, clock) {
            goalCheckDue is what the sitting has NOT yet covered this week, so the
            card on Today stands down once the battery has taken them rather than
            asking her the same question twice. */
+        /* ---- WHAT SHE HAS ALREADY ACHIEVED ---------------------------------
+           Her instruction, 10 August: "when I score something to become ten out
+           of ten, I think it should be replaced by something else because I've
+           achieved it — whether it's part of the battery or it is part of the
+           goals. There is no point of training for something that I'm already
+           doing."
+    
+           So the app notices, says so specifically, and offers to retire it. It
+           never retires anything by itself: she scored it, she decides it is done
+           (rules 12, 20). And the noticing is warm and self-referenced rather than
+           a badge — a thing she can now do that she could not before, named, with
+           the date she first could not do it (rules 24, 25). */
+        const goalsAchieved = openGoals
+            .map((g) => {
+            const sc = (g.scores || []).filter((x) => Number.isFinite(Number(x.value)));
+            if (!sc.length)
+                return null;
+            const last = sc[sc.length - 1];
+            if (Number(last.value) < 10)
+                return null;
+            const first = sc[0];
+            /* how many times running it has been a ten, and where it started */
+            let run = 0;
+            for (let i = sc.length - 1; i >= 0 && Number(sc[i].value) >= 10; i--)
+                run++;
+            return { goal: g, at: last.date, run, from: first.value, since: first.date, scores: sc };
+        })
+            .filter(Boolean);
+        /* A test at the top of its own scale is the same situation: the number
+           cannot move any further, so it has stopped measuring anything. Offered
+           the same way — a harder rung if the test has one, otherwise a swap. */
+        const testsMaxed = (() => {
+            const out = [];
+            const latest = (store) => { const ks = Object.keys(store || {}).sort(); return ks.length ? store[ks[ks.length - 1]] : null; };
+            const wk = latest(weekly), mo = latest(monthly);
+            [...fields.weekly, ...fields.monthly].forEach((f) => {
+                var _a;
+                if (!f.max)
+                    return;
+                const v = Number((_a = (wk && wk[f.id])) !== null && _a !== void 0 ? _a : (mo && mo[f.id]));
+                if (!Number.isFinite(v) || v < Number(f.max))
+                    return;
+                if (out.some((x) => x.id === f.id))
+                    return;
+                out.push({ id: f.id, label: f.label, value: v, max: Number(f.max), kind: "battery",
+                    rungs: f.rungs || [], rung: Number(f.rung || 0) });
+            });
+            const mob = latest(data.mobility);
+            (mobTests || []).forEach((m) => {
+                var _a, _b;
+                if (!m.max || !mob)
+                    return;
+                const e = mob[m.id];
+                if (!e)
+                    return;
+                const vals = m.side ? [Number(e.L), Number(e.R)] : [Number((_b = (_a = e.score) !== null && _a !== void 0 ? _a : e.v) !== null && _b !== void 0 ? _b : e)];
+                if (!vals.length || vals.some((v) => !Number.isFinite(v) || v < Number(m.max)))
+                    return;
+                out.push({ id: m.id, label: m.label, value: Number(m.max), max: Number(m.max),
+                    kind: "mobility", rungs: [], rung: 0 });
+            });
+            return out;
+        })();
+        /* ---- WHAT SHE CAN DO NOW -------------------------------------------
+           Her correction, 10 August: "Don't retire completely. Create a middle
+           list or something motivating that shows me the goals that I've already
+           achieved, so it keeps counting and it keeps making me feel motivated.
+           Don't just retire it altogether."
+    
+           So a goal she has reached stops being trained for and stops taking her
+           ten minutes — there is no point building towards something she can
+           already do — but it does not disappear. It moves to a list of things
+           she can now do that she could not before, with where it started, how
+           long it took, and what she wrote on the way.
+    
+           This is not a badge and not a streak (rule 25). It is specific,
+           self-referenced, and it is about a capability SHE chose — which is the
+           one form of feedback the evidence says sustains training for years. */
+        const wonGoals = goals
+            .filter((g) => g.status === "won")
+            .map((g) => {
+            const sc = (g.scores || []).filter((x) => Number.isFinite(Number(x.value)));
+            const first = sc[0] || null;
+            const last = sc[sc.length - 1] || null;
+            const on = g.wonOn || (last && last.date) || g.added || null;
+            const days = on && (first ? first.date : g.added)
+                ? Math.max(0, Math.round((parse(on) - parse(first ? first.date : g.added)) / 86400000)) : null;
+            return { ...g, wonOn: on, from: first ? Number(first.value) : null,
+                to: last ? Number(last.value) : null, days, scores: sc,
+                words: sc.map((x) => x.note).filter(Boolean) };
+        })
+            .sort((a, b) => String(b.wonOn || "").localeCompare(String(a.wonOn || "")));
         const goalScoredIn = (g, from) => (g.scores || []).some((sc) => sc.date >= from);
         /* SCORING IS WEEKLY, AND THE BATTERY OWNS IT.
     
@@ -6877,7 +6988,7 @@ function useCoach(data, day, clock) {
             weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
             pbs,
             planned, session, hasPlan, pos, themes, prescribed, themeGoal, bet, betsWon, betsTaken, phase, season, seasonTarget, themesAuto, auto,
-            verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, goalBattery, goalMinutes, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
+            verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, goalBattery, goalMinutes, goalsAchieved, testsMaxed, wonGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
             ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
             profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
             WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
@@ -7855,6 +7966,8 @@ function DrillsCard({ coach, setSheet }) {
         React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 12 } }, coach.dailyDrills.goalCount
             ? `After every session you train — this one and every other one, whatever the class was. The first ${coach.dailyDrills.goalCount === 1 ? "one builds" : coach.dailyDrills.goalCount + " build"} the muscles your goals need, whether or not a class happens to reach them, because a class that comes round once a fortnight builds nothing. ${coach.dailyDrills.goalMins} of the ten minutes go there. The rest is chosen by whatever your mobility tests say is short.`
             : "After every session you train. These are chosen by what your mobility tests say is short — they change as the scores change. Set a goal and the first few minutes become work for that instead."),
+        coach.dailyDrills.suggestedCount > 0 && (React.createElement("div", { style: { fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 12,
+                padding: "9px 11px", background: C.card, borderRadius: 9 } }, "Some of these were chosen from the words of your goals so you have something to do today rather than waiting for the first monthly read. Change any of them from the goal itself.")),
         (coach.dailyDrills.uncovered || []).length > 0 && (React.createElement("div", { style: { fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 12,
                 padding: "9px 11px", background: C.card, borderRadius: 9 } },
             "Nothing here is building \"",
@@ -7876,6 +7989,7 @@ function DrillsCard({ coach, setSheet }) {
                 "For: ",
                 d.forGoalText.join(" · "))),
             d.fromReview && (React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Written for you at the last monthly read.")),
+            d.suggested && !d.fromReview && (React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Chosen from the words of your goal, until you pick better ones or the coach writes them.")),
             React.createElement("div", { style: { marginTop: 6 } },
                 React.createElement(HowTo, { f: d })))))));
 }
@@ -8171,6 +8285,7 @@ function Today({ data, setData, coach, setSheet }) {
                         border: "none", background: "transparent", cursor: "pointer", padding: 0,
                         fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
                     } }, "back to today")))),
+        isToday && React.createElement(MedalShelf, { coach: coach, setSheet: setSheet }),
         isToday && React.createElement(MoodCard, { log: log, write: write, setSheet: setSheet, coach: coach }),
         isToday && (React.createElement(Card, { style: { background: coach.recValue ? C.card : C.pist, padding: "14px 16px" } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 } },
@@ -8214,6 +8329,7 @@ function Today({ data, setData, coach, setSheet }) {
                     "Everything your coach is watching (",
                     coach.agenda.length,
                     ")"))))),
+        isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
         isToday && !(log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.state) !== "moved" && !restDay
             && coach.moodToday && coach.moodToday !== "good" && (React.createElement(LadderCard, { data: data, setData: setData, coach: coach })),
         isToday && measureDue && (React.createElement(MeasureDueCard, { data: data, setData: setData, coach: coach, setSheet: setSheet, monthly: showMonthlyCall })),
@@ -10698,6 +10814,151 @@ function MicButton({ onText, current }) {
    first draft; she owns it from here. Tap any day to change what it is, drag
    phase lengths, move the start date. */
 /* ============================================================================
+   WHAT SHE CAN DO NOW, AND WHAT SHE HAS JUST REACHED
+   ---------------------------------------------------------------------------
+   Two halves of the same idea, both hers, both from 10 August.
+
+   The first: a ten out of ten means it is done, and there is no point
+   training for something she can already do — so the app notices and offers
+   to close it. It never closes anything itself. She scored it; she decides.
+
+   The second, immediately after: "don't retire completely... show me the
+   goals that I've already achieved, so it keeps counting and it keeps making
+   me feel motivated." So a closed goal moves to a list of things she can now
+   do, with where it started and how long it took. Not a badge and not a
+   streak — the specific, self-referenced record of a capability she chose,
+   which is the one form of feedback that sustains training for years
+   (rules 24, 25).
+   ==========================================================================*/
+function AchievedCard({ data, setData, coach, setSheet }) {
+    const reached = coach.goalsAchieved || [];
+    const maxed = coach.testsMaxed || [];
+    const [shut, setShut] = useState({});
+    const live = reached.filter((r) => !shut[r.goal.id]);
+    if (!live.length && !maxed.length)
+        return null;
+    const close = (r) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) => (g.id === r.goal.id ? { ...g, status: "won", wonOn: coach.t } : g)) }));
+    return (React.createElement(Card, { style: { background: C.mint } },
+        React.createElement(Eyebrow, { color: C.moss }, live.length ? "You can do this now" : "A test that has stopped measuring"),
+        live.map((r, i) => (React.createElement("div", { key: r.goal.id, style: { paddingTop: i ? 14 : 4, marginTop: i ? 14 : 0,
+                borderTop: i ? `1px solid ${C.line}` : "none" } },
+            React.createElement("div", { style: { fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.4 } }, r.goal.text),
+            React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 6 } },
+                "Ten out of ten",
+                r.run > 1 ? `, ${r.run} times running` : "",
+                ".",
+                Number.isFinite(Number(r.from)) && Number(r.from) < 10
+                    ? ` You first scored it ${r.from} out of ten on ${dayAndMonth(r.since)}.`
+                    : "",
+                " ",
+                "There is no point building towards something you can already do \u2014 shall we close it and put the ten minutes somewhere that still needs them?"),
+            React.createElement("div", { style: { marginTop: 10 } },
+                React.createElement(Btn, { kind: "signal", onClick: () => close(r) }, "Yes \u2014 I can do this now")),
+            React.createElement("div", { style: { marginTop: 8 } },
+                React.createElement(Btn, { kind: "quiet", onClick: () => setShut((x) => ({ ...x, [r.goal.id]: true })) }, "Not yet \u2014 keep working on it"))))),
+        maxed.length > 0 && (React.createElement("div", { style: { paddingTop: live.length ? 14 : 4, marginTop: live.length ? 14 : 0,
+                borderTop: live.length ? `1px solid ${C.line}` : "none" } },
+            React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: C.ink } }, maxed.length === 1 ? `${maxed[0].label} is at the top of its scale`
+                : `${maxed.length} of your tests are at the top of their scale`),
+            React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 5 } },
+                maxed.map((m) => m.label).join(", "),
+                " cannot go any higher, so ",
+                maxed.length === 1 ? "it has" : "they have",
+                " ",
+                "stopped measuring anything. No medal for ",
+                maxed.length === 1 ? "this one" : "these",
+                " \u2014 medals are for the things you said you wanted to be able to do, not for tests. What a maxed test needs is replacing with something that is still hard for you.",
+                maxed.some((m) => m.kind === "mobility") && (React.createElement("span", null, " For mobility, that usually means the same movement measured further along its range, or the harder version of it \u2014 a straight-leg raise measured to a wall rather than by eye, a fold measured past the floor line rather than to it."))),
+            React.createElement("div", { style: { marginTop: 10 } },
+                React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "edit-weekly" }) }, "Change what's measured"))))));
+}
+/* ============================================================================
+   THE MEDALS
+   ---------------------------------------------------------------------------
+   Her instruction, 10 August: "it would be nice if we keep accumulating
+   medals at the top of the landing page, like a medal or a star, and the goal
+   under it written, that it's achieved. It's a motivating thing that will
+   keep me going." And: "the medals should be for the goals, not for the
+   battery test."
+
+   THIS SITS AGAINST RULE 25, AND THE DISTINCTION MATTERS. Rule 25 forbids
+   gamification, and a medal is a badge. What the evidence is actually against
+   is CONTINGENT EXTRINSIC REWARD — points for opening an app, streaks that
+   punish one bad day, badges for turning up. Those crowd out the motivation
+   that lasts years.
+
+   These are not that, and the design keeps them from becoming that:
+     - only for goals SHE wrote, in her own words, and scored herself
+     - never for attendance, consistency, streaks or app use
+     - nothing is ever taken away, and a missed week costs nothing
+     - no levels, no totals to chase, no comparison to anyone
+   A permanent, specific, self-referenced record of a capability she chose and
+   reached is the one form of feedback rule 25 explicitly says helps. Rule 12
+   is the tiebreak: the app proposes, she disposes, and she asked for these.
+   Flagged in the write-up so she can decide whether rule 25 should say so.
+   ==========================================================================*/
+const Medal = ({ n = 0, size = 44 }) => {
+    /* three faces, cycled, so a shelf of them does not read as ranks */
+    const tone = [C.moss, C.ochre, C.signal][n % 3];
+    return (React.createElement("svg", { width: size, height: size, viewBox: "0 0 44 44", "aria-hidden": "true", style: { display: "block" } },
+        React.createElement("circle", { cx: "22", cy: "22", r: "17", fill: tone, opacity: "0.14" }),
+        React.createElement("circle", { cx: "22", cy: "22", r: "17", fill: "none", stroke: tone, strokeWidth: "1.5" }),
+        React.createElement("path", { d: "M22 12.5l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-2.9-5.4 2.9 1.2-6-4.5-4.2 6.1-.8z", fill: tone })));
+};
+function MedalShelf({ coach, setSheet }) {
+    const won = coach.wonGoals || [];
+    const [open, setOpen] = useState(null);
+    if (!won.length)
+        return null;
+    const shown = open !== null ? won[open] : null;
+    return (React.createElement(Card, { style: { background: C.mint } },
+        React.createElement(Eyebrow, { color: C.moss }, won.length === 1 ? "Something you can do now" : `${won.length} things you can do now`),
+        React.createElement("div", { style: { display: "flex", gap: 14, overflowX: "auto", padding: "10px 2px 4px",
+                WebkitOverflowScrolling: "touch" } }, won.map((g, i) => (React.createElement("button", { key: g.id, onClick: () => setOpen(open === i ? null : i), className: "tap", "aria-label": `${g.text} — achieved`, style: { border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                width: 92, flexShrink: 0, textAlign: "center", fontFamily: "inherit",
+                opacity: open === null || open === i ? 1 : 0.45 } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "center" } },
+                React.createElement(Medal, { n: i })),
+            React.createElement("div", { style: { fontSize: 10.5, lineHeight: 1.35, color: C.ink, marginTop: 6 } }, g.text))))),
+        shown && (React.createElement("div", { style: { marginTop: 10, padding: "12px 14px", background: C.card, borderRadius: 11 } },
+            React.createElement("div", { style: { fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.4 } }, shown.text),
+            React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.moss, marginTop: 5 } }, [Number.isFinite(shown.from) ? `${shown.from}/10 → 10/10` : null,
+                shown.days ? `${shown.days} days` : null,
+                shown.wonOn ? dayAndMonth(shown.wonOn) : null].filter(Boolean).join(" · ")),
+            shown.words.length > 0 && (React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.55, marginTop: 7, fontStyle: "italic" } },
+                "\"",
+                shown.words[shown.words.length - 1],
+                "\"")),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.55, marginTop: 7 } }, "Not trained for any more, and not going anywhere.")))));
+}
+/* The list itself. Everything she can now do that she could not before, most
+   recent first, with the distance travelled on each one. */
+function CanDoNow({ coach, setSheet, compact }) {
+    const won = coach.wonGoals || [];
+    if (!won.length)
+        return null;
+    return (React.createElement(Card, { style: compact ? {} : { background: C.mint } },
+        React.createElement(Eyebrow, { color: C.moss }, "Things you can do now"),
+        React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, margin: "3px 0 14px" } },
+            won.length === 1
+                ? "One thing you set out to be able to do, and can."
+                : `${won.length} things you set out to be able to do, and can.`,
+            " ",
+            "They are not trained for any more, and they are not going anywhere."),
+        won.map((g, i) => (React.createElement("div", { key: g.id, style: { paddingTop: i ? 12 : 0, marginTop: i ? 12 : 0,
+                borderTop: i ? `1px solid ${C.line}` : "none" } },
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.4 } }, g.text),
+            React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.moss, marginTop: 4 } }, [Number.isFinite(g.from) ? `${g.from}/10 → 10/10` : null,
+                g.days !== null && g.days > 0 ? `${g.days} days` : null,
+                g.wonOn ? dayAndMonth(g.wonOn) : null].filter(Boolean).join(" · ")),
+            g.words.length > 0 && (React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 5, fontStyle: "italic" } },
+                "\"",
+                g.words[g.words.length - 1],
+                "\""))))),
+        React.createElement("div", { style: { marginTop: 14 } },
+            React.createElement(Btn, { kind: "quiet", onClick: () => setSheet && setSheet({ kind: "goals" }) }, "Set the next one"))));
+}
+/* ============================================================================
    DECLINING A MEASUREMENT, ON SCREEN
    ---------------------------------------------------------------------------
    "Not today" on the battery. It does not go down the session ladder and it
@@ -12313,6 +12574,13 @@ ${about ? `- She tapped "${about}" and came here to ask about it. Answer that fi
 - WHY SHE SKIPPED, SWAPPED OR CUT ONE SHORT, in her own words and her own taps. Never quote this back
   as an accounting; use it so she does not have to explain the same thing twice:
 ${recentDays.map((d) => { var _a; const w = (_a = data.logs[d]) === null || _a === void 0 ? void 0 : _a.why; return w ? `  * ${d}: ${w.reason || "?"}${(w.answers || []).length ? ` (${(w.answers || []).join(", ")})` : ""}${w.words ? ` — she wrote: "${w.words}"` : ""}` : null; }).filter(Boolean).join("\n") || "  nothing in the last fortnight"}
+- WHAT SHE CAN ALREADY DO — goals she set and reached. Never trained for any more, and never
+  spoken about as if they were still open. Refer back to them when it helps, by name:
+  ${(coach.wonGoals || []).map((g) => `"${g.text}" — ${Number.isFinite(g.from) ? `went ${g.from}/10 to 10/10` : "reached"}${g.days ? ` over ${g.days} days` : ""}${g.wonOn ? `, closed ${g.wonOn}` : ""}`).join(" | ") || "none yet"}
+- AT TEN OUT OF TEN RIGHT NOW, not yet closed: ${(coach.goalsAchieved || []).map((r) => `"${r.goal.text}"`).join(", ") || "none"}
+  If one is sitting here, say so warmly and specifically — what she can do now that she could not,
+  and where it started. Then ask whether to close it, because there is no point building towards
+  something she can already do. Never close it yourself and never push.
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
             var _a, _b;
@@ -12683,6 +12951,14 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                         React.createElement("textarea", { rows: 2, value: goalWords[g.id] || "", onChange: (e) => setGoalWords((x) => ({ ...x, [g.id]: e.target.value })), placeholder: "Why not a ten? What stopped you \u2014 anything at all.", style: { ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => setGoalWords((x) => ({ ...x, [g.id]: v })), current: goalWords[g.id] || "" }))));
             }),
+            (coach.wonGoals || []).length > 0 && (React.createElement("div", { style: { marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` } },
+                React.createElement("div", { className: "mono", style: { fontSize: 10, letterSpacing: "0.1em",
+                        textTransform: "uppercase", color: C.moss, marginBottom: 8 } }, "Already yours \u2014 not scored any more"),
+                (coach.wonGoals || []).map((g) => (React.createElement("div", { key: g.id, style: { fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 4 } },
+                    g.text,
+                    React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.moss } },
+                        " · ",
+                        Number.isFinite(g.from) ? `${g.from}/10 → 10/10` : "done")))))),
             React.createElement("button", { onClick: () => setSheet({ kind: "goals" }), className: "tap", style: {
                     border: "none", background: "transparent", cursor: "pointer", padding: "14px 0 0",
                     fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit"
