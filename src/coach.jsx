@@ -2892,7 +2892,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 73";
+const BUILD = "10 August 2026 · 74";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7629,25 +7629,110 @@ function HowTo({ f }) {
 /* One box, wherever an exercise is done. Folded until she wants it, so a
    battery of twenty rows is not a wall of empty text areas — and it says it is
    optional, because a box that feels compulsory is friction (rule 24). */
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?" }) {
-  const has = !!String(value || "").trim();
-  const [open, setOpen] = useState(has);
-  if (!open) return (
-    <button onClick={() => setOpen(true)} className="tap" style={{
-      border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
-      fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>+ {label}</button>
-  );
+/* ============================================================================
+   EVERYTHING SHE HAS EVER WRITTEN AGAINST THIS EXERCISE
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 10 August: "I need all my data, including my notes that I
+   enter, to be accessible to me — so I see what I used to write before, and
+   then when I feel different I want to look backwards to see what I wrote and
+   how am I different now. It's not something that is hidden, and it should be
+   available under each part or each exercise I enter it."
+
+   Every note was already being stored. Not one of them was ever shown back.
+   This gathers them, per exercise, wherever they were written — battery,
+   mobility, the ten minutes, a goal — and hands them back at the exact place
+   she is about to write the next one (rule 11).
+
+   `skip` is the sitting she is in right now: today's words are on screen
+   already and do not belong in the history of themselves.
+   ==========================================================================*/
+function noteHistory(data, kind, id, skip) {
+  const d = data || {};
+  const out = [];
+  const push = (date, text) => { const v = String(text || "").trim(); if (v) out.push({ date, text: v }); };
+  if (kind === "weekly" || kind === "monthly") {
+    const store = d[kind] || {};
+    Object.keys(store).forEach((k) => {
+      if (k === skip) return;
+      const e = store[k] || {};
+      push(e.on || k, e[id + "__note"]);
+    });
+  } else if (kind === "mobility") {
+    Object.keys(d.mobility || {}).forEach((k) => {
+      if (k === skip) return;
+      const week = d.mobility[k] || {};
+      const o = week[id];
+      if (o && typeof o === "object") push(week.on || k, o.note);
+    });
+  } else if (kind === "drill") {
+    Object.keys(d.logs || {}).forEach((date) => {
+      if (date === skip) return;
+      push(date, ((d.logs[date] || {}).drillNotes || {})[id]);
+    });
+  } else if (kind === "goal") {
+    const g = (d.goals || []).find((x) => x.id === id);
+    (g && g.scores ? g.scores : []).forEach((sc) => {
+      if (sc.date === skip) return;
+      const v = String(sc.note || "").trim();
+      if (v) out.push({ date: sc.date, text: v, value: sc.value });
+    });
+  }
+  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+/* Folded, because eight months of notes under every row would bury the row —
+   but one tap away, and the count is on the button so she knows it is there. */
+function NotePast({ rows }) {
+  const [open, setOpen] = useState(false);
+  if (!rows || !rows.length) return null;
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" }}>
-      <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
-        placeholder="What went wrong, what hurt, what you changed. Optional."
-        style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 }} />
-      <MicButton onText={onChange} current={value || ""} />
+    <div style={{ marginTop: 4 }}>
+      <button onClick={() => setOpen((v) => !v)} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
+        fontSize: 11.5, color: C.moss, fontFamily: "inherit", fontWeight: 600 }}>
+        {open ? "Hide" : "What you wrote before"} ({rows.length})
+      </button>
+      {open && (
+        <div style={{ marginTop: 4, borderLeft: `2px solid ${C.line}`, paddingLeft: 9 }}>
+          {rows.map((r, i) => (
+            <div key={i} style={{ marginBottom: 7 }}>
+              <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                {dayAndMonth(r.date)}{r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""}
+              </span>
+              <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.ink }}>{r.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-const AssessInput = ({ f, form, set, pb, target }) => {
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history }) {
+  const has = !!String(value || "").trim();
+  const [open, setOpen] = useState(has);
+  if (!open) return (
+    <div>
+      <button onClick={() => setOpen(true)} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 2px",
+        fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>+ {label}</button>
+      <NotePast rows={history} />
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" }}>
+        <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
+          placeholder="What went wrong, what hurt, what you changed. Optional."
+          style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 }} />
+        <MicButton onText={onChange} current={value || ""} />
+      </div>
+      <NotePast rows={history} />
+    </div>
+  );
+}
+
+const AssessInput = ({ f, form, set, pb, target, history }) => {
   if (f.type === "note") return (
     <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
   );
@@ -7747,7 +7832,8 @@ const AssessInput = ({ f, form, set, pb, target }) => {
           order to be able to tell you what was wrong, because on each one I
           face a problem." A number cannot carry that, and the one note at the
           bottom of the sitting cannot say WHICH exercise it was about. */}
-      <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)} />
+      <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
+        history={history} />
       <HowTo f={f} />
     </div>
   );
@@ -7964,7 +8050,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put }) {
+function MobRow({ m, e, put, history }) {
   /* HER REPORT, 10 August: "in the mobility check you didn't put neither
      explanation of how it's done nor the link nor the photo. Although these
      are the ones that will really require to see a progression."
@@ -8016,7 +8102,7 @@ function MobRow({ m, e, put }) {
         <Field label="Score" unit={String(m.unit || "").replace("/", "of ")} value={e.v || ""}
           onChange={(v) => put(m.id, { v })} />
       )}
-      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} />
+      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} history={history} />
     </Card>
   );
 }
@@ -8056,7 +8142,8 @@ function MobilitySheet({ data, setData, coach, close }) {
       </div>
 
       {(coach.mobTests || []).map((m) => (
-        <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put} />
+        <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put}
+          history={noteHistory(data, "mobility", m.id, wk)} />
       ))}
 
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
@@ -8287,6 +8374,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                     style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
                   <MicButton onText={setScoreNote} current={scoreNote} />
                 </div>
+                <NotePast rows={noteHistory(data, "goal", g.id, coach.t)} />
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
                   {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
                     <button key={n} className="tap" onClick={() => { score(g.id, n, scoreNote.trim()); setScoreNote(""); setScoring(null); }}
@@ -8488,7 +8576,8 @@ function DrillsCard({ coach, setSheet, data, setData }) {
             return <Timer key={d.id + ":t"} seconds={secs} label={d.label} compact />;
           })()}
           {setData && (
-            <ExerciseNote value={notes[d.id]} onChange={(v) => putNote(d.id, v)} />
+            <ExerciseNote value={notes[d.id]} onChange={(v) => putNote(d.id, v)}
+              history={noteHistory(data, "drill", d.id, coach.t)} />
           )}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
         </div>
@@ -10392,6 +10481,54 @@ function Progress({ data, setData, coach, setSheet }) {
       </Card>
 
 
+
+      {/* ---------- EVERYTHING SHE HAS EVER WRITTEN ----------
+          "I want a way to access the notes." One place, grouped by the
+          exercise it was written against, newest first — so a tight back in
+          June is findable in August, next to the same exercise. */}
+      {(() => {
+        const groups = [];
+        const seen = {};
+        const addRows = (id, label, rows) => {
+          if (!rows || !rows.length) return;
+          if (!seen[id]) { seen[id] = { key: id, label, rows: [] }; groups.push(seen[id]); }
+          seen[id].rows.push(...rows);
+        };
+        (data.fields?.weekly || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "weekly", f.id)));
+        (data.fields?.monthly || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "monthly", f.id)));
+        (coach.mobTests || []).forEach((m) => addRows("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
+        (coach.drills || []).forEach((x) => addRows("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
+        (data.goals || []).forEach((g) => addRows("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
+        groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+        groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
+        const total = groups.reduce((n, g) => n + g.rows.length, 0);
+        return (
+          <Fold title="Everything you've written"
+            note={total
+              ? `${total} note${total === 1 ? "" : "s"} across ${groups.length} exercise${groups.length === 1 ? "" : "s"}`
+              : "nothing written against an exercise yet"}>
+            <Explain>Every word you have written against a particular exercise, kept under that exercise and never deleted. The numbers say what changed; this says why. It is also what the coach reads before it answers.</Explain>
+            {!groups.length ? (
+              <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+                Nothing yet. Anything you type in the box under an exercise — in a battery, in the
+                mobility check, in your ten minutes, or against a goal — gathers here and stays.
+              </div>
+            ) : groups.map((gr) => (
+              <div key={gr.key} style={{ padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 5 }}>{gr.label}</div>
+                {gr.rows.map((r, i) => (
+                  <div key={i} style={{ marginBottom: 6 }}>
+                    <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                      {dayAndMonth(r.date)}{r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""}
+                    </span>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.ink }}>{r.text}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Fold>
+        );
+      })()}
 
       {/* ---------- editable history: days ---------- */}
       <Fold title="Every day so far" note={`${recentDays.length} days, day by day, editable`}>
@@ -12454,6 +12591,16 @@ const mergeHeard = (soFar, next) => {
   return a + " " + b;
 };
 
+/* Two bursts either side of a pause are two different things she said, not
+   one restated — so they are JOINED, never merged. mergeHeard is right within
+   a single burst and wrong across two, because "yes" after "yes" is two. */
+const joinSpeech = (a, b) => {
+  const x = String(a || "").trim(), y = String(b || "").trim();
+  if (!x) return y;
+  if (!y) return x;
+  return x + " " + y;
+};
+
 function useDictation(onText) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -12477,6 +12624,22 @@ function useDictation(onText) {
   const wants = useRef(false);          /* does she still intend to be talking */
   const shortEnds = useRef(0);          /* consecutive sessions that died instantly */
   const startedAt = useRef(0);
+  /* ---- WHY ONLY THE LAST PART OF A SENTENCE SURVIVED -------------------
+     10 August: "it keeps recording, but the write-up comes out fragmented,
+     and it only records the last part of what I said and neglects the rest."
+
+     The auto-restart above is what did it. Every restart is a NEW recognition
+     session and a new session starts with an EMPTY results list — so onresult,
+     which rebuilds the text from that list, rebuilt it from nothing but the
+     newest burst and wrote over everything said before the pause. The longer
+     she talked the more restarts there were, so the more of it vanished, and
+     what survived was always the tail.
+
+     "carried" holds everything completed in earlier bursts of the same
+     dictation. What she is saying right now is added to it, never instead
+     of it. */
+  const carried = useRef("");           /* bursts already finished, this run   */
+  const heardNow = useRef("");          /* the burst in progress               */
 
   useEffect(() => {
     const SR = typeof window !== "undefined" &&
@@ -12499,7 +12662,8 @@ function useDictation(onText) {
          events — so a browser that repeats itself cannot double anything. */
       let out = "";
       for (let i = 0; i < e.results.length; i++) out = mergeHeard(out, e.results[i][0].transcript);
-      cb.current(out);
+      heardNow.current = out;
+      cb.current(joinSpeech(carried.current, out));
     };
     r.onend = () => {
       if (!wants.current) { setListening(false); return; }
@@ -12510,18 +12674,22 @@ function useDictation(onText) {
         setProblem("Dictation keeps stopping on its own. Type instead for now — the box beside the microphone takes typing.");
         return;
       }
+      /* bank the burst that just ended — the next session starts empty */
+      carried.current = joinSpeech(carried.current, heardNow.current);
+      heardNow.current = "";
       try { r.start(); } catch (err) { wants.current = false; setListening(false); }
     };
     r.onerror = (e) => {
+      /* no-speech fires on any silence and aborted fires on our own restart.
+         Neither is a failure, and neither may turn the button off: it used to
+         say "not listening" while the microphone was still running, and then
+         a tap could not stop it because the session was already open. */
+      if (e?.error === "no-speech" || e?.error === "aborted") { setProblem(null); return; }
       wants.current = false;
       shortEnds.current = 0;
       setListening(false);
       if (e?.error === "not-allowed" || e?.error === "service-not-allowed")
         setProblem("Microphone permission was refused. Allow it for this site in your browser settings.");
-      /* no-speech fires on any silence and is not a failure — it used to
-         stop her mid-thought and show a message. It just keeps listening. */
-      else if (e?.error === "no-speech") { wants.current = true; setProblem(null); }
-      else if (e?.error === "aborted") setProblem(null);
       else if (e?.error === "network") setProblem("Dictation needs a connection. It's the one part of the app that does.");
       else if (e?.error) setProblem(`Dictation stopped: ${e.error}`);
     };
@@ -12539,6 +12707,8 @@ function useDictation(onText) {
     } else {
       wants.current = true;
       shortEnds.current = 0;
+      carried.current = "";
+      heardNow.current = "";
       try { r.start(); setListening(true); setProblem(null); }
       catch (err) { wants.current = false; setListening(false); }
     }
@@ -13505,6 +13675,7 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                     <MicButton onText={(v) => setGoalNotes((n) => ({ ...n, [g.id]: v }))}
                       current={goalNotes[g.id] || ""} />
                   </div>
+                  <NotePast rows={noteHistory(data, "goal", g.id, coach.t)} />
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8 }}>
                     {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
                       <button key={n} className="tap" aria-label={`score ${n} for ${g.text}`}
@@ -15736,6 +15907,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 )}
                 <AssessInput f={f} form={form} set={set}
                   target={targetFor(f)}
+                  history={noteHistory(data, which, f.id, key)}
                   pb={f.better === "up" ? coach.pbs[f.id] : null} />
               </div>
             ))}
@@ -15823,7 +15995,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             {" "}These choose your ten minutes of drills until the next one.
           </div>
           {mobTests.map((m) => (
-            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob} />
+            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob}
+              history={noteHistory(data, "mobility", m.id, coach.ws)} />
           ))}
         </Card>
       )}
