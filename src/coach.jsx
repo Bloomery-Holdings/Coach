@@ -2799,7 +2799,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 65";
+const BUILD = "10 August 2026 · 66";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7182,6 +7182,147 @@ const VITAL_MEASURES = {
   mobility: [],
 };
 
+/* ============================================================================
+   A STOPWATCH, WITH AN ALARM
+   ---------------------------------------------------------------------------
+   Her instruction, 10 August: "I need a timer and a stopwatch in the app.
+   There is a lot of things that require me to do timed work, and it's going to
+   be very bugging for me to go in and out from the app... if you can make it
+   next to each exercise, having a timer and a stopwatch, it will be much
+   better for me." And: "A stopwatch with an alarm."
+
+   Almost every test in her battery is now time-boxed — sixty seconds of
+   squats, thirty a side, a plank held until the line breaks — so leaving the
+   app to find a clock is friction on the one screen where friction costs most
+   (rule 11).
+
+   Two modes in one control:
+     COUNT DOWN  for a test with a fixed window. Starts at the seconds the row
+                 itself specifies, and sounds an alarm at zero.
+     COUNT UP    for a hold, where the number IS the time. Stop it and the
+                 reading drops straight into the field.
+
+   THE ALARM. No browser dialogs — they are blocked in embedded contexts and
+   fail silently when they are (rule 29). A short WebAudio tone, started from her own tap so the
+   browser allows it, plus a vibration where the phone offers one, plus the
+   whole control turning colour. Any of the three on its own is enough.
+   ==========================================================================*/
+const beep = () => {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const at = ctx.currentTime;
+    /* three short rising notes — audible in a gym, not a klaxon */
+    [0, 0.22, 0.44].forEach((t, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(660 + i * 220, at + t);
+      g.gain.setValueAtTime(0.0001, at + t);
+      g.gain.exponentialRampToValueAtTime(0.35, at + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + t + 0.18);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(at + t); o.stop(at + t + 0.2);
+    });
+    setTimeout(() => { try { ctx.close(); } catch (e) {} }, 1200);
+  } catch (e) { /* no audio is not a failure — the colour and the buzz remain */ }
+};
+const buzz = (pattern) => {
+  try { if (navigator && typeof navigator.vibrate === "function") navigator.vibrate(pattern); }
+  catch (e) {}
+};
+
+/* How long this row's protocol actually asks for. Read from what she can see —
+   the unit first, then the wording — so changing the protocol changes the
+   timer and the two can never disagree. Null means it is a hold, and a hold
+   counts up. */
+const secondsFor = (f) => {
+  if (!f) return null;
+  const u = String(f.unit || "");
+  const inUnit = u.match(/(\d+)\s*s\b/);
+  if (inUnit) return Number(inUnit[1]);
+  const how = String(f.how || "");
+  if (/^\s*Sixty seconds/i.test(how)) return 60;
+  if (/^\s*Thirty seconds/i.test(how)) return 30;
+  const words = how.match(/(\d+)\s*seconds/i);
+  if (words) return Number(words[1]);
+  return null;
+};
+
+function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
+  /* seconds: count DOWN from this. null: count UP. */
+  const [ms, setMs] = useState(seconds ? seconds * 1000 : 0);
+  const [running, setRunning] = useState(false);
+  const [rang, setRang] = useState(false);
+  const tick = useRef(null);
+  const started = useRef(0);
+  const base = useRef(seconds ? seconds * 1000 : 0);
+
+  useEffect(() => () => { if (tick.current) clearInterval(tick.current); }, []);
+
+  useEffect(() => {
+    if (!running) { if (tick.current) { clearInterval(tick.current); tick.current = null; } return; }
+    tick.current = setInterval(() => {
+      const gone = Date.now() - started.current;
+      const next = seconds ? base.current - gone : base.current + gone;
+      if (seconds && next <= 0) {
+        setMs(0); setRunning(false); setRang(true);
+        beep(); buzz([220, 90, 220, 90, 420]);
+        if (tick.current) { clearInterval(tick.current); tick.current = null; }
+        return;
+      }
+      setMs(next);
+    }, 100);
+    return () => { if (tick.current) { clearInterval(tick.current); tick.current = null; } };
+  }, [running, seconds]);
+
+  const start = () => {
+    if (running) return;
+    /* the first tap is the gesture that buys us sound later */
+    buzz(20);
+    started.current = Date.now();
+    base.current = ms;
+    setRang(false);
+    setRunning(true);
+  };
+  const pause = () => { base.current = ms; setRunning(false); };
+  const reset = () => { setRunning(false); setRang(false); const v = seconds ? seconds * 1000 : 0; base.current = v; setMs(v); };
+  const take = () => { const v = Math.round(ms / 1000); pause(); if (onStop) onStop(v); };
+
+  const shown = Math.max(0, ms) / 1000;
+  const face = shown >= 60
+    ? `${Math.floor(shown / 60)}:${String(Math.floor(shown % 60)).padStart(2, "0")}`
+    : shown.toFixed(1);
+
+  const tone = rang ? C.clay : running ? C.signal : C.muted;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+      padding: compact ? "6px 0 0" : "10px 0 0" }}>
+      <span className="mono" aria-live="off" style={{ fontSize: compact ? 17 : 21, fontWeight: 600,
+        color: tone, minWidth: 62, letterSpacing: "0.02em" }}>{face}</span>
+      <button onClick={running ? pause : start} className="tap" style={{
+        padding: "7px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+        border: "none", background: running ? C.ink : C.signal, color: C.chalk,
+        fontFamily: "inherit" }}>{running ? "Pause" : rang ? "Again" : "Start"}</button>
+      {onStop && !seconds && (
+        <button onClick={take} className="tap" style={{
+          padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+          border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+          fontFamily: "inherit" }}>Use it</button>
+      )}
+      <button onClick={reset} className="tap" style={{
+        border: "none", background: "transparent", cursor: "pointer", padding: "7px 4px",
+        fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>reset</button>
+      {rang && (
+        <span style={{ fontSize: 11.5, color: C.clay, fontWeight: 600 }}>
+          time{label ? ` — ${label}` : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
 const Btn = ({ children, onClick, kind = "solid", style = {} }) => {
   const base = { width: "100%", padding: "14px 16px", borderRadius: 11, cursor: "pointer", fontSize: 15, fontWeight: 600, fontFamily: "'IBM Plex Sans', sans-serif" };
   const kinds = {
@@ -7418,6 +7559,22 @@ const AssessInput = ({ f, form, set, pb, target }) => {
         </>
       )}
       <NumRow label={ladder ? f.rungs[rung] : f.label} unit={f.unit} cells={cells} pb={pb} />
+      {/* THE CLOCK FOR THIS EXERCISE, BESIDE THIS EXERCISE.
+          Her instruction, 10 August. A row with a window counts down to an
+          alarm; a hold counts up and the reading goes straight into the box.
+          A row with neither gets nothing, because a timer on an untimed test
+          would just be clutter. */}
+      {(() => {
+        const secs = secondsFor(f);
+        if (secs) return (
+          <Timer key={f.id + ":down"} seconds={secs} label={f.label} compact />
+        );
+        if (f.type === "time" || /^sec/i.test(String(f.unit || ""))) return (
+          <Timer key={f.id + ":up"} compact label={f.label}
+            onStop={(v) => set(f.id, String(v))} />
+        );
+        return null;
+      })()}
       <HowTo f={f} />
     </div>
   );
@@ -15151,6 +15308,18 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         marginBottom: 14, textTransform: "uppercase" }}>
         {fields.length + mobTests.length + goalTests.length} rows · about {batteryMins} minutes{goalMins > 0 ? `, plus ${goalMins} for your goals` : ""}
       </div>
+
+      {/* HER CLOCK, ON THE PAGE SHE IS STANDING ON.
+          Almost everything below is timed, and leaving the app to find a
+          stopwatch is friction on the one screen where it costs most. This one
+          counts up for anything; each timed row has its own countdown. */}
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+          <Eyebrow>Stopwatch</Eyebrow>
+          <span className="mono" style={{ fontSize: 10, color: C.muted }}>counts up</span>
+        </div>
+        <Timer />
+      </Card>
 
       <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}
         className="tap" style={{
