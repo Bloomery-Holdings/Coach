@@ -2973,7 +2973,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 82";
+const BUILD = "10 August 2026 · 83";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -15526,14 +15526,27 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
 
      It resumes today's conversation now, under the same id, so carrying on
      later in the day adds to it rather than starting a second one. */
-  const priorToday = (() => {
-    const mine = (data.chats || []).filter((c) => c.date === coach.t
-      && (c.about || "open chat") === (about || "open chat"));
-    return mine[mine.length - 1] || null;
-  })();
+  /* ---- AND WHY IT WAS STILL EMPTY AFTER THE FIRST FIX ------------------
+     "It still doesn't show what I talked about with my coach. I said I
+     started flat but later I was fine and enjoyed my class, and he replied
+     that that's actually great. Where is all this?"
+
+     Because the resume was matched on `about` as well as the date, and
+     `about` is whichever door she came through — a card about her mood, an
+     exercise, or nothing at all. Come back through a different door and it
+     was a different conversation, so the screen was blank again.
+
+     It is ONE conversation a day now, whatever she opened it from. Every
+     session logged today is gathered into it in the order it was said, and
+     the day's entry is written back as one — so nothing is duplicated and
+     nothing is dropped. Yesterday and before are below, read-only. */
+  const todayChats = (data.chats || []).filter((c) => c.date === coach.t);
+  const earlier = (data.chats || []).filter((c) => c.date !== coach.t)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
   const [msgs, setMsgs] = useState(
-    (priorToday?.messages || []).map((m) => ({ role: m.role, content: m.text })));
-  const sessionId = useRef(priorToday?.id || newId());
+    todayChats.flatMap((c) => (c.messages || []).map((m) => ({ role: m.role, content: m.text }))));
+  const sessionId = useRef(todayChats[0]?.id || newId());
+  const [showOld, setShowOld] = useState(false);
   /* And the half-typed message survives too. Dictating three sentences and
      losing them to a screen that slept is the same loss by another route. */
   const [draft, setDraft] = useState(seed || data.chatDraft || "");
@@ -15847,10 +15860,14 @@ Two or three sentences unless she asks for more.`;
      lost. It used to be saved only on success, inside the try — so a failed
      call, a missing key or a thrown prompt took her words with it. */
   const persist = (all) => setData((d) => {
-    const chats = [...(d.chats || [])];
-    const idx = chats.findIndex((c) => c.id === sessionId.current);
     const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
       messages: all.map((m) => ({ role: m.role, text: m.content })) };
+    /* Everything said today lives in ONE entry. The other same-day entries
+       are already gathered into `all` above, so dropping them here loses no
+       word she has ever said — it stops the same exchange being stored twice
+       and read back to the coach twice. */
+    const chats = [...(d.chats || [])].filter((c) => c.date !== coach.t || c.id === sessionId.current);
+    const idx = chats.findIndex((c) => c.id === sessionId.current);
     if (idx >= 0) chats[idx] = entry; else chats.push(entry);
     /* No cap. Conversations were capped at the last 200 and older ones
        silently dropped — roughly seven months at any real rate of use. They
@@ -15898,6 +15915,37 @@ Two or three sentences unless she asks for more.`;
       <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 }}>
         I can see your week, your battery and the call I made. Argue with it if you think I'm wrong.
       </div>
+
+      {/* EVERY CONVERSATION SHE HAS EVER HAD, ONE TAP AWAY. Today's is on the
+          page already; the rest are here rather than gone. */}
+      {earlier.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <button onClick={() => setShowOld((v) => !v)} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
+            fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+            {showOld ? "Hide earlier conversations" : `Earlier conversations (${earlier.length} day${earlier.length === 1 ? "" : "s"})`}
+          </button>
+          {showOld && (
+            <div style={{ marginTop: 8, borderLeft: `2px solid ${C.line}`, paddingLeft: 10 }}>
+              {earlier.map((c) => (
+                <div key={c.id} style={{ marginBottom: 12 }}>
+                  <div className="mono" style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>
+                    {dayAndMonth(c.date)}
+                  </div>
+                  {(c.messages || []).map((m, i) => (
+                    <div key={i} style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 5,
+                      color: m.role === "user" ? C.ink : C.muted }}>
+                      <span className="mono" style={{ fontSize: 9.5, color: C.moss }}>
+                        {m.role === "user" ? "you" : "coach"}
+                      </span>{" "}{m.text}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {msgs.length === 0 && coach.leading.length > 0 && (
         <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
