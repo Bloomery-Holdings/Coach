@@ -2845,7 +2845,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 70";
+const BUILD = "10 August 2026 · 71";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2934,6 +2934,16 @@ const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "ellip
 const SEED_VERSION = 62;
 const BATTERY_TIDY = 56;        /* build that retired the first five rows      */
 const MOBILITY_REBUILD = 62;    /* build that rebuilt mobility by muscle length */
+
+const sittingFinished = (entry) => {
+  if (!entry || typeof entry !== "object") return false;
+  if (entry.finished === true) return true;
+  /* An entry written before either flag existed carries only `on`, and `on`
+     was written by the button — so it was finished. An entry she is part way
+     through carries `started` and no `on`, and is not. */
+  if (entry.finished === undefined && entry.on && !entry.started) return true;
+  return false;
+};
 
 const hasReading = (store, id) => {
   try {
@@ -4677,14 +4687,20 @@ function useCoach(data, day, clock) {
     };
 
     /* due the moment its day arrives, and it stays due until it's done */
-    const weeklyDue = !weekly[ws] && t >= weeklyFrom;
-    const monthlyDue = !monthly[mk] && t >= monthlyFrom;
-    const weeklyToday = !weekly[ws] && t === weeklyFrom;
-    const monthlyToday = !monthly[mk] && t === monthlyFrom;
+    const weeklyDone = sittingFinished(weekly[ws]);
+    const monthlyDone = sittingFinished(monthly[mk]);
+    const weeklyDue = !weeklyDone && t >= weeklyFrom;
+    const monthlyDue = !monthlyDone && t >= monthlyFrom;
+    const weeklyToday = !weeklyDone && t === weeklyFrom;
+    const monthlyToday = !monthlyDone && t === monthlyFrom;
     const weeklyLate = weeklyDue && t > weeklyFrom
       ? Math.round((parse(t) - parse(weeklyFrom)) / 86400000) : 0;
     const monthlyLate = monthlyDue && t > monthlyFrom
       ? Math.round((parse(t) - parse(monthlyFrom)) / 86400000) : 0;
+    /* started but not finished — so the card can say "carry on" rather than
+       either nagging her from scratch or pretending she is done */
+    const weeklyStarted = !!weekly[ws] && !weeklyDone;
+    const monthlyStarted = !!monthly[mk] && !monthlyDone;
     /* what she has taken out of each sitting, and where a moved one lands */
     const weeklySkips = (data.skips || {})[weeklyKey] || [];
     const monthlySkips = (data.skips || {})[monthlyKey] || [];
@@ -6843,7 +6859,7 @@ function useCoach(data, day, clock) {
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
       batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
-      monthlyWeek, monthlyIsWeeklyToo,
+      monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
     };
   }, [data, day, clock]);
@@ -15433,14 +15449,47 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   });
   const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
   const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
-  const [form, setForm] = useState(data[which][key] || {});
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  /* ============================================================================
+     EVERY FIELD SAVES ITSELF, THE MOMENT IT IS TYPED
+     ---------------------------------------------------------------------------
+     HER REPORT, 10 August, mid-battery: "I put in the battery. It doesn't save
+     anything. And all of a sudden the app goes backwards and removes
+     everything. It has to be each one saved alone, not wait until I finish
+     everything and then it gets saved."
+
+     She is describing losing a sitting she had already done. The whole battery
+     lived in local component state and only reached storage when she pressed
+     Save at the bottom — so anything that ended the render before that took
+     the lot: the sheet closing, the service worker swapping the build under
+     her, a phone call, the browser reclaiming a backgrounded tab.
+
+     Twenty minutes of measurements held in memory with one button between her
+     and losing them is indefensible, and it breaks rule 20 in the plainest
+     way — data she entered was not permanent.
+
+     So there is no draft any more. `form` reads straight from storage and
+     `set` writes straight to it, keystroke by keystroke, the same way every
+     other input in the app already worked. The Save button still exists,
+     because it also does the mobility stamp, the monthly carry-over and the
+     benchmark log — but nothing is riding on her reaching it.
+  ========================================================================== */
+  const form = data[which][key] || {};
+  const set = (k, v) => setData((d) => {
+    const prev = (d[which] || {})[key] || {};
+    return { ...d, [which]: { ...(d[which] || {}),
+      [key]: { ...prev, [k]: v, started: prev.started || coach.t } } };
+  });
 
   /* Mobility is the end of this battery, not a separate errand. It keeps its
-     own store because every mobility calculation reads that shape. */
+     own store because every mobility calculation reads that shape — and it
+     saves itself as it is typed, for exactly the same reason. */
   const mobTests = (coach.mobTests || []).filter((m) => (isWeekly ? m.inWeekly !== false : true));
-  const [mob, setMob] = useState(() => ({ ...(data.mobility?.[coach.ws] || {}) }));
-  const putMob = (id, patch) => setMob((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }));
+  const mob = (data.mobility && data.mobility[coach.ws]) || {};
+  const putMob = (id, patch) => setData((d) => {
+    const week = (d.mobility || {})[coach.ws] || {};
+    return { ...d, mobility: { ...(d.mobility || {}),
+      [coach.ws]: { ...week, started: week.started || coach.t, [id]: { ...(week[id] || {}), ...patch } } } };
+  });
 
   /* THE THINGS SHE WANTS TO DO ARE A BATTERY OF THEIR OWN.
      Her instruction, 10 August. Every open goal, every sitting — not the ones
@@ -15448,8 +15497,22 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
      trying it, out of ten, with room to say what stopped her. Saves on the
      same one button as everything else. */
   const goalTests = coach.goalBattery || [];
-  const [goalScores, setGoalScores] = useState({});
-  const [goalWords, setGoalWords] = useState({});
+  /* Same rule as everything else on this screen: the tap IS the save. An
+     entry for today is replaced rather than appended, so tapping 6 and then
+     changing your mind to 7 leaves one score for today, not two. */
+  const todayScore = (g) => (g.scores || []).find((x) => x.date === coach.t) || null;
+  const goalScores = {};
+  goalTests.forEach((g) => { const x = todayScore(g); if (x && x.value !== undefined) goalScores[g.id] = x.value; });
+  const goalWords = {};
+  goalTests.forEach((g) => { const x = todayScore(g); if (x && x.note) goalWords[g.id] = x.note; });
+  const putGoal = (id, patch) => setData((d) => ({ ...d, goals: (d.goals || []).map((g) => {
+    if (g.id !== id) return g;
+    const scores = [...(g.scores || [])];
+    const i = scores.findIndex((x) => x.date === coach.t);
+    if (i >= 0) scores[i] = { ...scores[i], ...patch };
+    else scores.push({ date: coach.t, value: undefined, note: "", ...patch });
+    return { ...g, scores };
+  }) }));
 
   /* Her instruction: an estimate per exercise, so the sitting has a real
      budget rather than a hopeful one. Everything carries its own minutes and
@@ -15482,6 +15545,46 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         marginBottom: 14, textTransform: "uppercase" }}>
         {fields.length + mobTests.length + goalTests.length} rows · about {batteryMins} minutes{goalMins > 0 ? `, plus ${goalMins} for your goals` : ""}
       </div>
+
+      {/* WHAT IS STILL EMPTY, NAMED.
+          Her words, mid-battery: "I need to access the rest of the monthly
+          benchmark exercises, and it should not be saved and assumed it's
+          done. It should tell me that there are exercises that are not
+          entered." A long sitting gives no sense of where you are in it, and
+          on the monthly that is twenty-odd rows. So: how many are in, which
+          ones are not, and nothing is called finished until she says so. */}
+      {(() => {
+        const done = fields.filter((f) => {
+          if (f.type === "note" || f.type === "scale") return String(form[f.id] || "").trim() !== "";
+          if (f.type === "weightreps") return String(form[f.id + "__w"] || "").trim() !== "";
+          if (f.bilateral) return String(form[f.id + "__L"] || "").trim() !== "";
+          return String(form[f.id] || "").trim() !== "";
+        });
+        const left = fields.filter((f) => !done.includes(f));
+        if (!fields.length) return null;
+        return (
+          <Card style={{ marginBottom: 14, background: left.length ? C.pist : C.mint }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>
+              {done.length} of {fields.length} entered{left.length === 0 ? " — all of them" : ""}
+            </div>
+            <div style={{ height: 6, borderRadius: 999, background: C.card, margin: "8px 0 10px", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round((done.length / fields.length) * 100)}%`,
+                background: left.length ? C.signal : C.moss }} />
+            </div>
+            {left.length > 0 ? (
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+                Still to do: {left.map((f) => f.label).join(", ")}.
+                {" "}Everything you have typed is already saved — you can close this and come back to
+                the rest whenever you like, and it will still be here.
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+                Every row is in. Press the button at the bottom when you want to close it off.
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* HER CLOCK, ON THE PAGE SHE IS STANDING ON.
           Almost everything below is timed, and leaving the app to find a
@@ -15568,7 +15671,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 9 }}>
                   {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
                     <button key={n} className="tap" aria-label={`score ${n} out of 10 for ${g.text}`}
-                      onClick={() => setGoalScores((x) => ({ ...x, [g.id]: n }))}
+                      onClick={() => putGoal(g.id, { value: n })}
                       style={{ flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8,
                         cursor: "pointer", fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
                         border: `1.5px solid ${picked === n ? C.ink : C.line}`,
@@ -15578,10 +15681,10 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 9 }}>
                   <textarea rows={2} value={goalWords[g.id] || ""}
-                    onChange={(e) => setGoalWords((x) => ({ ...x, [g.id]: e.target.value }))}
+                    onChange={(e) => putGoal(g.id, { note: e.target.value })}
                     placeholder="Why not a ten? What stopped you — anything at all."
                     style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
-                  <MicButton onText={(v) => setGoalWords((x) => ({ ...x, [g.id]: v }))}
+                  <MicButton onText={(v) => putGoal(g.id, { note: v })}
                     current={goalWords[g.id] || ""} />
                 </div>
               </div>
@@ -15629,58 +15732,74 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       )}
 
       <div style={{ marginTop: 14 }}>
+        {(() => {
+          const filled = (f) => {
+            if (f.type === "note" || f.type === "scale") return String(form[f.id] || "").trim() !== "";
+            if (f.type === "weightreps") return String(form[f.id + "__w"] || "").trim() !== "";
+            if (f.bilateral) return String(form[f.id + "__L"] || "").trim() !== "";
+            return String(form[f.id] || "").trim() !== "";
+          };
+          const left = fields.filter((f) => !filled(f)).length;
+          if (!left) return null;
+          return (
+            <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 10 }}>
+              {left} {left === 1 ? "row is" : "rows are"} still empty. Closing it off does not lose
+              them — everything you typed is saved either way — but it stops the app asking, so only
+              do it when you have finished. Otherwise just leave this screen and come back.
+            </div>
+          );
+        })()}
         <Btn kind="signal" onClick={() => {
-          /* the store is keyed by week start and by month; without this the
-             app cannot tell a battery taken this morning from one taken six
-             days ago, and a reading led her opening line for a month */
-          const stamped = { ...form, on: coach.t };
-          const next = { ...data, [which]: { ...data[which], [key]: stamped } };
-          /* one button, both stores — she did it in one sitting, it saves as one */
-          if (Object.keys(mob).length) next.mobility = { ...(data.mobility || {}), [coach.ws]: { ...mob, on: coach.t } };
-          /* and the goals, which are a battery like any other. Appended, never
-             replaced — the whole history of a goal is the point (rule 20). */
-          const scoredNow = Object.keys(goalScores).filter((id) => goalScores[id] !== undefined);
-          if (scoredNow.length) {
-            next.goals = (data.goals || []).map((g) => (scoredNow.includes(g.id)
-              ? { ...g, scores: [...(g.scores || []),
-                  { date: coach.t, value: goalScores[g.id], note: String(goalWords[g.id] || "").trim() }] }
-              : g));
-          }
-          /* THE MONTHLY FILLS THE WEEKLY.
+          /* NOTHING HERE IS THE SAVE ANY MORE. Every number, every note and
+             every goal score went into storage as she entered it. What is
+             left is the bookkeeping that only makes sense once the sitting is
+             finished — the stamp, the carry into the weekly, and logging the
+             benchmark as the day's session. */
+          /* IT MUST BUILD ON WHAT IS THERE NOW, NOT ON WHAT WAS THERE WHEN THE
+             SHEET OPENED. Spreading the `data` prop here would take a snapshot
+             from first render and write it back over everything she has typed
+             since — which, now that typing saves immediately, would throw away
+             the entire sitting on the press of the button meant to keep it.
+             Functional update, every time. */
+          setData((d) => {
+            const cur = (d[which] || {})[key] || {};
+            /* "finished" is a thing she says, never a thing the store implies
+               — otherwise the first digit she typed would end the battery */
+            const next = { ...d, [which]: { ...(d[which] || {}),
+              [key]: { ...cur, on: cur.on || coach.t, finished: true } } };
+            const mw = (d.mobility || {})[coach.ws];
+            if (mw && !mw.on) next.mobility = { ...(d.mobility || {}), [coach.ws]: { ...mw, on: coach.t } };
 
-             Her instruction, 10 August: "the weekly filled as part of the
-             monthly battery test. So I wouldn't have to do the same exercises
-             twice." The monthly IS the weekly plus more — every row the
-             weekly asks for is already in this form — so those readings are
-             written into this week's store as well and the weekly stops being
-             due. Any row she took out of this sitting simply isn't there to
-             copy, which is correct.
-
-             It never overwrites a weekly she has already filled in (rule 20),
-             and it carries fromMonthly so nothing downstream has to guess
-             where the numbers came from. */
-          if (!isWeekly && isCurrent && !data.weekly[coach.monthlyWeek || coach.ws]) {
-            const weeklyIds = new Set((data.fields.weekly || [])
-              .filter((f) => f.inWeekly !== false).map((f) => f.id));
-            const carried = {};
-            Object.keys(form).forEach((k) => {
-              const base = String(k).split("__")[0];
-              if (weeklyIds.has(base) && form[k] !== undefined && form[k] !== "") carried[k] = form[k];
-            });
-            if (Object.keys(carried).length) {
-              next.weekly = { ...data.weekly,
-                [coach.monthlyWeek || coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
+            /* THE MONTHLY FILLS THE WEEKLY. Her instruction, 10 August: "the
+               weekly filled as part of the monthly battery test, so I wouldn't
+               have to do the same exercises twice." Every row the weekly asks
+               for is already in this sitting, so it is written into that
+               week's store as well. Never over a weekly she already did
+               (rule 20), and flagged so nothing downstream has to guess. */
+            if (!isWeekly && isCurrent && !(d.weekly || {})[coach.monthlyWeek || coach.ws]) {
+              const weeklyIds = new Set((d.fields.weekly || [])
+                .filter((f) => f.inWeekly !== false).map((f) => f.id));
+              const carried = {};
+              Object.keys(cur).forEach((k) => {
+                const base = String(k).split("__")[0];
+                if (weeklyIds.has(base) && cur[k] !== undefined && cur[k] !== "") carried[k] = cur[k];
+              });
+              if (Object.keys(carried).length) {
+                next.weekly = { ...(d.weekly || {}),
+                  [coach.monthlyWeek || coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
+              }
             }
-          }
-          /* The benchmark is thirty-odd minutes under load — it counts as the
-             day's session, so the week isn't punished for measuring. */
-          if (!isWeekly && isCurrent && !data.logs[coach.t]?.type) {
-            next.logs = { ...data.logs, [coach.t]: {
-              ...(data.logs[coach.t] || {}), type: "Monthly benchmark", minutes: "30", completed: true } };
-          }
-          setData(next); close();
+            /* The benchmark is thirty-odd minutes under load — it counts as
+               the day's session, so the week isn't punished for measuring. */
+            if (!isWeekly && isCurrent && !(d.logs || {})[coach.t]?.type) {
+              next.logs = { ...(d.logs || {}), [coach.t]: {
+                ...((d.logs || {})[coach.t] || {}), type: "Monthly benchmark", minutes: "30", completed: true } };
+            }
+            return next;
+          });
+          close();
         }}>
-          Save {isWeekly ? "the weekly check" : "the benchmark"}{mobTests.length ? " and mobility" : ""}
+          Done — {isWeekly ? "close the weekly check" : "close the benchmark"}
         </Btn>
         <Btn kind="quiet" onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}>Edit which measures appear here</Btn>
         <Btn kind="quiet" onClick={close}>Cancel</Btn>
