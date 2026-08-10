@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 88";
+const BUILD = "10 August 2026 · 90";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7333,6 +7333,25 @@ const Tag = ({ children, tone }) => (
   }}>{children}</span>
 );
 
+/* THE EDIT DOOR, MADE VISIBLE.
+   ---------------------------------------------------------------------------
+   Her report, 10 August, over four screenshots of rows that each carried a
+   small grey text link: "no editing options at all." The link was there and
+   it worked — and from where she stood it did not exist. An affordance she
+   cannot see is not an affordance (rule 11). Build 89 gave the field editor
+   a bordered chip that says "edit" and she found it at once, so that chip is
+   now THE edit door, one shape everywhere: battery rows, mobility tests,
+   body-work exercises, and the ten-minutes drills (which until now had no
+   door at all). Conformity was her word: the same signal everywhere. */
+const EditChip = ({ open, onClick, label }) => (
+  <button onClick={onClick} className="tap" aria-label={label || "Edit this"} style={{
+    border: `1px solid ${open ? C.signal : C.line}`, borderRadius: 8,
+    background: open ? C.signal : "transparent",
+    color: open ? C.chalk : C.signal, cursor: "pointer",
+    padding: "5px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+    flexShrink: 0 }}>{open ? "close" : "edit"}</button>
+);
+
 /* ============================================================================
    A CHART
    ---------------------------------------------------------------------------
@@ -8885,6 +8904,18 @@ function DrillsCard({ coach, setSheet, data, setData }) {
               seeAll={setSheet ? () => setSheet({ kind: "written" }) : undefined} />
           )}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
+          {/* HER REPORT, 10 August: "no editing options at all." These rows
+              were the one exercise list in the app with no edit door of any
+              kind — a drill could only be changed from the mobility editor,
+              which nothing here pointed to. Every drill in the ten minutes
+              lives in the stored drills list, so the chip opens that drill's
+              own editor directly (rule 11). */}
+          {setSheet && (
+            <div style={{ marginTop: 10 }}>
+              <EditChip label={`Edit ${d.label}`}
+                onClick={() => setSheet({ kind: "edit-mobility", focus: d.id })} />
+            </div>
+          )}
         </div>
       ))}
     </Card>
@@ -11809,27 +11840,48 @@ function VersionRow() {
 
 /* -------------------------------------------------------- FIELD EDITOR ---- */
 function FieldEditor({ which, data, setData, close, focus }) {
-  const [list, setList] = useState(data.fields[which]);
-  /* Opened from the "edit" beside a row, it lands on THAT exercise already
-     open. Her instruction, 10 August: "I need an edit button next to each
-     exercise. I can edit the exercise itself, I can edit how it's measured,
-     or I can delete it altogether." */
+  /* ---- WHY THE MONTHLY EDITOR SHOWED HER TWO ROWS -----------------------
+     HER REPORT, 10 August: "It does not even show me all the benchmark
+     exercises — it is showing me only two fields."
+
+     Storage-true, screen-false. The monthly LIST holds only what the monthly
+     asks for ON TOP of the weekly — muscle and body fat — because the
+     benchmark sitting is the weekly list plus those two. Correct data,
+     useless editor: from where she stands the benchmark is twenty-nine rows
+     and this screen owned two of them. The monthly editor now shows the
+     whole benchmark; each edit is written back to the list the row actually
+     lives in, and nothing changes shape underneath (rule 20). */
+  const both = which === "monthly";
+  const [mo, setMo] = useState(data.fields.monthly);
+  const [wk, setWk] = useState(data.fields.weekly);
+  const list = both ? [...mo, ...wk] : wk;
+  const setFor = (id) => (mo.some((f) => f.id === id) ? setMo : setWk);
   const [openId, setOpenId] = useState(focus || null);
 
-  const patch = (id, p) => setList((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
-  const move = (i, dir) => setList((l) => {
-    const n = [...l], j = i + dir;
-    if (j < 0 || j >= n.length) return n;
-    [n[i], n[j]] = [n[j], n[i]];
-    return n;
-  });
-  const remove = (id) => setList((l) => l.filter((f) => f.id !== id));
+  const patch = (id, p) => setFor(id)((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
+  /* reorder stays within the list a row lives in — the benchmark's shape is
+     "monthly extras first, then the weekly", and crossing that line would
+     silently move a row between batteries */
+  const move = (i, dir) => {
+    const f = list[i];
+    setFor(f.id)((l) => {
+      const k = l.findIndex((x) => x.id === f.id), j = k + dir;
+      if (k < 0 || j < 0 || j >= l.length) return l;
+      const n = [...l]; [n[k], n[j]] = [n[j], n[k]];
+      return n;
+    });
+  };
+  const remove = (id) => setFor(id)((l) => l.filter((f) => f.id !== id));
   const add = () => {
     const f = { id: newId(), label: "New measure", unit: "reps", type: "number", better: "up",
-      cap: "", role: "rotating", inWeekly: true, rungs: [] };
-    setList((l) => [...l, f]); setOpenId(f.id);
+      cap: "", role: "rotating", inWeekly: !both, rungs: [] };
+    (both ? setMo : setWk)((l) => [...l, f]); setOpenId(f.id);
   };
-  const save = () => { setData({ ...data, fields: { ...data.fields, [which]: list } }); close(); };
+  const save = () => {
+    setData((d) => ({ ...d, fields: { ...d.fields,
+      ...(both ? { monthly: mo, weekly: wk } : { weekly: wk }) } }));
+    close();
+  };
 
   const TYPES = [["number", "Number"], ["weightreps", "Weight x reps"], ["time", "Time"], ["rung", "Ladder only"], ["scale", "Scale"], ["note", "Note"]];
   const BETTER = [["up", "Higher is better"], ["down", "Lower is better"], [null, "Neither"]];
@@ -11860,10 +11912,19 @@ function FieldEditor({ which, data, setData, close, focus }) {
                 <div style={{ fontSize: 14, fontWeight: 500 }}>{f.label || "Untitled"}</div>
                 <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>
                   {f.cap ? f.cap + " · " : ""}{f.role === "anchor" ? "anchor" : "rotating"}
-                  {f.inWeekly !== false ? " · weekly" : " · monthly"}
+                  {f.inWeekly !== false ? " · weekly" : " · monthly only"}
                   {f.rungs?.length > 1 ? ` · ${f.rungs.length} rungs` : ""}
                 </div>
               </button>
+              {/* "I can only add or remove — I can't edit an existing one."
+                  She could, by tapping the name, but nothing SAID so, and an
+                  invisible affordance does not exist (rule 11). */}
+              <button onClick={() => setOpenId(openId === f.id ? null : f.id)} className="tap" style={{
+                border: `1px solid ${openId === f.id ? C.signal : C.line}`, borderRadius: 8,
+                background: openId === f.id ? C.signal : "transparent",
+                color: openId === f.id ? C.chalk : C.signal, cursor: "pointer",
+                padding: "5px 10px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+                flexShrink: 0 }}>{openId === f.id ? "close" : "edit"}</button>
               <button onClick={() => remove(f.id)} className="tap" style={{
                 border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
               }}>×</button>
@@ -14403,10 +14464,13 @@ function QuietRows({ rows, open, setOpen }) {
   );
 }
 function MobilityEditor({ data, setData, coach, close, focus }) {
-  const [tab, setTab] = useState("tests");
-  const [openId, setOpenId] = useState(focus || null);
   const tests = data.mobTests?.length ? data.mobTests : coach.mobTests;
   const drills = data.drills?.length ? data.drills : coach.drills;
+  /* Opened from a drill's edit chip it lands on THAT drill — not on a list
+     of tests the drill is not in. She should never arrive on the wrong tab
+     and conclude the thing she came to edit does not exist (rule 11). */
+  const [tab, setTab] = useState(focus && drills.some((x) => x.id === focus) ? "drills" : "tests");
+  const [openId, setOpenId] = useState(focus || null);
 
   const setTests = (fn) => setData((d) => ({ ...d, mobTests: fn(d.mobTests?.length ? d.mobTests : tests) }));
   const setDrills = (fn) => setData((d) => ({ ...d, drills: fn(d.drills?.length ? d.drills : drills) }));
@@ -14523,6 +14587,21 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             <>
               <Field label="Minutes" unit="" value={item.mins}
                 onChange={(v) => patchDrill(item.id, { mins: Number(v) || 1 })} />
+              {/* "Enable me to edit each and every input in that exercise."
+                  The row on Today shows sets x reps and how often — so they
+                  are editable here, not just visible there (rule 12). */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: 1 }}>
+                  <Field label="Sets" unit="" type="text" value={item.sets || ""}
+                    onChange={(v) => patchDrill(item.id, { sets: v })} />
+                </span>
+                <span style={{ flex: 1 }}>
+                  <Field label="Reps" unit="" type="text" value={item.reps || ""}
+                    onChange={(v) => patchDrill(item.id, { reps: v })} />
+                </span>
+              </div>
+              <Field label="How often" unit="e.g. daily, 3x/week" type="text" value={item.freq || ""}
+                onChange={(v) => patchDrill(item.id, { freq: v })} />
               <Field label="What it targets" unit="" type="text" value={item.targets || ""}
                 onChange={(v) => patchDrill(item.id, { targets: v })} />
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How to do it</div>
@@ -16549,12 +16628,10 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
               pb={f.better === "up" ? coach.pbs[f.id] : null} />
             {/* EDIT IT WHERE IT IS. Rename it, rewrite how it is measured, or
                 take it out — without hunting for a settings screen (rule 11). */}
-            <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id })}
-              className="tap" style={{
-                border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 8px",
-                fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
-              edit or remove this exercise
-            </button>
+            <div style={{ padding: "2px 0 10px" }}>
+              <EditChip label={`Edit ${f.label}`}
+                onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id })} />
+            </div>
           </div>
         );
         const cards = [];
@@ -16688,12 +16765,10 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                 ask={(txt) => setSheet({ kind: "chat", about: m.label,
                   seed: `About ${m.label}: ${txt}` })}
                 seeAll={() => setSheet({ kind: "written" })} />
-              <button onClick={() => setSheet({ kind: "edit-mobility", focus: m.id })}
-                className="tap" style={{
-                  border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
-                  fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
-                edit or remove this test
-              </button>
+              <div style={{ padding: "0 0 12px" }}>
+                <EditChip label={`Edit ${m.label}`}
+                  onClick={() => setSheet({ kind: "edit-mobility", focus: m.id })} />
+              </div>
             </div>
           ))}
         </Card>
@@ -17575,9 +17650,9 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
           seed: `About ${ex.name} in my ${prog.area} work: ${txt}` })}
         seeAll={() => setSheet({ kind: "written" })} />
       {!editing ? (
-        <button onClick={() => setEditing(true)} className="tap" style={{
-          border: "none", background: "transparent", cursor: "pointer", padding: "4px 0 0",
-          fontSize: 11, color: C.muted, fontFamily: "inherit" }}>edit or remove this exercise</button>
+        <div style={{ paddingTop: 8 }}>
+          <EditChip label={`Edit ${ex.name}`} onClick={() => setEditing(true)} />
+        </div>
       ) : (
         <div style={{ marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
           <Field label="Name" unit="" type="text" value={ex.name} onChange={(v) => patch({ name: v })} />
