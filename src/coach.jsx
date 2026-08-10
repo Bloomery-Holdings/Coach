@@ -2510,6 +2510,18 @@ const analyseMeasure = (f, store, F = FORMULA_DEFAULTS) => {
     isBest: neutral ? false : now.v === best.v && series.length > 1,
     points: series.length,
     rung: rungNow, rungMoved,
+    /* THE TWO NUMBERS SHE ACTUALLY SETS.
+       The total is a product of these, and an instruction has to be given in
+       them or it cannot be followed. They were referenced by the shoulder
+       ceiling above and never actually put on this object, so every reading
+       of m.weight and m.reps was NaN and fell through to its guard. */
+    bilateral: !!f.bilateral,
+    weight: f.type === "weightreps" ? (Number(store[now.k][f.id + "__w"]) || null) : null,
+    reps: f.type === "weightreps"
+      ? (f.bilateral
+          ? ((Number(store[now.k][f.id + "__L"]) || 0) + (Number(store[now.k][f.id + "__R"]) || 0)) || null
+          : (Number(store[now.k][f.id]) || null))
+      : null,
     /* A rung change is judged by the rung. Otherwise, only past its own error
        floor does a move get a direction. And a neutral measure never gets one. */
     direction: neutral ? "tracked"
@@ -2892,7 +2904,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 74";
+const BUILD = "10 August 2026 · 75";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7100,15 +7112,47 @@ const Scale = ({ label, value, onChange, max = 5, lo, hi, pb }) => (
   </div>
 );
 
+/* ============================================================================
+   A BOX THAT GROWS WITH WHAT SHE SAYS
+   ---------------------------------------------------------------------------
+   HER REPORT, 10 August: "I still can't see the note I input. Unless I scroll
+   inside the box, I can't see what I wrote. And this applies everywhere in the
+   application."
+
+   Every note box was two rows tall and fixed. Dictate three sentences into it
+   and the first two scroll out of sight — so the one input method the app is
+   built around (rule 22) produced text she could not read back. A box she
+   cannot read is a box she stops trusting.
+
+   It measures its own content after every render and takes exactly the height
+   that content needs. CSS field-sizing does the same thing natively where the
+   browser has it; this works everywhere.
+   ==========================================================================*/
+function AutoText({ value, onChange, rows = 2, placeholder, style, ...rest }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !el.style) return;             /* no DOM under test — nothing to size */
+    el.style.height = "auto";
+    const h = Number(el.scrollHeight) || 0;
+    if (h > 0) el.style.height = h + "px";
+  });
+  return (
+    <textarea ref={ref} rows={rows} value={value || ""} placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...style, resize: "none", overflow: "hidden" }} {...rest} />
+  );
+}
+
 /* Rule 22: typing is friction, and friction is why people stop. Every box that
    takes her words takes her voice too. */
 const Note = ({ label, value, onChange, hint }) => (
   <div style={{ display: "block", marginBottom: 12 }}>
     <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>{label}</div>
     <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-      <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
+      <AutoText value={value} onChange={onChange}
         placeholder="Type here, or use the microphone"
-        style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontFamily: "'IBM Plex Sans', sans-serif" }} />
+        style={{ ...inputStyle, marginBottom: 0, fontFamily: "'IBM Plex Sans', sans-serif" }} />
       <MicButton onText={onChange} current={value || ""} />
     </div>
     {hint && <div style={{ fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.45 }}>{hint}</div>}
@@ -7130,9 +7174,9 @@ function EditableText({ value, onSave, children, rows = 3, placeholder, small })
     return (
       <div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
-          <textarea rows={rows} value={draft} onChange={(e) => setDraft(e.target.value)}
+          <AutoText rows={rows} value={draft} onChange={setDraft}
             placeholder={placeholder || "Type here, or use the microphone"}
-            style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 }} />
+            style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
           <MicButton onText={setDraft} current={draft} />
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -7708,7 +7752,7 @@ function NotePast({ rows }) {
   );
 }
 
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history }) {
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask }) {
   const has = !!String(value || "").trim();
   const [open, setOpen] = useState(has);
   if (!open) return (
@@ -7722,17 +7766,34 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
   return (
     <div>
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end", margin: "7px 0 2px" }}>
-        <textarea rows={2} value={value || ""} onChange={(e) => onChange(e.target.value)}
+        <AutoText value={value} onChange={onChange}
           placeholder="What went wrong, what hurt, what you changed. Optional."
-          style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 12.5 }} />
+          style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 12.5 }} />
         <MicButton onText={onChange} current={value || ""} />
+      </div>
+      {/* HER WORDS, 10 August: "there is no save button or send button or
+          anything interactive. It should be a conversation between me and the
+          coach, not just a note." It IS saved the moment she types it — but a
+          box with no button reads as a box that swallowed what she said. This
+          says so, and hands it straight to the coach with the exercise
+          attached, so the answer is about THIS movement. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
+        <span className="mono" style={{ fontSize: 10, color: C.moss }}>saved as you type</span>
+        {ask && String(value || "").trim() !== "" && (
+          <button onClick={() => ask(String(value || "").trim())} className="tap" style={{
+            border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
+            padding: "7px 12px", borderRadius: 999, fontSize: 11.5, fontWeight: 600,
+            fontFamily: "inherit" }}>
+            Ask your coach about this →
+          </button>
+        )}
       </div>
       <NotePast rows={history} />
     </div>
   );
 }
 
-const AssessInput = ({ f, form, set, pb, target, history }) => {
+const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
   if (f.type === "note") return (
     <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
   );
@@ -7833,7 +7894,7 @@ const AssessInput = ({ f, form, set, pb, target, history }) => {
           face a problem." A number cannot carry that, and the one note at the
           bottom of the sitting cannot say WHICH exercise it was about. */}
       <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
-        history={history} />
+        history={history} ask={ask} />
       <HowTo f={f} />
     </div>
   );
@@ -7948,9 +8009,9 @@ function SessionBlock({ cls, note, minutes, onNote, onMinutes, onClass, onRemove
       {showNote ? (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-            <textarea rows={2} value={note || ""} onChange={(e) => onNote(e.target.value)}
+            <AutoText value={note} onChange={onNote}
             placeholder="How it went, what you changed, what hurt"
-            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5, marginBottom: 0, fontSize: 13.5 }} />
+            style={{ ...inputStyle, lineHeight: 1.5, marginBottom: 0, fontSize: 13.5 }} />
             <MicButton onText={onNote} current={note || ""} />
           </div>
         </div>
@@ -8050,7 +8111,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put, history }) {
+function MobRow({ m, e, put, history, ask }) {
   /* HER REPORT, 10 August: "in the mobility check you didn't put neither
      explanation of how it's done nor the link nor the photo. Although these
      are the ones that will really require to see a progression."
@@ -8102,7 +8163,7 @@ function MobRow({ m, e, put, history }) {
         <Field label="Score" unit={String(m.unit || "").replace("/", "of ")} value={e.v || ""}
           onChange={(v) => put(m.id, { v })} />
       )}
-      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} history={history} />
+      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} history={history} ask={ask} />
     </Card>
   );
 }
@@ -8246,9 +8307,9 @@ function RecordCard({ data, setData, coach, setSheet }) {
             {trying === iss.id ? (
               <div style={{ marginTop: 10 }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-                  <textarea rows={2} value={what} onChange={(e) => setWhat(e.target.value)}
+                  <AutoText value={what} onChange={setWhat}
                     placeholder="What did you do about it?"
-                    style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+                    style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                   <MicButton onText={setWhat} current={what} />
                 </div>
                 <div style={{ fontSize: 12, color: C.muted, marginBottom: 7 }}>Did it help?</div>
@@ -8284,9 +8345,9 @@ function RecordCard({ data, setData, coach, setSheet }) {
       {adding ? (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-            <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)}
+            <AutoText rows={3} value={text} onChange={(v) => setText(v)}
               placeholder="My right lower back is tight again..."
-              style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+              style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
             <MicButton onText={setText} current={text} />
           </div>
           <Btn kind="signal" onClick={add}>Tell the coach</Btn>
@@ -8369,9 +8430,9 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                     change - and it was never askable before, so the line the
                     coach reads back was always empty */}
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-                  <textarea rows={2} value={scoreNote} onChange={(e) => setScoreNote(e.target.value)}
+                  <AutoText value={scoreNote} onChange={setScoreNote}
                     placeholder="Anything to say about it? What stopped you, if something did."
-                    style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+                    style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                   <MicButton onText={setScoreNote} current={scoreNote} />
                 </div>
                 <NotePast rows={noteHistory(data, "goal", g.id, coach.t)} />
@@ -8444,9 +8505,9 @@ function GoalsCard({ data, setData, coach, setSheet }) {
       {adding ? (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-            <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
+            <AutoText value={text} onChange={setText}
               placeholder="What do you want to be able to do?"
-              style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+              style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
             <MicButton onText={setText} current={text} />
           </div>
           <Btn kind="signal" onClick={add}>Add it</Btn>
@@ -8733,9 +8794,9 @@ function BodyWorkCard({ log, write, isToday }) {
           </div>
           <Field label="How long" unit="min" value={mins} onChange={setMins} />
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
-            <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            <AutoText value={note} onChange={setNote}
               placeholder="What they worked on, how it felt — optional"
-              style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+              style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
             <MicButton onText={setNote} current={note} />
           </div>
           <Btn kind="signal" onClick={add}>Log it</Btn>
@@ -9365,10 +9426,10 @@ function Today({ data, setData, coach, setSheet }) {
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                      <textarea rows={2} value={log?.loads ?? ""}
-                        onChange={(e) => write({ loads: e.target.value })}
+                      <AutoText value={log?.loads ?? ""}
+                        onChange={(v) => write({ loads: v })}
                         placeholder="8 kg kettlebell, 5 kg dumbbells — whatever you actually picked up"
-                        style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45, fontSize: 13 }} />
+                        style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 }} />
                       <MicButton onText={(v) => write({ loads: v })} current={log?.loads || ""} />
                     </div>
                     <div style={{ marginTop: 7 }}>
@@ -10054,9 +10115,9 @@ function Workouts({ data, setData, coach }) {
               </span>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <textarea rows={2} value={plan.themes[lvl][num] ?? coach.auto[lvl]}
-                onChange={(e) => setTheme(lvl, num, e.target.value)}
-                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0,
+              <AutoText value={plan.themes[lvl][num] ?? coach.auto[lvl]}
+                onChange={(v) => setTheme(lvl, num, v)}
+                style={{ ...inputStyle, lineHeight: 1.45, marginBottom: 0,
                   color: coach.themesAuto[lvl] ? C.muted : C.ink }} />
               <MicButton onText={(v) => setTheme(lvl, num, v)} current={plan.themes[lvl][num] ?? ""} />
             </div>
@@ -10147,9 +10208,9 @@ function Workouts({ data, setData, coach }) {
 
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>Resistance / loads</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
-                  <textarea rows={3} value={w.resistance || ""} onChange={(e) => patch(w.id, { resistance: e.target.value })}
+                  <AutoText rows={3} value={w.resistance || ""} onChange={(v) => patch(w.id, { resistance: v })}
                     placeholder="Plate weights, band strength, machine settings"
-                    style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 }} />
+                    style={{ ...inputStyle, lineHeight: 1.45, marginBottom: 0 }} />
                   <MicButton onText={(v) => patch(w.id, { resistance: v })} current={w.resistance || ""} />
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 14, lineHeight: 1.45 }}>
@@ -10159,17 +10220,17 @@ function Workouts({ data, setData, coach }) {
 
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How the class runs</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
-                  <textarea rows={3} value={w.structure || ""} onChange={(e) => patch(w.id, { structure: e.target.value })}
+                  <AutoText rows={3} value={w.structure || ""} onChange={(v) => patch(w.id, { structure: v })}
                     placeholder="Tracks, sections, how the effort is distributed"
-                    style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 }} />
+                    style={{ ...inputStyle, lineHeight: 1.45, marginBottom: 0 }} />
                   <MicButton onText={(v) => patch(w.id, { structure: v })} current={w.structure || ""} />
                 </div>
 
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How it feels to you</div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
-                  <textarea rows={3} value={w.felt || ""} onChange={(e) => patch(w.id, { felt: e.target.value })}
+                  <AutoText rows={3} value={w.felt || ""} onChange={(v) => patch(w.id, { felt: v })}
                     placeholder="What's hard, what your shoulder does, what you change"
-                    style={{ ...inputStyle, resize: "vertical", lineHeight: 1.45, marginBottom: 0 }} />
+                    style={{ ...inputStyle, lineHeight: 1.45, marginBottom: 0 }} />
                   <MicButton onText={(v) => patch(w.id, { felt: v })} current={w.felt || ""} />
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: -8, marginBottom: 4, lineHeight: 1.45 }}>
@@ -11397,9 +11458,13 @@ function VersionRow() {
 }
 
 /* -------------------------------------------------------- FIELD EDITOR ---- */
-function FieldEditor({ which, data, setData, close }) {
+function FieldEditor({ which, data, setData, close, focus }) {
   const [list, setList] = useState(data.fields[which]);
-  const [openId, setOpenId] = useState(null);
+  /* Opened from the "edit" beside a row, it lands on THAT exercise already
+     open. Her instruction, 10 August: "I need an edit button next to each
+     exercise. I can edit the exercise itself, I can edit how it's measured,
+     or I can delete it altogether." */
+  const [openId, setOpenId] = useState(focus || null);
 
   const patch = (id, p) => setList((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
   const move = (i, dir) => setList((l) => {
@@ -11899,9 +11964,9 @@ function Journal({ data, setData, coach, close }) {
       <Card style={{ marginBottom: 16 }}>
         <Eyebrow>Write something</Eyebrow>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <textarea rows={4} value={draft} onChange={(e) => setDraft(e.target.value)}
+          <AutoText rows={4} value={draft} onChange={(v) => setDraft(v)}
           placeholder="Anything at all — how the week is going, what you noticed, what you want to change"
-          style={{ ...inputStyle, resize: "vertical", lineHeight: 1.55, fontSize: 14.5, marginBottom: 10 }} />
+          style={{ ...inputStyle, lineHeight: 1.55, fontSize: 14.5, marginBottom: 10 }} />
           <MicButton onText={setDraft} current={draft} />
         </div>
         <Btn kind={draft.trim() ? "signal" : "quiet"} onClick={saveEntry}>Save to today</Btn>
@@ -11926,9 +11991,9 @@ function Journal({ data, setData, coach, close }) {
           {free.map((e) => (
             <div key={e.id} style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <textarea rows={3} value={e.text} onChange={(ev) => editEntry(e.id, ev.target.value)}
+                <AutoText rows={3} value={e.text} onChange={(v) => editEntry(e.id, v)}
                 className="serif-it"
-                style={{ ...inputStyle, resize: "vertical", lineHeight: 1.55, fontSize: 15.5, marginBottom: 6,
+                style={{ ...inputStyle, lineHeight: 1.55, fontSize: 15.5, marginBottom: 6,
                   background: "transparent", border: "none", borderLeft: `2px solid ${C.signal}`,
                   borderRadius: 0, padding: "0 0 0 12px" }} />
                 <MicButton onText={(v) => editEntry(e.id, v)} current={e.text} />
@@ -13310,8 +13375,8 @@ function WhyCard({ data, setData, coach, setSheet }) {
             Anything else about it? Only if you want to.
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-            <textarea rows={2} value={words} onChange={(e) => setWords(e.target.value)}
-              style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 }} />
+            <AutoText value={words} onChange={setWords}
+              style={{ ...inputStyle, marginBottom: 0, fontSize: 13.5 }} />
             <MicButton onText={setWords} current={words} />
           </div>
           <div style={{ marginTop: 10 }}>
@@ -13425,9 +13490,9 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
         {adding ? (
           <>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-              <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)}
+              <AutoText value={text} onChange={setText}
                 placeholder="I never want an early session on a Monday"
-                style={{ ...inputStyle, resize: "vertical", marginBottom: 0, fontSize: 13.5 }} />
+                style={{ ...inputStyle, marginBottom: 0, fontSize: 13.5 }} />
               <MicButton onText={setText} current={text} />
             </div>
             <Btn kind="signal" onClick={addOwn}>Add it</Btn>
@@ -13668,10 +13733,10 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                     </div>
                   )}
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 8 }}>
-                    <textarea rows={2} value={goalNotes[g.id] || ""}
-                      onChange={(e) => setGoalNotes((n) => ({ ...n, [g.id]: e.target.value }))}
+                    <AutoText value={goalNotes[g.id] || ""}
+                      onChange={(v) => setGoalNotes((n) => ({ ...n, [g.id]: v }))}
                       placeholder="Anything to say about it? What stopped you, if something did."
-                      style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
+                      style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 }} />
                     <MicButton onText={(v) => setGoalNotes((n) => ({ ...n, [g.id]: v }))}
                       current={goalNotes[g.id] || ""} />
                   </div>
@@ -13928,9 +13993,9 @@ function QuietRows({ rows, open, setOpen }) {
     </Card>
   );
 }
-function MobilityEditor({ data, setData, coach, close }) {
+function MobilityEditor({ data, setData, coach, close, focus }) {
   const [tab, setTab] = useState("tests");
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState(focus || null);
   const tests = data.mobTests?.length ? data.mobTests : coach.mobTests;
   const drills = data.drills?.length ? data.drills : coach.drills;
 
@@ -14000,14 +14065,14 @@ function MobilityEditor({ data, setData, coach, close }) {
               </div>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How to do it</div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
-                <textarea rows={3} value={item.how || ""} onChange={(e) => patchTest(item.id, { how: e.target.value })}
-                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <AutoText rows={3} value={item.how || ""} onChange={(v) => patchTest(item.id, { how: v })}
+                  style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                 <MicButton onText={(v) => patchTest(item.id, { how: v })} current={item.how || ""} />
               </div>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>Why it matters</div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
-                <textarea rows={3} value={item.why || ""} onChange={(e) => patchTest(item.id, { why: e.target.value })}
-                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <AutoText rows={3} value={item.why || ""} onChange={(v) => patchTest(item.id, { why: v })}
+                  style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                 <MicButton onText={(v) => patchTest(item.id, { why: v })} current={item.why || ""} />
               </div>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>
@@ -14035,8 +14100,8 @@ function MobilityEditor({ data, setData, coach, close }) {
                 onChange={(v) => patchDrill(item.id, { targets: v })} />
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 5 }}>How to do it</div>
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <textarea rows={3} value={item.how || ""} onChange={(e) => patchDrill(item.id, { how: e.target.value })}
-                  style={{ ...inputStyle, resize: "vertical", marginBottom: 0, lineHeight: 1.45 }} />
+                <AutoText rows={3} value={item.how || ""} onChange={(v) => patchDrill(item.id, { how: v })}
+                  style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                 <MicButton onText={(v) => patchDrill(item.id, { how: v })} current={item.how || ""} />
               </div>
             </>
@@ -14416,8 +14481,8 @@ function ProgramView({ data, setData, coach, setSheet }) {
             <input value={ph.name} onChange={(e) => setField(pi, "name", e.target.value)}
               style={{ ...inputStyle, marginBottom: 6, fontSize: 15, fontWeight: 600 }} />
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
-              <textarea rows={2} value={ph.line} onChange={(e) => setField(pi, "line", e.target.value)}
-                style={{ ...inputStyle, marginBottom: 0, fontSize: 12.5, resize: "none", lineHeight: 1.5 }} />
+              <AutoText value={ph.line} onChange={(v) => setField(pi, "line", v)}
+                style={{ ...inputStyle, marginBottom: 0, fontSize: 12.5, lineHeight: 1.5 }} />
               <MicButton onText={(v) => setField(pi, "line", v)} current={ph.line || ""} />
             </div>
 
@@ -15594,8 +15659,8 @@ Two or three sentences unless she asks for more.`;
               editing === i ? (
                 <div style={{ width: "85%", marginTop: 6 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
-                    <textarea rows={3} value={editDraft} onChange={(e) => setEditDraft(e.target.value)}
-                      style={{ ...inputStyle, marginBottom: 0, resize: "vertical", lineHeight: 1.45 }} />
+                    <AutoText rows={3} value={editDraft} onChange={setEditDraft}
+                      style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
                     <MicButton onText={setEditDraft} current={editDraft} />
                   </div>
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
@@ -15627,10 +15692,10 @@ Two or three sentences unless she asks for more.`;
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <textarea rows={2} value={draft} onChange={(e) => setDraft(e.target.value)}
+        <AutoText value={draft} onChange={setDraft}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
           placeholder="Say it, or hold the mic"
-          style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45 }} />
+          style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
         <MicButton onText={setDraft} current={draft} />
         <button onClick={send} disabled={busy || !draft.trim()} className="tap" style={{
           padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
@@ -15671,16 +15736,48 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}`
       : Math.round(v * 10) / 10);
     if (f.type === "weightreps") {
-      /* Load is a product, so the aim is a total you can reach either way —
-         more weight, more reps, whichever your body offers that day. */
+      /* ---- WHY "BEAT 173 KG TOTAL" WAS THE WRONG ANSWER ---------------
+         Her words, 10 August: "you've moved 170 kg, make it 173. How do I do
+         that? It's not even feasible. If I do one more rep it will be 175.
+         I want you to tell me: increase the weight from five kilograms to
+         six. That's how I see a progress requested from me."
+
+         She is right, and the fault is a category error. Total load is a
+         PRODUCT of the only two things she can actually set — the weight on
+         the bar and the reps she gets in the minute — and neither of them
+         moves in units of one kilo of total. So the total stays as the
+         arithmetic behind it, and the instruction is now given in the two
+         numbers she types into this row.
+
+         Weight first where the step is a real one, because that is what she
+         asked for and it is the harder stimulus. Reps where a weight step
+         would cost her more than about a third of the set — going 1 kg to
+         2 kg is a hundred per cent jump, and telling her to do it is telling
+         her to fail. */
       const prev = m.reading?.sub || "";
-      return {
-        last: `${Math.round(m.now)} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`,
-        aim: frozen ? "hold what you did — shoulder"
-        : sore ? "hold what you did — your shoulder was uncomfortable this week"
-        : loadIsMass(f) ? `beat ${Math.round(raw)} kg total — more weight or more reps`
-          : `beat ${Math.round(raw)} — a heavier band or more reps`,
-      };
+      const w = Number(m.weight), r = Number(m.reps);
+      const totalNow = Math.round(m.now);
+      const sides = m.bilateral ? 2 : 1;
+      const say = (n) => (sides === 2 ? `${Math.ceil(n / 2)} reps each side` : `${n} reps`);
+      const last = w > 0 && r > 0
+        ? `${w} ${loadUnit(f)} x ${say(r)} (${totalNow}${loadIsMass(f) ? " kg" : ""} moved)`
+        : `${totalNow} ${loadIsMass(f) ? "kg total" : loadUnit(f)}${prev ? ` (${prev})` : ""}`;
+      if (frozen) return { last, aim: "hold what you did — shoulder" };
+      if (sore) return { last, aim: "hold what you did — your shoulder was uncomfortable this week" };
+      if (!(w > 0 && r > 0)) {
+        return { last, aim: loadIsMass(f)
+          ? `beat ${Math.round(raw)} kg moved — more weight or more reps`
+          : `beat ${Math.round(raw)} — a heavier band or more reps` };
+      }
+      const stepUp = loadIsMass(f) ? (overhead ? KG_STEP_SHOULDER : (w < 4 ? 0.5 : 1)) : 1;
+      const upW = Math.round((w + stepUp) * 10) / 10;
+      const repsAtUpW = Math.max(1, Math.ceil(raw / upW));
+      const repsSameW = Math.max(r + 1, Math.ceil(raw / w));
+      const worthIt = repsAtUpW >= Math.ceil(r * 0.66);
+      const aim = worthIt
+        ? `go up to ${upW} ${loadUnit(f)} and get ${say(repsAtUpW)} — that beats what you did`
+        : `stay at ${w} ${loadUnit(f)} and get ${say(repsSameW)}`;
+      return { last, aim };
     }
     return { last: fmt(m.now), aim: (frozen || sore) ? fmt(m.now) + " (held — shoulder)" : fmt(raw) };
   };
@@ -15785,6 +15882,28 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   /* Her instruction: an estimate per exercise, so the sitting has a real
      budget rather than a hopeful one. Everything carries its own minutes and
      the total is arithmetic, not a promise. */
+  /* WHAT IS STILL EMPTY GOES TO THE TOP.
+     Her instruction, 10 August: "When there are exercises missing from the
+     battery, put them at the beginning of the measurements when I open. Don't
+     tell me eleven out of twenty-nine done. Rearrange them so the missing
+     ones are at the beginning, so I can complete them the following day."
+
+     A fraction is a score, and a score on a half-finished sitting is the
+     wrong thing to hand her (rules 24, 25). The list itself is the answer:
+     open it the next day and the rows that still need her are the rows she
+     lands on. The order only changes once she has started — an untouched
+     battery has nothing to reorder, and the capability grouping is the right
+     shape for a fresh one. */
+  const isFilled = (f) => {
+    if (f.type === "note" || f.type === "scale") return String(form[f.id] || "").trim() !== "";
+    if (f.type === "weightreps") return String(form[f.id + "__w"] || "").trim() !== "";
+    if (f.bilateral) return String(form[f.id + "__L"] || "").trim() !== "";
+    return String(form[f.id] || "").trim() !== "";
+  };
+  const doneFields = fields.filter(isFilled);
+  const left = fields.filter((f) => !isFilled(f));
+  const started = doneFields.length > 0;
+
   const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
   const batteryMins = Math.round(minsOf(fields) + minsOf(mobTests));
   const goalMins = Math.round(coach.goalMinutes || 0);
@@ -15822,31 +15941,18 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           on the monthly that is twenty-odd rows. So: how many are in, which
           ones are not, and nothing is called finished until she says so. */}
       {(() => {
-        const done = fields.filter((f) => {
-          if (f.type === "note" || f.type === "scale") return String(form[f.id] || "").trim() !== "";
-          if (f.type === "weightreps") return String(form[f.id + "__w"] || "").trim() !== "";
-          if (f.bilateral) return String(form[f.id + "__L"] || "").trim() !== "";
-          return String(form[f.id] || "").trim() !== "";
-        });
-        const left = fields.filter((f) => !done.includes(f));
         if (!fields.length) return null;
+        if (!started) return null;          /* nothing filled yet — nothing to say */
         return (
           <Card style={{ marginBottom: 14, background: left.length ? C.pist : C.mint }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>
-              {done.length} of {fields.length} entered{left.length === 0 ? " — all of them" : ""}
-            </div>
-            <div style={{ height: 6, borderRadius: 999, background: C.card, margin: "8px 0 10px", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${Math.round((done.length / fields.length) * 100)}%`,
-                background: left.length ? C.signal : C.moss }} />
-            </div>
             {left.length > 0 ? (
-              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
-                Still to do: {left.map((f) => f.label).join(", ")}.
-                {" "}Everything you have typed is already saved — you can close this and come back to
-                the rest whenever you like, and it will still be here.
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
+                Picking up where you left off. The ones you haven't done yet are at the top —
+                work down from there. Everything you already typed is saved and sitting further
+                down, exactly as you left it.
               </div>
             ) : (
-              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted }}>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
                 Every row is in. Press the button at the bottom when you want to close it off.
               </div>
             )}
@@ -15893,27 +15999,51 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         </Card>
       )}
 
-      {[...CAPS, ""].map((cap) => {
-        const group = fields.filter((f) => (f.cap || "") === cap);
-        if (!group.length) return null;
-        return (
-          <Card key={cap || "feel"} style={{ marginBottom: 12 }}>
-            <Eyebrow>{cap ? capLabel(cap) : "How the week felt"}</Eyebrow>
-            {group.map((f) => (
-              <div key={f.id}>
-                {onlyMonthly(f) && (
-                  <div className="mono" style={{ fontSize: 8.5, letterSpacing: "0.12em",
-                    textTransform: "uppercase", color: C.ochre, marginBottom: 2 }}>only here</div>
-                )}
-                <AssessInput f={f} form={form} set={set}
-                  target={targetFor(f)}
-                  history={noteHistory(data, which, f.id, key)}
-                  pb={f.better === "up" ? coach.pbs[f.id] : null} />
-              </div>
-            ))}
-          </Card>
+      {(() => {
+        const row = (f) => (
+          <div key={f.id}>
+            {onlyMonthly(f) && (
+              <div className="mono" style={{ fontSize: 8.5, letterSpacing: "0.12em",
+                textTransform: "uppercase", color: C.ochre, marginBottom: 2 }}>only here</div>
+            )}
+            <AssessInput f={f} form={form} set={set}
+              target={targetFor(f)}
+              history={noteHistory(data, which, f.id, key)}
+              ask={(txt) => setSheet({ kind: "chat", about: f.label,
+                seed: `About ${f.label}: ${txt}` })}
+              pb={f.better === "up" ? coach.pbs[f.id] : null} />
+            {/* EDIT IT WHERE IT IS. Rename it, rewrite how it is measured, or
+                take it out — without hunting for a settings screen (rule 11). */}
+            <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly", focus: f.id })}
+              className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", padding: "2px 0 8px",
+                fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+              edit or remove this exercise
+            </button>
+          </div>
         );
-      })}
+        const cards = [];
+        if (started && left.length) {
+          cards.push(
+            <Card key="__left" style={{ marginBottom: 12, borderLeft: `3px solid ${C.signal}` }}>
+              <Eyebrow color={C.signal}>Still to do</Eyebrow>
+              {left.map(row)}
+            </Card>
+          );
+        }
+        const rest = started && left.length ? doneFields : fields;
+        [...CAPS, ""].forEach((cap) => {
+          const group = rest.filter((f) => (f.cap || "") === cap);
+          if (!group.length) return;
+          cards.push(
+            <Card key={cap || "feel"} style={{ marginBottom: 12 }}>
+              <Eyebrow>{(started && left.length ? "Already in · " : "") + (cap ? capLabel(cap) : "How the week felt")}</Eyebrow>
+              {group.map(row)}
+            </Card>
+          );
+        });
+        return cards;
+      })()}
 
       {/* WHAT SHE WANTS TO BE ABLE TO DO. A battery of its own, and all of
           them every time — a goal scored some weeks and not others produces a
@@ -15949,10 +16079,10 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 9 }}>
-                  <textarea rows={2} value={goalWords[g.id] || ""}
-                    onChange={(e) => putGoal(g.id, { note: e.target.value })}
+                  <AutoText value={goalWords[g.id] || ""}
+                    onChange={(v) => putGoal(g.id, { note: v })}
                     placeholder="Why not a ten? What stopped you — anything at all."
-                    style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
+                    style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 }} />
                   <MicButton onText={(v) => putGoal(g.id, { note: v })}
                     current={goalWords[g.id] || ""} />
                 </div>
@@ -15995,8 +16125,18 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             {" "}These choose your ten minutes of drills until the next one.
           </div>
           {mobTests.map((m) => (
-            <MobRow key={m.id} m={m} e={mob[m.id] || {}} put={putMob}
-              history={noteHistory(data, "mobility", m.id, coach.ws)} />
+            <div key={m.id}>
+              <MobRow m={m} e={mob[m.id] || {}} put={putMob}
+                history={noteHistory(data, "mobility", m.id, coach.ws)}
+                ask={(txt) => setSheet({ kind: "chat", about: m.label,
+                  seed: `About ${m.label}: ${txt}` })} />
+              <button onClick={() => setSheet({ kind: "edit-mobility", focus: m.id })}
+                className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
+                  fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+                edit or remove this test
+              </button>
+            </div>
           ))}
         </Card>
       )}
@@ -16242,7 +16382,7 @@ function CoachApp() {
           ) : sheet.kind === "vital" ? (
             <VitalDetail id={sheet.id} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "edit-mobility" ? (
-            <MobilityEditor data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+            <MobilityEditor data={data} setData={setData} coach={coach} focus={sheet.focus} close={() => setSheet(null)} />
           ) : sheet.kind === "month" ? (
             <BlockCalendar data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "goals" ? (
@@ -16262,7 +16402,7 @@ function CoachApp() {
           ) : sheet.kind === "chat" ? (
             <CoachChat data={data} setData={setData} coach={coach} seed={sheet.seed} about={sheet.about} close={() => setSheet(null)} />
           ) : (
-            <FieldEditor which={sheet.kind === "edit-weekly" ? "weekly" : "monthly"} data={data} setData={setData} close={() => setSheet(null)} />
+            <FieldEditor which={sheet.kind === "edit-weekly" ? "weekly" : "monthly"} data={data} setData={setData} focus={sheet.focus} close={() => setSheet(null)} />
           )}
         </SheetShell>
       )}
