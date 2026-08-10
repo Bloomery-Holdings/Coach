@@ -2932,7 +2932,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 76";
+const BUILD = "10 August 2026 · 77";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3105,6 +3105,12 @@ const BLANK = {
   program: SEED_PROGRAM,
   morning: {},
   sample: false,  /* true while demo history is loaded */
+  /* BODY WORK. Her instruction, 10 August: a tab of its own holding written
+     exercise lists that rotate — same body area, different exercises, tools
+     and strategies each training day, so across ten lists the major muscles,
+     the minor ones, the tendons and the ligaments all get reached. One
+     programme per body area, and she can have as many areas as she wants. */
+  bodywork: [],
   journal: [],    /* free entries: { id, date, text } */
   notes: {},      /* date -> { text, kept } */
   notesUsed: [],  /* pool indices already spent, so nothing repeats */
@@ -3229,6 +3235,7 @@ async function loadData() {
         chats: Array.isArray(d.chats) ? d.chats : [],
         profile: Array.isArray(d.profile) ? d.profile : [],
         reviews: Array.isArray(d.reviews) ? d.reviews : [],
+        bodywork: Array.isArray(d.bodywork) ? d.bodywork : [],
         /* An older file has neither — seed them, never wipe them (rule 20). */
         mobTests: Array.isArray(d.mobTests) && d.mobTests.length
           ? addNewFields(
@@ -16342,7 +16349,7 @@ function CoachApp() {
     else setSheets((s) => [...s, next]);
   };
 
-  const TABS = [["today", "Today"], ["plan", "Workouts"], ["progress", "Progress"], ["settings", "Settings"]];
+  const TABS = [["today", "Today"], ["plan", "Workouts"], ["body", "Body"], ["progress", "Progress"], ["settings", "Settings"]];
   const title = TABS.find(([id]) => id === tab)?.[1] || "";
   const canGoBack = stack.length > 1;
 
@@ -16371,6 +16378,7 @@ function CoachApp() {
           <>
             {tab === "today" && <Today data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "plan" && <Workouts data={data} setData={setData} coach={coach} />}
+            {tab === "body" && <BodyWork data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "progress" && <Progress data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "settings" && <Settings data={data} setData={setData} setSheet={setSheet} />}
           </>
@@ -16393,7 +16401,9 @@ function CoachApp() {
               flex: 1, padding: "13px 0 11px", borderRadius: 10, border: "none", cursor: "pointer",
               background: "transparent", color: tab === id ? C.signal : C.muted,
               position: "relative",
-              fontSize: 10, fontWeight: 500, letterSpacing: "0.13em", textTransform: "uppercase",
+              /* five tabs on a phone, so the letter-spacing has to give a
+                 little or the last one wraps */
+              fontSize: 9.5, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase",
             }}>{label}</button>
           ))}
         </div>
@@ -16734,6 +16744,424 @@ class ErrorBoundary extends React.Component {
       </>
     );
   }
+}
+
+/* ============================================================================
+   BODY WORK — TEN LISTS THAT ROTATE
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 10 August: "I want a separate tab where I ask my coach to
+   design for me a set of written exercises that I follow after each session to
+   tackle specific body parts that need attention. I also want him to design a
+   rotating list that gives me different exercises each day while addressing
+   the same issue. For example, if I need stronger shoulders he will give me a
+   list of exercises that change every exercise day but that are still focusing
+   on shoulder strength, and use different tools and strategies for each list,
+   so I make sure I tackle all the major and minor muscles of the body part as
+   well as its tendons and ligaments. Accordingly, by the time I am ten times
+   into ten lists, the whole body area will have transformed. I want it in a
+   separate tab so the exercises will be in one place and I don't need to
+   scroll too much to find what I want."
+
+   And: "Allow me to ask for more than one list for more than one body part."
+
+   So: one PROGRAMME per body area, as many areas as she wants, each holding
+   ten written lists. One list per training day, in rotation. The tenth is
+   followed by the first again — and when a full round is finished the coach
+   offers to design the next ten, reading what she wrote against each exercise
+   in the round she just did.
+
+   This is the one place in the app that prescribes written sets and reps.
+   Rule 10 says the programme sets the day and the coach picks the CLASS — and
+   that still holds for training. This is the add-on after it, which is exactly
+   what rule 10's ten minutes always was; she has asked for a longer, written,
+   body-part version of it that lives somewhere she can find.
+
+   Nothing here is fixed. Every list, every exercise, every line of every
+   exercise is editable, and any of it can be deleted (rule 12).
+   ==========================================================================*/
+const BODYWORK_SYSTEM = `You are her strength and rehabilitation coach. She is 51, trains to hold
+muscle through her fifties, and her right shoulder is rehabilitating.
+
+She wants TEN written lists for ONE body area. She does one list after each
+training session, in rotation — list 1 on the first training day, list 2 on the
+next, and so on to ten, then round again. Across the ten, the whole area must
+be covered: the large muscles AND the small ones, the stabilisers, the tendons
+and the ligaments, through their full range and in every direction the joint
+moves.
+
+THE TEN MUST NOT BE TEN COPIES OF EACH OTHER. Each list gets a different
+emphasis, a different set of tools and a different strategy — bodyweight,
+dumbbells, bands, a wall or a doorframe, a towel, isometric holds, slow
+eccentrics, end-range work, high-rep endurance, single-side work, tempo, and
+so on. Vary the position too: standing, lying, side-lying, kneeling, hanging.
+A list she can tell apart from the others is a list she will actually do.
+
+CONSTRAINTS THAT DO NOT BEND.
+- Every exercise must be doable at home or in an ordinary gym with everyday
+  equipment. Name the tool.
+- Anything overhead or loaded through the right shoulder must be conservative
+  and say so in its "how".
+- The whole list must genuinely fit the number of minutes given.
+- Write it so she can do it from the page alone, without looking anything up.
+- Plain, warm, specific language. No jargon she would have to decode.
+
+Return ONLY a JSON object, no prose around it, no code fence:
+{
+  "area": "the body area, two or three words",
+  "line": "one or two sentences to her about what these ten lists are doing and in what order",
+  "lists": [
+    {
+      "title": "what makes THIS list different, four or five words",
+      "focus": "the specific tissue or quality this one is after",
+      "exercises": [
+        { "name": "...", "tool": "what she needs for it, or 'nothing'",
+          "dose": "sets and reps or a hold, e.g. '3 x 12' or '3 x 30 seconds each side'",
+          "mins": 2,
+          "how": "how to do it, precise enough to do from the page",
+          "targets": "the muscles, tendons or ligaments it reaches" }
+      ]
+    }
+  ]
+}
+Exactly ten lists. Each list's exercises must total roughly the minutes given.`;
+
+const designBodyWork = async ({ area, mins, apiKey, context }) => {
+  const raw = await askModel({
+    system: BODYWORK_SYSTEM,
+    messages: [{ role: "user", content:
+      `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"\nMINUTES PER LIST: ${mins}\n\n${context || ""}` }],
+    apiKey, maxTokens: 8000,
+  });
+  const out = parseReview(raw);
+  if (!out || !Array.isArray(out.lists) || !out.lists.length) throw new Error("unreadable");
+  const lists = out.lists.slice(0, 10).map((l, i) => ({
+    id: newId(), n: i + 1,
+    title: String(l.title || `List ${i + 1}`),
+    focus: String(l.focus || ""),
+    exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
+      id: newId(),
+      name: String(x.name || "Exercise"),
+      tool: String(x.tool || ""),
+      dose: String(x.dose || ""),
+      mins: Number(x.mins) || 2,
+      how: String(x.how || ""),
+      targets: String(x.targets || ""),
+    })),
+  }));
+  return { area: String(out.area || area), line: String(out.line || ""), lists };
+};
+
+/* Which list comes next, and how far round she is. Kept as plain arithmetic so
+   it survives without the model and reads the same every time. */
+const bodyworkState = (prog) => {
+  const log = prog.log || {};
+  const dates = Object.keys(log).sort();
+  const doneCount = dates.length;
+  const lists = prog.lists || [];
+  const nextIndex = lists.length ? doneCount % lists.length : 0;
+  const round = lists.length ? Math.floor(doneCount / lists.length) : 0;
+  const inRound = lists.length ? doneCount % lists.length : 0;
+  return { doneCount, nextIndex, round, inRound, total: lists.length, dates,
+           roundComplete: lists.length > 0 && doneCount > 0 && inRound === 0 };
+};
+
+function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
+  const [editing, setEditing] = useState(false);
+  const noteId = `bw:${prog.id}:${ex.id}`;
+  const today = coach.t;
+  const notes = ((data.logs || {})[today] || {}).drillNotes || {};
+  const putNote = (v) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+    [today]: { ...((d.logs || {})[today] || {}),
+      drillNotes: { ...(((d.logs || {})[today] || {}).drillNotes || {}), [noteId]: v } } } }));
+  const patch = (fields) => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
+      ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).map((x) =>
+        x.id === ex.id ? { ...x, ...fields } : x) }) }) }));
+  const drop = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
+      ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).filter((x) => x.id !== ex.id) }) }) }));
+
+  return (
+    <div style={{ padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+        <span style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{ex.name}</span>
+        <span className="mono" style={{ fontSize: 11, color: C.signal, flexShrink: 0 }}>{ex.dose}</span>
+      </div>
+      {ex.tool && (
+        <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 3,
+          letterSpacing: "0.06em", textTransform: "uppercase" }}>{ex.tool}</div>
+      )}
+      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginTop: 6 }}>{ex.how}</div>
+      {ex.targets && (
+        <div style={{ fontSize: 11.5, color: C.moss, marginTop: 4 }}>{ex.targets}</div>
+      )}
+      <Timer key={ex.id + ":t"} compact label={ex.name} />
+      <ExerciseNote value={notes[noteId]} onChange={putNote}
+        history={noteHistory(data, "drill", noteId, today)}
+        ask={(txt) => setSheet({ kind: "chat", about: ex.name,
+          seed: `About ${ex.name} in my ${prog.area} work: ${txt}` })} />
+      {!editing ? (
+        <button onClick={() => setEditing(true)} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "4px 0 0",
+          fontSize: 11, color: C.muted, fontFamily: "inherit" }}>edit or remove this exercise</button>
+      ) : (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
+          <Field label="Name" unit="" type="text" value={ex.name} onChange={(v) => patch({ name: v })} />
+          <Field label="What you need" unit="" type="text" value={ex.tool} onChange={(v) => patch({ tool: v })} />
+          <Field label="Sets and reps" unit="" type="text" value={ex.dose} onChange={(v) => patch({ dose: v })} />
+          <Note label="How it's done" value={ex.how} onChange={(v) => patch({ how: v })} />
+          <Note label="What it reaches" value={ex.targets} onChange={(v) => patch({ targets: v })} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn kind="quiet" onClick={() => setEditing(false)}>Done editing</Btn>
+            <button onClick={drop} className="tap" style={{
+              border: `1.5px solid ${C.clay}`, background: "transparent", color: C.clay,
+              borderRadius: 9, padding: "9px 14px", cursor: "pointer", fontSize: 12,
+              fontWeight: 600, fontFamily: "inherit" }}>Remove it</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
+  const [showAll, setShowAll] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const st = bodyworkState(prog);
+  const lists = prog.lists || [];
+  const live = lists[st.nextIndex] || null;
+  /* List one is index 0, and !!0 is false — so the first list of every round
+     would have been asked for twice on the same day. Presence, not truthiness. */
+  const doneToday = (prog.log || {})[coach.t] !== undefined;
+
+  const markDone = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    pg.id !== prog.id ? pg : { ...pg, log: { ...(pg.log || {}), [coach.t]: st.nextIndex } }) }));
+  const undo = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+    if (pg.id !== prog.id) return pg;
+    const log = { ...(pg.log || {}) }; delete log[coach.t];
+    return { ...pg, log };
+  }) }));
+  const removeProg = () => setData((d) => ({ ...d,
+    bodywork: (d.bodywork || []).filter((pg) => pg.id !== prog.id) }));
+
+  /* A new round is designed from the round she just did — every word she wrote
+     against every exercise in it, so the next ten answer what happened rather
+     than repeating the last ten. */
+  const rebuild = async () => {
+    setBusy(true); setErr(null);
+    try {
+      const said = [];
+      Object.keys(data.logs || {}).sort().forEach((date) => {
+        const dn = (data.logs[date] || {}).drillNotes || {};
+        Object.keys(dn).forEach((k) => {
+          if (!k.startsWith(`bw:${prog.id}:`)) return;
+          const ex = (prog.lists || []).flatMap((l) => l.exercises || []).find((x) => `bw:${prog.id}:${x.id}` === k);
+          const v = String(dn[k] || "").trim();
+          if (v) said.push(`${date} — ${ex ? ex.name : "an exercise"}: "${v}"`);
+        });
+      });
+      const out = await designBodyWork({
+        area: prog.area, mins: prog.mins, apiKey: data.settings?.apiKey,
+        context: [
+          `SHE HAS JUST FINISHED A FULL ROUND OF TEN. Design the next ten — harder or deeper where she coped, changed where she did not.`,
+          `THE TEN SHE JUST DID:\n${(prog.lists || []).map((l) => `${l.n}. ${l.title} — ${(l.exercises || []).map((x) => x.name).join(", ")}`).join("\n")}`,
+          said.length ? `WHAT SHE WROTE AGAINST THEM:\n${said.join("\n")}`
+            : `She wrote nothing against any of them.`,
+        ].join("\n\n"),
+      });
+      setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+        pg.id !== prog.id ? pg
+          : { ...pg, line: out.line, lists: out.lists,
+              rounds: [...(pg.rounds || []), { lists: pg.lists, log: pg.log, closed: coach.t }],
+              log: {} }) }));
+    } catch (e) {
+      setErr(e.message === "no-key"
+        ? "This needs your API key, which lives in Settings."
+        : "I couldn't build the next ten just now. Nothing has changed — try again in a minute.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+        <Eyebrow color={C.signal}>{prog.area}</Eyebrow>
+        <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+          {st.inRound || (st.doneCount ? lists.length : 0)} of {lists.length} this round
+          {st.round > 0 ? ` · round ${st.round + (st.roundComplete ? 0 : 1)}` : ""}
+        </span>
+      </div>
+      {prog.line && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "4px 0 12px" }}>{prog.line}</div>
+      )}
+
+      {st.roundComplete && (
+        <Card style={{ background: C.mint, marginBottom: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 6 }}>
+            That's all ten done.
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 10 }}>
+            A full round of the area. I can read everything you wrote against these ten and build
+            the next ten from it — deeper where you coped, different where you didn't. The ten you
+            just did are kept either way.
+          </div>
+          <Btn kind="signal" onClick={rebuild} disabled={busy}>
+            {busy ? "Reading the round…" : "Design the next ten"}
+          </Btn>
+        </Card>
+      )}
+
+      {live && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>
+              {doneToday ? "Today's list — done" : `Next: ${live.title}`}
+            </span>
+            <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
+              list {live.n} of {lists.length}
+            </span>
+          </div>
+          {live.focus && (
+            <div style={{ fontSize: 12, color: C.moss, marginTop: 3 }}>{live.focus}</div>
+          )}
+          {!doneToday ? (
+            <div>
+              {(live.exercises || []).map((ex) => (
+                <BodyWorkExercise key={ex.id} prog={prog} list={live} ex={ex}
+                  data={data} setData={setData} coach={coach} setSheet={setSheet} />
+              ))}
+              <div style={{ marginTop: 12 }}>
+                <Btn kind="signal" onClick={markDone}>Done — move to the next list</Btn>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 8 }}>
+                You did this one today. The next one comes round on your next training day.
+              </div>
+              <Btn kind="quiet" onClick={undo}>I haven't actually done it — put it back</Btn>
+            </div>
+          )}
+        </div>
+      )}
+
+      {err && (
+        <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>
+      )}
+
+      <div style={{ marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
+        <button onClick={() => setShowAll((v) => !v)} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+          fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+          {showAll ? "Hide the other lists" : `See all ${lists.length} lists`}
+        </button>
+        {showAll && (
+          <div style={{ marginTop: 8 }}>
+            {lists.map((l) => (
+              <div key={l.id} style={{ padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: l.id === (live && live.id) ? C.signal : C.ink }}>
+                    {l.n}. {l.title}
+                  </span>
+                  <span className="mono" style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                    {(l.exercises || []).length} exercises
+                  </span>
+                </div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+                  {(l.exercises || []).map((x) => x.name).join(" · ")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <button onClick={removeProg} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+            fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+            remove this body area
+          </button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function BodyWork({ data, setData, coach, setSheet }) {
+  const [area, setArea] = useState("");
+  const [mins, setMins] = useState("10");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const progs = data.bodywork || [];
+
+  const build = async () => {
+    const want = area.trim();
+    if (!want) return;
+    setBusy(true); setErr(null);
+    try {
+      const out = await designBodyWork({
+        area: want, mins: Number(mins) || 10, apiKey: data.settings?.apiKey,
+        context: [
+          `HER SHOULDER: ${data.settings?.shoulderInjury ? "the right one is rehabilitating and must not be loaded aggressively overhead" : "no current restriction"}.`,
+          `WHAT SHE HAS SAID SHE WANTS TO BE ABLE TO DO: ${(data.goals || []).filter((g) => g.status !== "won" && g.status !== "retired").map((g) => g.text).join("; ") || "nothing recorded"}.`,
+          `SHE ALREADY HAS BODY WORK RUNNING FOR: ${progs.map((p) => p.area).join(", ") || "nothing else"} — do not duplicate those.`,
+        ].join("\n"),
+      });
+      setData((d) => ({ ...d, bodywork: [...(d.bodywork || []), {
+        id: newId(), area: out.area, line: out.line, mins: Number(mins) || 10,
+        created: coach.t, lists: out.lists, log: {}, rounds: [], status: "active" }] }));
+      setArea("");
+    } catch (e) {
+      setErr(e.message === "no-key"
+        ? "This one needs your Anthropic key, which lives in Settings. Everything else in the app works without it."
+        : "I couldn't reach the coach to build it. Nothing has changed — try again in a minute.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <Eyebrow color={C.signal}>Body work</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" }}>
+        Ten lists, one body area
+      </h1>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, marginBottom: 18 }}>
+        Written work you do after a session, aimed at one part of you that needs attention. Ten
+        different lists, one per training day, all after the same thing but with different exercises,
+        different tools and different angles — so the big muscles, the small ones, the tendons and
+        the ligaments all get reached rather than the same three movements ten times. Add as many
+        body areas as you want; each keeps its own ten.
+      </div>
+
+      {progs.map((prog) => (
+        <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
+          coach={coach} setSheet={setSheet} />
+      ))}
+
+      <Card style={{ background: C.pist }}>
+        <Eyebrow color={C.signal}>{progs.length ? "Another body area" : "Ask your coach for a set"}</Eyebrow>
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "4px 0 12px" }}>
+          Say which part of you needs work, in your own words — "stronger shoulders", "my lower back",
+          "the whole of my hips". The coach writes ten lists from it.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 10 }}>
+          <AutoText value={area} onChange={setArea}
+            placeholder="Stronger shoulders, all the small muscles too"
+            style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
+          <MicButton onText={setArea} current={area} />
+        </div>
+        <Field label="Minutes per list" unit="min" value={mins} onChange={setMins} />
+        <Btn kind="signal" onClick={build} disabled={busy || !area.trim()}>
+          {busy ? "Writing your ten lists…" : "Design ten lists"}
+        </Btn>
+        {err && <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
+          It takes about half a minute and costs a few cents. Everything it writes is yours to edit
+          or delete afterwards, and nothing here is ever thrown away when a new round is designed.
+        </div>
+      </Card>
+    </div>
+  );
 }
 
 export default function App() {
