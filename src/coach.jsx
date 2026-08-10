@@ -2932,7 +2932,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 78";
+const BUILD = "10 August 2026 · 79";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7770,6 +7770,95 @@ function noteHistory(data, kind, id, skip) {
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
+/* EVERY NOTE SHE HAS EVER WRITTEN, GROUPED BY THE EXERCISE IT BELONGS TO.
+   Her report, 10 August: "All the notes I've entered before — I don't know
+   where they go, I don't know where they come from, I don't know how to
+   retrieve them, I don't know whether they are reflected on the coach or not.
+   I cannot see anything."
+
+   The gathering existed but only inside Progress, and it did not know about
+   the body-work exercises at all. One function now, used by the sheet that
+   opens from every note box AND by the Progress fold, and it covers every
+   place a note can be written. */
+const allWritten = (data, coach) => {
+  const groups = [];
+  const seen = {};
+  const add = (key, label, rows) => {
+    if (!rows || !rows.length) return;
+    if (!seen[key]) { seen[key] = { key, label, rows: [] }; groups.push(seen[key]); }
+    seen[key].rows.push(...rows);
+  };
+  (data.fields?.weekly || []).forEach((f) => add(f.id, f.label, noteHistory(data, "weekly", f.id)));
+  (data.fields?.monthly || []).forEach((f) => add(f.id, f.label, noteHistory(data, "monthly", f.id)));
+  ((coach && coach.mobTests) || data.mobTests || []).forEach((m) =>
+    add("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
+  ((coach && coach.drills) || data.drills || []).forEach((x) =>
+    add("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
+  /* the body-area lists, which nothing was reading */
+  (data.bodywork || []).forEach((pg) => {
+    const seenIds = {};
+    [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))].forEach((l) => {
+      (l.exercises || []).forEach((ex) => {
+        if (seenIds[ex.id]) return;
+        seenIds[ex.id] = true;
+        add("bw:" + ex.id, `${ex.name} · ${pg.area}`,
+          noteHistory(data, "drill", `bw:${pg.id}:${ex.id}`));
+      });
+    });
+  });
+  (data.goals || []).forEach((g) => add("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
+  groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
+  groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
+  return { groups, total: groups.reduce((n, g) => n + g.rows.length, 0) };
+};
+
+function WrittenSheet({ data, coach }) {
+  const { groups, total } = allWritten(data, coach);
+  return (
+    <div>
+      <Eyebrow color={C.signal}>Everything you've written</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 400, lineHeight: 1.15, margin: "2px 0 8px" }}>
+        Your own words, kept
+      </h1>
+      <div style={{ fontSize: 12.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 }}>
+        Every word you have written against an exercise, anywhere in the app — the battery, the
+        mobility check, your body work, your goals — kept under the exercise it belongs to, newest
+        first. Nothing here is ever deleted. <strong style={{ color: C.ink, fontWeight: 600 }}>The
+        coach reads all of it before it answers you</strong>, and it is read again at the end of
+        every month when the next block is designed.
+      </div>
+      {!groups.length ? (
+        <Card>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+            Nothing yet. Anything you type in the box under an exercise lands here and stays.
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <div className="mono" style={{ fontSize: 10, color: C.muted, marginBottom: 10,
+            letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            {total} note{total === 1 ? "" : "s"} · {groups.length} exercise{groups.length === 1 ? "" : "s"}
+          </div>
+          {groups.map((gr, i) => (
+            <div key={gr.key} style={{ padding: "10px 0",
+              borderTop: i ? `1px solid ${C.line}` : "none" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 5 }}>{gr.label}</div>
+              {gr.rows.map((r, j) => (
+                <div key={j} style={{ marginBottom: 7 }}>
+                  <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                    {dayAndMonth(r.date)}{r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""}
+                  </span>
+                  <div style={{ fontSize: 13, lineHeight: 1.55, color: C.ink }}>{r.text}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 /* Folded, because eight months of notes under every row would bury the row —
    but one tap away, and the count is on the button so she knows it is there. */
 function NotePast({ rows }) {
@@ -7798,7 +7887,7 @@ function NotePast({ rows }) {
   );
 }
 
-function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask }) {
+function ExerciseNote({ value, onChange, label = "Anything wrong with this one?", history, ask, seeAll }) {
   const has = !!String(value || "").trim();
   const [open, setOpen] = useState(has);
   if (!open) return (
@@ -7824,7 +7913,17 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
           says so, and hands it straight to the coach with the exercise
           attached, so the answer is about THIS movement. */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 2 }}>
-        <span className="mono" style={{ fontSize: 10, color: C.moss }}>saved as you type</span>
+        {/* "I don't know where they go... I don't know how to retrieve them."
+            So the box says where, and the way there is the same line. */}
+        {seeAll ? (
+          <button onClick={seeAll} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+            fontSize: 10.5, color: C.moss, fontFamily: "'IBM Plex Mono', monospace" }}>
+            saved · see everything you've written →
+          </button>
+        ) : (
+          <span className="mono" style={{ fontSize: 10, color: C.moss }}>saved as you type</span>
+        )}
         {ask && String(value || "").trim() !== "" && (
           <button onClick={() => ask(String(value || "").trim())} className="tap" style={{
             border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
@@ -7839,7 +7938,7 @@ function ExerciseNote({ value, onChange, label = "Anything wrong with this one?"
   );
 }
 
-const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
+const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
   if (f.type === "note") return (
     <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
   );
@@ -7940,7 +8039,7 @@ const AssessInput = ({ f, form, set, pb, target, history, ask }) => {
           face a problem." A number cannot carry that, and the one note at the
           bottom of the sitting cannot say WHICH exercise it was about. */}
       <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
-        history={history} ask={ask} />
+        history={history} ask={ask} seeAll={seeAll} />
       <HowTo f={f} />
     </div>
   );
@@ -8157,7 +8256,7 @@ function SetsTap({ value, onChange }) {
    the asymmetry flags all read `data.mobility`, and moving that would throw
    away the shape those calculations depend on for nothing she would see.
 ========================================================================== */
-function MobRow({ m, e, put, history, ask }) {
+function MobRow({ m, e, put, history, ask, seeAll }) {
   /* HER REPORT, 10 August: "in the mobility check you didn't put neither
      explanation of how it's done nor the link nor the photo. Although these
      are the ones that will really require to see a progression."
@@ -8209,12 +8308,12 @@ function MobRow({ m, e, put, history, ask }) {
         <Field label="Score" unit={String(m.unit || "").replace("/", "of ")} value={e.v || ""}
           onChange={(v) => put(m.id, { v })} />
       )}
-      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} history={history} ask={ask} />
+      <ExerciseNote value={e.note} onChange={(v) => put(m.id, { note: v })} history={history} ask={ask} seeAll={seeAll} />
     </Card>
   );
 }
 
-function MobilitySheet({ data, setData, coach, close }) {
+function MobilitySheet({ data, setData, coach, close, setSheet }) {
   const wk = coach.ws;
   /* HER REPORT, 10 August: "I inputted the standing fold and the seated fold
      and they both couldn't save. I don't see them anywhere. And again, no
@@ -8250,7 +8349,10 @@ function MobilitySheet({ data, setData, coach, close }) {
 
       {(coach.mobTests || []).map((m) => (
         <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put}
-          history={noteHistory(data, "mobility", m.id, wk)} />
+          history={noteHistory(data, "mobility", m.id, wk)}
+          seeAll={setSheet ? () => setSheet({ kind: "written" }) : undefined}
+          ask={setSheet ? (txt) => setSheet({ kind: "chat", about: m.label,
+            seed: `About ${m.label}: ${txt}` }) : undefined} />
       ))}
 
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
@@ -8687,7 +8789,8 @@ function DrillsCard({ coach, setSheet, data, setData }) {
           })()}
           {setData && (
             <ExerciseNote value={notes[d.id]} onChange={(v) => putNote(d.id, v)}
-              history={noteHistory(data, "drill", d.id, coach.t)} />
+              history={noteHistory(data, "drill", d.id, coach.t)}
+              seeAll={setSheet ? () => setSheet({ kind: "written" }) : undefined} />
           )}
           <div style={{ marginTop: 6 }}><HowTo f={d} /></div>
         </div>
@@ -8867,7 +8970,7 @@ function BodyWorkCard({ log, write, isToday }) {
   );
 }
 
-function Today({ data, setData, coach, setSheet }) {
+function Today({ data, setData, coach, setSheet, goTab }) {
   /* one note a day, taken from the pool and never handed out twice */
   useEffect(() => {
     if (data.notes?.[coach.t]) return;
@@ -9229,8 +9332,29 @@ function Today({ data, setData, coach, setSheet }) {
           It comes up as a real card whenever any of it is for a goal. Pure
           mobility filler stays folded below, because that changes with the
           scores and does not need announcing every day. */}
-      {isToday && coach.dailyDrills.goalCount > 0 && (
-        <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} />
+      {/* IT LIVES IN THE BODY TAB NOW. Her instruction, 10 August: "We can
+          remove the things you want to do from the landing page now." It is
+          the same kind of work as the body-area lists and belongs in the same
+          place — one home for everything you do after a session. What stays
+          here is the doorway, so Today still says it is waiting. */}
+      {isToday && coach.dailyDrills.list.length > 0 && (
+        <Card style={{ background: C.mint }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ flex: 1 }}>
+              <Eyebrow color={C.moss}>After your session</Eyebrow>
+              <div style={{ fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45 }}>
+                {coach.dailyDrills.mins} minutes waiting in Body
+                {coach.dailyDrills.goalCount > 0
+                  ? ` — ${coach.dailyDrills.goalCount === 1 ? "one movement" : coach.dailyDrills.goalCount + " movements"} for what you want to be able to do`
+                  : " — chosen by what your mobility scores say is short"}
+              </div>
+            </span>
+            <button onClick={() => goTab && goTab("body")} className="tap" style={{
+              padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
+              fontWeight: 600, border: "none", background: C.moss, color: C.chalk,
+              fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
+          </div>
+        </Card>
       )}
 
       {/* And when there is no goal at all, the ten minutes cannot exist — so
@@ -9891,10 +10015,8 @@ function Today({ data, setData, coach, setSheet }) {
             node: <MobilityDoor coach={coach} setSheet={setSheet} /> },
           /* Only the mobility-only version lives down here — anything with
              goal work in it is a card on the page above (rule 11). */
-          { id: "drills", title: "Today's ten minutes",
-            count: coach.dailyDrills.goalCount ? 0 : coach.dailyDrills.list.length,
-            node: coach.dailyDrills.list.length && !coach.dailyDrills.goalCount
-              ? <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} /> : null },
+          /* The ten minutes moved to the Body tab on 10 August. Nothing is
+             shown here any more — the card above is the doorway. */
           { id: "body", title: "Body work",
             node: <BodyWorkCard log={log} write={write} isToday={isToday} /> },
         ]} />
@@ -10597,21 +10719,7 @@ function Progress({ data, setData, coach, setSheet }) {
           exercise it was written against, newest first — so a tight back in
           June is findable in August, next to the same exercise. */}
       {(() => {
-        const groups = [];
-        const seen = {};
-        const addRows = (id, label, rows) => {
-          if (!rows || !rows.length) return;
-          if (!seen[id]) { seen[id] = { key: id, label, rows: [] }; groups.push(seen[id]); }
-          seen[id].rows.push(...rows);
-        };
-        (data.fields?.weekly || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "weekly", f.id)));
-        (data.fields?.monthly || []).forEach((f) => addRows(f.id, f.label, noteHistory(data, "monthly", f.id)));
-        (coach.mobTests || []).forEach((m) => addRows("mob:" + m.id, m.label, noteHistory(data, "mobility", m.id)));
-        (coach.drills || []).forEach((x) => addRows("dr:" + x.id, x.label, noteHistory(data, "drill", x.id)));
-        (data.goals || []).forEach((g) => addRows("goal:" + g.id, g.text, noteHistory(data, "goal", g.id)));
-        groups.forEach((g) => g.rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)));
-        groups.sort((a, b) => (a.rows[0].date < b.rows[0].date ? 1 : a.rows[0].date > b.rows[0].date ? -1 : 0));
-        const total = groups.reduce((n, g) => n + g.rows.length, 0);
+        const { groups, total } = allWritten(data, coach);
         return (
           <Fold title="Everything you've written"
             note={total
@@ -16060,6 +16168,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
               history={noteHistory(data, which, f.id, key)}
               ask={(txt) => setSheet({ kind: "chat", about: f.label,
                 seed: `About ${f.label}: ${txt}` })}
+              seeAll={() => setSheet({ kind: "written" })}
               pb={f.better === "up" ? coach.pbs[f.id] : null} />
             {/* EDIT IT WHERE IT IS. Rename it, rewrite how it is measured, or
                 take it out — without hunting for a settings screen (rule 11). */}
@@ -16178,7 +16287,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
               <MobRow m={m} e={mob[m.id] || {}} put={putMob}
                 history={noteHistory(data, "mobility", m.id, coach.ws)}
                 ask={(txt) => setSheet({ kind: "chat", about: m.label,
-                  seed: `About ${m.label}: ${txt}` })} />
+                  seed: `About ${m.label}: ${txt}` })}
+                seeAll={() => setSheet({ kind: "written" })} />
               <button onClick={() => setSheet({ kind: "edit-mobility", focus: m.id })}
                 className="tap" style={{
                   border: "none", background: "transparent", cursor: "pointer", padding: "0 0 10px",
@@ -16379,7 +16489,7 @@ function CoachApp() {
 
         {!ready ? <div style={{ padding: "60px 0", textAlign: "center", color: C.muted, fontSize: 13 }}>Loading…</div> : (
           <>
-            {tab === "today" && <Today data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+            {tab === "today" && <Today data={data} setData={setData} coach={coach} setSheet={setSheet} goTab={go} />}
             {tab === "plan" && <Workouts data={data} setData={setData} coach={coach} />}
             {tab === "body" && <BodyWork data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "progress" && <Progress data={data} setData={setData} coach={coach} setSheet={setSheet} />}
@@ -16445,8 +16555,10 @@ function CoachApp() {
             <ProfileSheet data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "vitals" ? (
             <VitalsAll coach={coach} setSheet={setSheet} />
+          ) : sheet.kind === "written" ? (
+            <WrittenSheet data={data} coach={coach} />
           ) : sheet.kind === "mobility" ? (
-            <MobilitySheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
+            <MobilitySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "review" ? (
             <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "briefing" ? (
@@ -16808,7 +16920,8 @@ CONSTRAINTS THAT DO NOT BEND.
 - Write it so she can do it from the page alone, without looking anything up.
 - Plain, warm, specific language. No jargon she would have to decode.
 
-Return ONLY a JSON object, no prose around it, no code fence:
+Return ONLY a JSON object, no prose around it, no code fence. NOTHING before the { and
+nothing after the }:
 {
   "area": "the body area, two or three words",
   "line": "one or two sentences to her about what these ten lists are doing and in what order",
@@ -16826,32 +16939,68 @@ Return ONLY a JSON object, no prose around it, no code fence:
     }
   ]
 }
-Exactly ten lists. Each list's exercises must total roughly the minutes given.`;
+Return exactly the number of lists asked for. Each list's exercises must total roughly
+the minutes given. Keep every "how" to two or three sentences — she needs to be able to
+do it from the page, not read an essay.`;
 
-const designBodyWork = async ({ area, mins, apiKey, context }) => {
+/* ---- WHY NOTHING CAME OUT THE FIRST TIME -----------------------------
+   Her report, 10 August: "I asked for ten lists and nothing came out."
+
+   Ten lists of five written exercises, each with a protocol, is far more than
+   one reply can hold. The response ran past the limit, stopped mid-object, the
+   JSON would not parse, and the whole thing was thrown away — ten lists' worth
+   of work discarded because the tenth was incomplete.
+
+   So it is asked for in halves, and each half that arrives is KEPT. Five lists
+   is a usable rotation on its own; if the second half fails she has five and is
+   told so, rather than nothing and a shrug (rule 23). */
+const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid }) => {
   const raw = await askModel({
     system: BODYWORK_SYSTEM,
-    messages: [{ role: "user", content:
-      `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"\nMINUTES PER LIST: ${mins}\n\n${context || ""}` }],
+    messages: [{ role: "user", content: [
+      `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"`,
+      `MINUTES PER LIST: ${mins}`,
+      `HOW MANY LISTS TO WRITE NOW: ${count}. These are lists ${startAt} to ${startAt + count - 1} of ten.`,
+      (avoid && avoid.length)
+        ? `LISTS ALREADY WRITTEN FOR THIS AREA — do not repeat their exercises, their tools or their emphasis:\n${avoid.join("\n")}`
+        : "",
+      context || "",
+    ].filter(Boolean).join("\n\n") }],
     apiKey, maxTokens: 8000,
   });
   const out = parseReview(raw);
   if (!out || !Array.isArray(out.lists) || !out.lists.length) throw new Error("unreadable");
-  const lists = out.lists.slice(0, 10).map((l, i) => ({
-    id: newId(), n: i + 1,
-    title: String(l.title || `List ${i + 1}`),
-    focus: String(l.focus || ""),
-    exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
-      id: newId(),
-      name: String(x.name || "Exercise"),
-      tool: String(x.tool || ""),
-      dose: String(x.dose || ""),
-      mins: Number(x.mins) || 2,
-      how: String(x.how || ""),
-      targets: String(x.targets || ""),
-    })),
-  }));
-  return { area: String(out.area || area), line: String(out.line || ""), lists };
+  return out;
+};
+
+const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
+  id: newId(), n: startAt + i,
+  title: String(l.title || `List ${startAt + i}`),
+  focus: String(l.focus || ""),
+  exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
+    id: newId(),
+    name: String(x.name || "Exercise"),
+    tool: String(x.tool || ""),
+    dose: String(x.dose || ""),
+    mins: Number(x.mins) || 2,
+    how: String(x.how || ""),
+    targets: String(x.targets || ""),
+  })),
+}));
+
+const designBodyWork = async ({ area, mins, apiKey, context, onProgress }) => {
+  const say = (m) => { try { onProgress && onProgress(m); } catch (e) { /* nothing */ } };
+  say("Writing lists 1 to 5…");
+  const first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [] });
+  let lists = shapeLists(first.lists.slice(0, 5), 1);
+  let partial = false;
+  try {
+    say("Writing lists 6 to 10…");
+    const second = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 6,
+      avoid: lists.map((l) => `${l.n}. ${l.title} — ${(l.exercises || []).map((x) => x.name).join(", ")}`) });
+    lists = [...lists, ...shapeLists(second.lists.slice(0, 5), lists.length + 1)];
+  } catch (e) { partial = true; }
+  return { area: String(first.area || area), line: String(first.line || ""), lists, partial };
 };
 
 /* Which list comes next, and how far round she is. Kept as plain arithmetic so
@@ -16902,7 +17051,8 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
       <ExerciseNote value={notes[noteId]} onChange={putNote}
         history={noteHistory(data, "drill", noteId, today)}
         ask={(txt) => setSheet({ kind: "chat", about: ex.name,
-          seed: `About ${ex.name} in my ${prog.area} work: ${txt}` })} />
+          seed: `About ${ex.name} in my ${prog.area} work: ${txt}` })}
+        seeAll={() => setSheet({ kind: "written" })} />
       {!editing ? (
         <button onClick={() => setEditing(true)} className="tap" style={{
           border: "none", background: "transparent", cursor: "pointer", padding: "4px 0 0",
@@ -17112,11 +17262,18 @@ function BodyWork({ data, setData, coach, setSheet }) {
   const [pick, setPick] = useState("all");
   const progs = data.bodywork || [];
   const hasTen = (coach.dailyDrills?.list || []).length > 0;
+  /* everything that has a list for today: her goal ten minutes, and one list
+     from each body area */
+  const parts = [...(hasTen ? ["goals"] : []), ...progs.map((pg) => pg.id)];
+  /* With one part there is nothing to choose between, so "everything" is not
+     offered and that part shows on its own. */
+  const showing = parts.length > 1 ? pick : (pick === "new" ? "new" : "all");
 
+  const [step, setStep] = useState("");
   const build = async () => {
     const want = area.trim();
     if (!want) return;
-    setBusy(true); setErr(null);
+    setBusy(true); setErr(null); setStep("");
     try {
       const out = await designBodyWork({
         area: want, mins: Number(mins) || 10, apiKey: data.settings?.apiKey,
@@ -17125,17 +17282,22 @@ function BodyWork({ data, setData, coach, setSheet }) {
           `WHAT SHE HAS SAID SHE WANTS TO BE ABLE TO DO: ${(data.goals || []).filter((g) => g.status !== "won" && g.status !== "retired").map((g) => g.text).join("; ") || "nothing recorded"}.`,
           `SHE ALREADY HAS BODY WORK RUNNING FOR: ${progs.map((p) => p.area).join(", ") || "nothing else"} — do not duplicate those.`,
         ].join("\n"),
+        onProgress: setStep,
       });
       setData((d) => ({ ...d, bodywork: [...(d.bodywork || []), {
         id: newId(), area: out.area, line: out.line, mins: Number(mins) || 10,
         created: coach.t, lists: out.lists, log: {}, rounds: [], status: "active" }] }));
       setArea("");
+      setPick("all");
+      if (out.partial) setErr(`I got ${out.lists.length} lists written and the rest didn't come through. ${out.lists.length} is a real rotation — use them, and ask again whenever you want the other ${10 - out.lists.length}.`);
     } catch (e) {
       setErr(e.message === "no-key"
         ? "This one needs your Anthropic key, which lives in Settings. Everything else in the app works without it."
-        : "I couldn't reach the coach to build it. Nothing has changed — try again in a minute.");
+        : e.message === "unreadable"
+        ? "The coach answered but I couldn't read it back as lists. Nothing has changed — try again, and if it happens twice tell me and I'll look at it."
+        : "I couldn't reach the coach to build it. Nothing has changed — check you have a connection and try again.");
     }
-    setBusy(false);
+    setBusy(false); setStep("");
   };
 
   return (
@@ -17154,11 +17316,21 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
         </InfoNote>
       </div>
 
-      {(progs.length > 0 || hasTen) && (
+      {/* HER QUESTION, 10 August: "Why do you have two chips having the same
+          exercises — the Today one and the What you want to do one?"
+
+          Because with only one thing to show, "everything today" and "that one
+          thing" ARE the same list, and two chips for one list is nonsense. The
+          "everything" chip only exists when there is more than one thing to
+          gather. And yes to the rest of her question: on that chip she gets
+          her ten minutes for what she wants to be able to do, AND today's list
+          from each body area, stacked — the goal work stays the same until she
+          changes a goal, the body lists move on every training day. */}
+      {parts.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
           {[
-            ["all", progs.length + (hasTen ? 1 : 0) > 1 ? "Today, all of it" : "Today"],
-            ...(hasTen ? [["goals", "The things you want to do"]] : []),
+            ...(parts.length > 1 ? [["all", "Everything today"]] : []),
+            ...(hasTen ? [["goals", "What you want to do"]] : []),
             ...progs.map((pg) => [pg.id, pg.area]),
             ["new", "+ another area"],
           ].map(([id, label]) => (
@@ -17176,20 +17348,20 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
       {/* Her ten minutes for the things she wants to be able to do lives here
           too now, alongside the body areas — same kind of work, same place to
           find it. It stays on Today as well; she asked for it in both. */}
-      {(pick === "all" || pick === "goals") && hasTen && (
+      {(showing === "all" || showing === "goals") && hasTen && (
         <div style={{ marginBottom: 14 }}>
           <DrillsCard coach={coach} setSheet={setSheet} data={data} setData={setData} />
         </div>
       )}
 
       {progs
-        .filter((prog) => pick === "all" || pick === prog.id)
+        .filter((prog) => showing === "all" || showing === prog.id)
         .map((prog) => (
           <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
             coach={coach} setSheet={setSheet} />
         ))}
 
-      {(pick === "new" || (!progs.length && !hasTen)) && (
+      {(showing === "new" || (!progs.length && !hasTen)) && (
       <Card style={{ background: C.pist }}>
         <Eyebrow color={C.signal}>{progs.length ? "Another body area" : "Ask your coach for a set"}</Eyebrow>
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "4px 0 12px" }}>
@@ -17204,8 +17376,14 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
         </div>
         <Field label="Minutes per list" unit="min" value={mins} onChange={setMins} />
         <Btn kind="signal" onClick={build} disabled={busy || !area.trim()}>
-          {busy ? "Writing your ten lists…" : "Design ten lists"}
+          {busy ? (step || "Writing your ten lists…") : "Design ten lists"}
         </Btn>
+        {busy && (
+          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 8, lineHeight: 1.5 }}>
+            It writes them in two halves and keeps whichever arrive. Give it up to a minute — leaving
+            this screen while it works will lose it.
+          </div>
+        )}
         {err && <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>}
         <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
           It takes about half a minute and costs a few cents. Everything it writes is yours to edit
