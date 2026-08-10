@@ -1775,7 +1775,7 @@ const reviewPayload = (data, coach) => {
                 var _a;
                 const v = String(dn[id] || "").trim();
                 if (v)
-                    out.push(`${date} ten minutes — ${((_a = (d.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+                    out.push(`${date} ten minutes — ${bwNoteName(d, id) || ((_a = (d.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
             });
         });
         if (!out.length)
@@ -1980,8 +1980,11 @@ const reviewPayload = (data, coach) => {
         });
         return out.join("\n");
     }));
-    S("CONVERSATIONS", rvSafe(() => (d.chats || []).slice(-6).map((ch) => `--- ${ch.date || ""}${ch.about ? ` — ${ch.about}` : ""}\n`
-        + (ch.messages || ch.msgs || []).slice(-14).map((m) => `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || m.content || "").slice(0, 600)}`).join("\n")).join("\n")));
+    S("CONVERSATIONS — every one from the last five weeks, in full. What she says\n"
+        + "here is instruction, not commentary: if she asked for something, changed her\n"
+        + "mind, or told you how she wants to be coached, it binds the month you design.", rvSafe(() => (d.chats || []).filter((ch) => !ch.date || parse(ch.date) >= parse(t) - 35 * 86400000)
+        .map((ch) => `--- ${ch.date || ""}${ch.about ? ` — ${ch.about}` : ""}\n`
+        + (ch.messages || ch.msgs || []).map((m) => `${m.role === "user" ? "SHE" : "COACH"}: ${String(m.text || m.content || "").slice(0, 1500)}`).join("\n")).join("\n")));
     /* THE CLOSED WORLD. The block can only ever be delivered by what is in
        here, so the model has to see not just the names but what each class
        actually reaches — otherwise "no class covers this" is a guess. */
@@ -3141,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 87";
+const BUILD = "10 August 2026 · 88";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7986,6 +7989,19 @@ function HowTo({ f }) {
    `skip` is the sitting she is in right now: today's words are on screen
    already and do not belong in the history of themselves.
    ==========================================================================*/
+/* a note keyed bw:<prog>:<exercise> has a real name — every reader resolves
+   it, so the coach reads "Band external rotation · shoulders", not a raw id */
+function bwNoteName(data, id) {
+    const m = String(id).match(/^bw:([^:]+):(.+)$/);
+    if (!m)
+        return null;
+    const pg = (data.bodywork || []).find((x) => x.id === m[1]);
+    if (!pg)
+        return String(id);
+    const ex = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))]
+        .flatMap((l) => l.exercises || []).find((x) => x.id === m[2]);
+    return `${ex ? ex.name : "an exercise"} · ${pg.area}`;
+}
 function noteHistory(data, kind, id, skip) {
     const d = data || {};
     const out = [];
@@ -10600,7 +10616,7 @@ function FieldEditor({ which, data, setData, close, focus }) {
         React.createElement("h2", { className: "disp", style: { fontSize: 22, fontWeight: 800, margin: "0 0 6px" } }, "What do you want to measure?"),
         React.createElement("p", { style: { fontSize: 12, color: C.muted, margin: "0 0 16px", lineHeight: 1.45 } }, "Tap a row to edit it. Deleting a measure hides it from the form but leaves past entries untouched."),
         React.createElement(Card, { style: { padding: 8 } }, list.map((f, i) => {
-            var _a;
+            var _a, _b;
             return (React.createElement("div", { key: f.id, style: { borderBottom: i < list.length - 1 ? `1px solid ${C.chalk}` : "none" } },
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, padding: "8px 6px" } },
                     React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, [[-1, "▲"], [1, "▼"]].map(([d, ch]) => (React.createElement("button", { key: d, onClick: () => move(i, d), className: "tap", style: {
@@ -10658,6 +10674,7 @@ function FieldEditor({ which, data, setData, close, focus }) {
                             "Left / right separately",
                             f.bilateral ? " ✓" : "")),
                     f.type === "scale" && React.createElement(Field, { label: "Highest value", unit: "", value: f.max || 5, onChange: (v) => patch(f.id, { max: Number(v) || 5 }) }),
+                    React.createElement(Field, { label: "Minutes it takes", unit: "min", value: (_b = f.mins) !== null && _b !== void 0 ? _b : "", onChange: (v) => patch(f.id, { mins: v === "" ? undefined : Number(v) || 0, minsEdited: true }) }),
                     f.type !== "note" && (React.createElement(React.Fragment, null,
                         React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 6 } }, "Direction of progress"),
                         React.createElement("div", { style: { display: "flex", gap: 5 } }, BETTER.map(([v, l]) => (React.createElement("button", { key: String(v), onClick: () => patch(f.id, { better: v }), className: "tap", style: {
@@ -12603,6 +12620,14 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             React.createElement(Field, { label: "Name", unit: "", type: "text", value: item.label, onChange: (v) => (isTest ? patchTest : patchDrill)(item.id, { label: v }) }),
             isTest ? (React.createElement(React.Fragment, null,
                 React.createElement(Field, { label: "Unit", unit: "cm, /10, seconds\u2026", type: "text", value: item.unit || "", onChange: (v) => patchTest(item.id, { unit: v }) }),
+                item.type === "steps" && (React.createElement("div", { style: { marginBottom: 12 } },
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 5 } }, "The steps, one per line"),
+                    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
+                        React.createElement(AutoText, { rows: 4, value: (item.steps || []).join("\n"), onChange: (v) => patchTest(item.id, { steps: v.split("\n"),
+                                max: Math.max(1, v.split("\n").filter((x) => x.trim()).length - 1) }), style: { ...inputStyle, marginBottom: 0, lineHeight: 1.5, fontSize: 12.5 } }),
+                        React.createElement(MicButton, { onText: (v) => patchTest(item.id, { steps: v.split("\n"),
+                                max: Math.max(1, v.split("\n").filter((x) => x.trim()).length - 1) }), current: (item.steps || []).join("\n") })),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 5, lineHeight: 1.45 } }, "Scored 0 for the first line upward. Reword them, add a harder one at the bottom, or take one out \u2014 the top line stays the easiest."))),
                 React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 6 } }, "Which way is progress?"),
                 React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } }, [["higher", "Higher is better"], ["lower", "Lower is better"]].map(([v, l]) => (React.createElement("button", { key: v, onClick: () => patchTest(item.id, { better: v }), className: "tap", style: {
                         flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
@@ -13628,7 +13653,7 @@ ${recentDays.map((d) => { var _a; const w = (_a = data.logs[d]) === null || _a =
                     var _a;
                     const v = String(dn[id] || "").trim();
                     if (v)
-                        out.push(`${date} ${((_a = (data.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
+                        out.push(`${date} ${bwNoteName(data, id) || ((_a = (data.drills || []).find((x) => x.id === id)) === null || _a === void 0 ? void 0 : _a.label) || id}: "${v}"`);
                 });
             });
             return out.slice(0, 20).join(" | ") || "nothing yet";
