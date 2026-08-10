@@ -2927,12 +2927,53 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
   return (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
 };
 
+/* ============================================================================
+   THE SCREEN DOES NOT GO TO SLEEP WHILE SHE IS IN HERE
+   ---------------------------------------------------------------------------
+   HER REPORT, 10 August: "I got this in the middle of talking to my coach
+   because the phone screen slept during my talk, and now it refuses to work
+   again. I asked you to make the screen always working while I am on the app
+   and it shouldn't sleep."
+
+   A phone that sleeps mid-sentence kills the microphone, loses the thread, and
+   then blames her for a permission she never refused. It also sleeps in the
+   middle of a sixty-second hold, which is the whole point of the timer.
+
+   The lock is released by the browser whenever the tab is hidden, so it has to
+   be taken again every time she comes back — that is not a bug, it is how the
+   API works, and forgetting it is why most implementations only work once.
+   ==========================================================================*/
+const useAwake = () => {
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.wakeLock) return;
+    let lock = null, dead = false;
+    const take = async () => {
+      try {
+        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        if (lock && !lock.released) return;
+        lock = await navigator.wakeLock.request("screen");
+        lock.addEventListener && lock.addEventListener("release", () => { lock = null; });
+      } catch (e) { /* refused, or the phone is in low power — nothing to do */ }
+    };
+    const back = () => { if (!dead) take(); };
+    take();
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", back);
+    if (typeof window !== "undefined") window.addEventListener("focus", back);
+    return () => {
+      dead = true;
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", back);
+      if (typeof window !== "undefined") window.removeEventListener("focus", back);
+      try { lock && lock.release && lock.release(); } catch (e) { /* already gone */ }
+    };
+  }, []);
+};
+
 /* ---- WHICH VERSION IS THIS PHONE ACTUALLY RUNNING? -------------------
    The app updates itself in the background, which is right, but it meant
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 80";
+const BUILD = "10 August 2026 · 81";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -12870,6 +12911,8 @@ function useDictation(onText) {
      "carried" holds everything completed in earlier bursts of the same
      dictation. What she is saying right now is added to it, never instead
      of it. */
+  const everRan = useRef(false);        /* has it ever actually started here   */
+  const recovering = useRef(false);     /* mid-repair; onend must not restart  */
   const carried = useRef("");           /* bursts already finished, this run   */
   const heardNow = useRef("");          /* the burst in progress               */
 
@@ -12888,7 +12931,7 @@ function useDictation(onText) {
     r.continuous = true;
     r.interimResults = true;
     r.lang = "en-GB";
-    r.onstart = () => { startedAt.current = Date.now(); setProblem(null); };
+    r.onstart = () => { startedAt.current = Date.now(); everRan.current = true; setProblem(null); };
     r.onresult = (e) => {
       /* Rebuilt from the whole list every time, never accumulated between
          events — so a browser that repeats itself cannot double anything. */
@@ -12898,6 +12941,7 @@ function useDictation(onText) {
       cb.current(joinSpeech(carried.current, out));
     };
     r.onend = () => {
+      if (recovering.current) { setListening(false); return; }
       if (!wants.current) { setListening(false); return; }
       const lasted = Date.now() - (startedAt.current || 0);
       shortEnds.current = lasted < 900 ? shortEnds.current + 1 : 0;
@@ -12921,7 +12965,15 @@ function useDictation(onText) {
       shortEnds.current = 0;
       setListening(false);
       if (e?.error === "not-allowed" || e?.error === "service-not-allowed")
-        setProblem("Microphone permission was refused. Allow it for this site in your browser settings.");
+        /* The same error code covers "she said no" and "the phone took the
+           microphone away" — a screen that slept mid-sentence is the second,
+           and telling her she refused it is both wrong and irritating. If the
+           session had been running, say what actually happened. */
+        setProblem(everRan.current
+          ? "The phone took the microphone back — usually the screen going to sleep. Tap the mic and carry on; everything you had already said is still in the box."
+          : "The microphone is blocked for this site. Allow it in your browser settings — in Chrome, the padlock beside the address, then Permissions.");
+      else if (e?.error === "audio-capture")
+        setProblem("The microphone stopped responding. Tap it again — and if it keeps happening, close the app and reopen it.");
       else if (e?.error === "network") setProblem("Dictation needs a connection. It's the one part of the app that does.");
       else if (e?.error) setProblem(`Dictation stopped: ${e.error}`);
     };
@@ -12932,7 +12984,11 @@ function useDictation(onText) {
   const toggle = () => {
     const r = recRef.current;
     if (!r) return;
-    if (listening) {
+    /* Decided from the INTENT, not from the rendered flag. After the phone
+       slept, the rendered flag could say false while a session was still open — so
+       a tap read as "start", start() threw, and the button did nothing at all.
+       `wants` is the truth about whether she means to be talking. */
+    if (wants.current) {
       wants.current = false;
       try { r.stop(); } catch (err) { /* already stopped */ }
       setListening(false);
@@ -12941,8 +12997,26 @@ function useDictation(onText) {
       shortEnds.current = 0;
       carried.current = "";
       heardNow.current = "";
-      try { r.start(); setListening(true); setProblem(null); }
-      catch (err) { wants.current = false; setListening(false); }
+      setProblem(null);            /* a new tap clears the last complaint */
+      /* THE PHONE WENT TO SLEEP AND THE SESSION WAS LEFT HALF-OPEN.
+         start() then throws "already started", which used to be swallowed —
+         so the button did nothing at all and the old message stayed on screen,
+         saying permission was refused when it never was. Close it properly and
+         try once more. */
+      try { r.start(); setListening(true); }
+      catch (err) {
+        recovering.current = true;
+        try { r.abort && r.abort(); } catch (e2) { /* nothing to close */ }
+        setTimeout(() => {
+          recovering.current = false;
+          if (!wants.current) return;
+          try { r.start(); setListening(true); setProblem(null); }
+          catch (e3) {
+            wants.current = false; setListening(false);
+            setProblem("The microphone is stuck — close the app and open it again, and it will come back. Nothing you have typed is lost.");
+          }
+        }, 350);
+      }
     }
   };
   return { listening, supported, toggle, problem };
@@ -17505,6 +17579,9 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
 
 export default function App() {
   useEffect(() => { keepCurrent(); }, []);
+  /* the screen stays awake for as long as she is in here (rule 22 in spirit:
+     friction is why people stop, and a dead screen mid-sentence is friction) */
+  useAwake();
   return (
     <ErrorBoundary>
       <CoachApp />
