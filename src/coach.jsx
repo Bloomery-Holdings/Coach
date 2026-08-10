@@ -957,7 +957,7 @@ const sameIssue = (a, b) => {
    renaming a test keeps every reading it has ever had (rule 12, rule 13). */
 const SEED_MOBILITY = [
   { id: "sitrise", mins: 0.75, inWeekly: true, label: "Sit-to-rise", unit: "/10", better: "higher", max: 10,
-    how: "Sit down cross-legged on the floor and stand back up. Start with 10 points: lose one for each hand, forearm, knee or side of leg you use for support, on the way down and on the way up. Half a point for wobbling.",
+    how: "Sit down cross-legged on the floor and stand back up. Start with 10 points: lose one for each hand, forearm, knee or side of leg you use for support, on the way down and on the way up. Half a point for wobbling. USE WHATEVER SUPPORT YOU NEED — needing a hand down and a hand up is a 8, not a failure, and that is exactly what the test is for. There is no version of this you cannot score.",
     why: "This is the single most-studied whole-body functional test there is — hip mobility, ankle range, single-leg strength and trunk control in one movement. It is also exactly the thing that quietly disappears in your fifties if nobody measures it.",
     needs: ["legs", "core"], drills: ["deepsquat", "hipopen", "ankle", "getup"] },
 
@@ -2443,6 +2443,18 @@ const bestEntryFor = (f, stores) => {
    Everything appears in the ~30 min monthly.
    role: 'anchor' | 'rotating'   measure: number | weightreps | time | scale | note
 --------------------------------------------------------------------------- */
+/* EVERY TEST IS TIME-BOXED, LOADED OR NOT — her instruction, 10 August.
+
+   The loaded tests used to carry no clock, on the reasoning that the weight is
+   what stops you rather than the minute. Her objection is the better one: a
+   test with a clock and a test without one are not the same kind of number,
+   and a battery that mixes them cannot be read straight down the page. "So
+   when we have kilogram, we don't have seconds. Doesn't make sense."
+
+   So everything is now weight-and-reps-in-a-minute, or reps-in-a-minute, or a
+   hold in seconds. Two-sided tests get thirty seconds a side. The comparison
+   week to week is the whole value of a battery, and it is only honest if the
+   conditions are identical — which now includes the clock. */
 const SEED_WEEKLY = [
   /* ---- LOWER ---- */
   { id: "squat", mins: 1.5, cap: "lower",    label: "Squat",            role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: true,
@@ -2461,8 +2473,8 @@ const SEED_WEEKLY = [
   { id: "splitsq", mins: 1.5, cap: "lower",    label: "Split squat",      role: "rotating", type: "weightreps", unit: "kg x reps in 30s each side", better: "up", inWeekly: false, bilateral: true ,
     how: "Thirty seconds a side, holding a weight — same weight in each hand, or one at your chest, and the same setup every time. One foot forward, one back, about a stride apart. Lower until the back knee is just off the floor, stand up. Count each side separately: the weight goes in once, the reps go in twice, left and right, because the gap between them is the thing this test exists to find.",
     why: "Single-leg strength, which is what walking actually is. It also exposes a left-right difference that a two-legged squat quietly hides." },
-  { id: "goblet", mins: 1.5, cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Hold a dumbbell or kettlebell at your chest, elbows down. Same depth rule as the bodyweight squat. As many as you can with that weight — no clock here, because the weight is what stops you rather than the time, and putting a clock on it would turn a strength test into a fitness test.",
+  { id: "goblet", mins: 1.5, cap: "lower",    label: "Goblet squat",     role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Hold a dumbbell or kettlebell at your chest, elbows down, same depth rule as the bodyweight squat. Log the weight and how many you got in the minute. Same weight every time, or the number is not comparable.",
     why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
@@ -2470,28 +2482,28 @@ const SEED_WEEKLY = [
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
     how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
     why: "Upper-body pressing strength and trunk stiffness in one. Because it is your own bodyweight, it also quietly tracks any change in body composition." },
-  { id: "press", mins: 1.5, cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. As many as you can with that weight, each arm counted separately. No clock: the weight is the limit, not the minute.",
+  { id: "press", mins: 1.5, cap: "push",     label: "Shoulder press",   role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Standing or seated, a dumbbell in each hand at shoulder height. Press overhead until your elbows are straight, lower under control. Log the weight and the reps in the minute. Stop early if the shoulder objects and log what you got — a short honest number beats a forced one.",
     why: "Overhead pressing is the movement your right shoulder is most sensitive to, which is exactly why it is measured rather than avoided. The reps are capped by the shoulder, not the arm — if the right side lags, that is the reading." },
-  { id: "raise", mins: 1.5, cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. As many as you can with that weight, per side. No clock — the weight decides when you stop.",
+  { id: "raise", mins: 1.5, cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. Log the weight and the reps in the minute.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
   { id: "dip", mins: 1.25, cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
     why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
 
   /* ---- PULL ---- */
-  { id: "cablerow", mins: 1.5, cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. As many as you can with that weight. No clock: with a real load on it, the load is the test.",
+  { id: "cablerow", mins: 1.5, cap: "pull",     label: "Cable row",        role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Seated, chest up, pull the handle to your lower ribs, elbows past your body, and let it back out under control. Log the weight and the reps in the minute. Same seat height and same handle every time.",
     why: "Pulling strength, and the direct counterweight to everything you press. Backs off first when people stop training, and it is the strongest lever you have on posture." },
   { id: "bandrow", mins: 1.25, cap: "pull",     label: "Band row",         role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Band anchored at chest height, arms straight. Pull the handles to your ribs, squeeze, and let it out slowly. Same band every time or the number means nothing.",
     why: "The version that needs no gym. Its whole job is that the pull can still be measured on a week away from the machines." },
-  { id: "latpull", mins: 1.5, cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. As many as you can with that weight, no clock.",
+  { id: "latpull", mins: 1.5, cap: "pull",     label: "Lat pulldown",     role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Wide grip, pull the bar to your collarbone with your chest up, and let it rise under control. Log the weight and the reps in the minute.",
     why: "Overhead pulling. It uses the shoulder in the opposite direction to a press, so together the two say more about the joint than either alone." },
-  { id: "facepull", mins: 1.5, cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps", better: "up", inWeekly: false ,
-    how: "Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears. As many as you can with that weight, no clock.",
+  { id: "facepull", mins: 1.5, cap: "pull",     label: "Face pull",        role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
+    how: "Sixty seconds. Rope or band at face height. Pull towards your face, elbows high and out, and finish with your hands beside your ears. Log the weight and the reps in the minute.",
     why: "The upper back and the outside rotators of the shoulder. This is the single most useful movement for a shoulder that has been irritable, which is why it is measured and not just prescribed." },
 
   /* ---- CORE ---- */
@@ -2717,7 +2729,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 59";
+const BUILD = "10 August 2026 · 60";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3804,12 +3816,30 @@ function useCoach(data, day, clock) {
       return { list: out, mins, goalMins, goalCount: out.filter((x) => x.forGoal).length };
     })();
 
-    /* the weekly "how's it going?" on each goal */
-    const goalCheckDue = openGoals.filter((g) => {
-      const last = (g.scores || []).slice(-1)[0];
-      if (!last) return true;
-      return Math.round((parse(t) - parse(last.date)) / 86400000) >= 7;
-    });
+    /* ---- THE THINGS SHE WANTS TO DO, SCORED ---------------------------
+       Her instruction, 10 August: "they shouldn't be part of the mobility.
+       it should be a battery on its own. The things I want to do, how am I
+       improving? I have to test them with the weekly test or the monthly
+       test when it comes... they should be part of the weekly check, all of
+       them, not just one of them."
+
+       Two things were wrong. They were scored from a card on Today rather
+       than from the battery, so they were not part of the weekly sitting at
+       all. And they were filtered to whichever ones happened to be seven
+       days stale, so on any given week she was asked about some of her goals
+       and not the others — which makes the scores impossible to read across.
+
+       Now: every open goal, every sitting, scored the same way she scores
+       everything else. A battery of its own, at the end, before mobility.
+
+       goalCheckDue is what the sitting has NOT yet covered this week, so the
+       card on Today stands down once the battery has taken them rather than
+       asking her the same question twice. */
+    const goalScoredIn = (g, from) => (g.scores || []).some((sc) => sc.date >= from);
+    const goalCheckDue = openGoals.filter((g) => !goalScoredIn(g, ws));
+    /* every one of them, always — this is what the battery asks */
+    const goalBattery = openGoals;
+    const goalMinutes = Math.round(openGoals.length * 0.75 * 10) / 10;
 
     /* ---- ADHERENCE ENGINE ----------------------------------------------
        Built from the adherence evidence rather than from training theory.
@@ -6467,7 +6497,7 @@ function useCoach(data, day, clock) {
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
       planned, session, hasPlan, pos, themes, prescribed, themeGoal, bet, betsWon, betsTaken, phase, season, seasonTarget, themesAuto, auto,
-      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
+      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, goalBattery, goalMinutes, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
@@ -14478,11 +14508,22 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   const [mob, setMob] = useState(() => ({ ...(data.mobility?.[coach.ws] || {}) }));
   const putMob = (id, patch) => setMob((e) => ({ ...e, [id]: { ...(e[id] || {}), ...patch } }));
 
+  /* THE THINGS SHE WANTS TO DO ARE A BATTERY OF THEIR OWN.
+     Her instruction, 10 August. Every open goal, every sitting — not the ones
+     that happen to be a week stale, and not buried inside mobility. Scored by
+     trying it, out of ten, with room to say what stopped her. Saves on the
+     same one button as everything else. */
+  const goalTests = coach.goalBattery || [];
+  const [goalScores, setGoalScores] = useState({});
+  const [goalWords, setGoalWords] = useState({});
+
   /* Her instruction: an estimate per exercise, so the sitting has a real
      budget rather than a hopeful one. Everything carries its own minutes and
      the total is arithmetic, not a promise. */
   const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
-  const totalMins = Math.round(minsOf(fields) + minsOf(mobTests));
+  const batteryMins = Math.round(minsOf(fields) + minsOf(mobTests));
+  const goalMins = Math.round(coach.goalMinutes || 0);
+  const totalMins = batteryMins + goalMins;
 
   return (
     <>
@@ -14505,7 +14546,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           all, which is indistinguishable from it being hard-coded. */}
       <div className="mono" style={{ fontSize: 10, color: C.signal, letterSpacing: "0.06em",
         marginBottom: 14, textTransform: "uppercase" }}>
-        {fields.length + mobTests.length} rows · about {totalMins} minutes
+        {fields.length + mobTests.length + goalTests.length} rows · about {batteryMins} minutes{goalMins > 0 ? `, plus ${goalMins} for your goals` : ""}
       </div>
 
       <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}
@@ -14556,6 +14597,58 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
         );
       })}
 
+      {/* WHAT SHE WANTS TO BE ABLE TO DO. A battery of its own, and all of
+          them every time — a goal scored some weeks and not others produces a
+          line nobody can read. Rule 9: her stated goals outrank the numbers,
+          which means they have to BE numbers. */}
+      {goalTests.length > 0 && (
+        <Card style={{ marginBottom: 12, background: C.pist }}>
+          <Eyebrow color={C.signal}>The things you want to do</Eyebrow>
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 14px" }}>
+            Try each one now and score how close you are, out of ten. Not whether you managed it —
+            how close. Needing help is a score, not a failure, and it is the only way to see these
+            move. All {goalTests.length} every time, so the line means something.
+          </div>
+          {goalTests.map((g, gi) => {
+            const prev = (g.scores || []).filter((sc) => sc.date < coach.t).slice(-1)[0];
+            const picked = goalScores[g.id];
+            return (
+              <div key={g.id} style={{ paddingTop: gi ? 14 : 0, marginTop: gi ? 14 : 0,
+                borderTop: gi ? `1px solid ${C.line}` : "none" }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.4 }}>{g.text}</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                  {prev ? `Last time ${prev.value}/10, on ${dayAndMonth(prev.date)}` : "First score — this becomes the line the rest are read against."}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 9 }}>
+                  {[0,1,2,3,4,5,6,7,8,9,10].map((n) => (
+                    <button key={n} className="tap" aria-label={`score ${n} out of 10 for ${g.text}`}
+                      onClick={() => setGoalScores((x) => ({ ...x, [g.id]: n }))}
+                      style={{ flex: "1 1 8%", minWidth: 28, padding: "9px 0", borderRadius: 8,
+                        cursor: "pointer", fontSize: 12, fontFamily: "'IBM Plex Mono', monospace",
+                        border: `1.5px solid ${picked === n ? C.ink : C.line}`,
+                        background: picked === n ? C.ink : C.card,
+                        color: picked === n ? C.chalk : C.muted }}>{n}</button>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 9 }}>
+                  <textarea rows={2} value={goalWords[g.id] || ""}
+                    onChange={(e) => setGoalWords((x) => ({ ...x, [g.id]: e.target.value }))}
+                    placeholder="What stopped you, if something did. Anything at all."
+                    style={{ ...inputStyle, marginBottom: 0, resize: "none", lineHeight: 1.45, fontSize: 13 }} />
+                  <MicButton onText={(v) => setGoalWords((x) => ({ ...x, [g.id]: v }))}
+                    current={goalWords[g.id] || ""} />
+                </div>
+              </div>
+            );
+          })}
+          <button onClick={() => setSheet({ kind: "goals" })} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "14px 0 0",
+            fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+            Add one, change one, or mark one done →
+          </button>
+        </Card>
+      )}
+
       {/* MOBILITY, LAST. "Mobility, of course, comes at the end of the
           battery." It saves with everything else on the one button. */}
       {mobTests.length > 0 && (
@@ -14582,6 +14675,15 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           const next = { ...data, [which]: { ...data[which], [key]: stamped } };
           /* one button, both stores — she did it in one sitting, it saves as one */
           if (Object.keys(mob).length) next.mobility = { ...(data.mobility || {}), [coach.ws]: { ...mob, on: coach.t } };
+          /* and the goals, which are a battery like any other. Appended, never
+             replaced — the whole history of a goal is the point (rule 20). */
+          const scoredNow = Object.keys(goalScores).filter((id) => goalScores[id] !== undefined);
+          if (scoredNow.length) {
+            next.goals = (data.goals || []).map((g) => (scoredNow.includes(g.id)
+              ? { ...g, scores: [...(g.scores || []),
+                  { date: coach.t, value: goalScores[g.id], note: String(goalWords[g.id] || "").trim() }] }
+              : g));
+          }
           /* THE MONTHLY FILLS THE WEEKLY.
 
              Her instruction, 10 August: "the weekly filled as part of the
