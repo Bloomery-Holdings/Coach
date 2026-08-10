@@ -2729,7 +2729,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 60";
+const BUILD = "10 August 2026 · 61";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4316,7 +4316,40 @@ function useCoach(data, day, clock) {
       }
       return out;
     })();
-    const monthlyAssessDay = firstTrainingDay(monthDays);
+    /* THE MONTHLY LANDS ON A WEEKLY DAY, ALWAYS.
+
+       Her instruction, 10 August: "The first monthly and the last weekly
+       should come on the same day, by definition... I will not do a monthly
+       day and a weekly two days later. So every month has 3 weekly batteries
+       and one monthly that fills the fourth weekly too."
+
+       Before this the two were computed independently — the weekly from the
+       first training day of the WEEK, the monthly from the first training day
+       of the MONTH. Those coincide only when a month happens to begin at the
+       top of one of her weeks. Every other month they fell on different days,
+       and because the weekly for that week was already in by the time the
+       monthly came round, the monthly could not fill it and she did the same
+       exercises twice.
+
+       So the monthly is pinned to a weekly day by construction: the first
+       weekly assess day that falls inside the month. It cannot drift, and the
+       carry-over into that week's weekly is then guaranteed rather than
+       lucky. */
+    const monthlyAssessDay = (() => {
+      const first = mk + "-01";
+      let w = weekStart(first, startOn);
+      for (let i = 0; i < 6; i++) {
+        const week = Array.from({ length: 7 }, (_, k) => addDays(w, k));
+        const day = firstTrainingDay(week);
+        if (day >= first && day.slice(0, 7) === mk) return day;
+        w = addDays(w, 7);
+      }
+      /* a month with no training day at all in it should not be possible, but
+         if it happens the old answer is still an answer (rule 23) */
+      return firstTrainingDay(monthDays);
+    })();
+    /* the week the monthly belongs to — the one it fills */
+    const monthlyWeek = weekStart(monthlyAssessDay, startOn);
 
     /* once this week's are in, the card should name the NEXT one, not the
        day that has already gone by */
@@ -4355,6 +4388,10 @@ function useCoach(data, day, clock) {
     const monthlySkips = (data.skips || {})[monthlyKey] || [];
     const weeklyMoveTo = nextMeasureDay(t, calendarWeek);
     const monthlyMoveTo = nextMeasureDay(t, monthDays);
+    /* On the benchmark day the two are one sitting. Moving the monthly has to
+       move the weekly with it, or she is straight back to doing the same
+       exercises twice in a week — which is the thing she asked us to stop. */
+    const monthlyIsWeeklyToo = monthlyAssessDay === weeklyAssessDay && monthlyWeek === ws;
 
     /* Was a battery filled in today, or in the last couple of days? A reading
        is worth saying while it is still the thing she just did. */
@@ -6504,6 +6541,7 @@ function useCoach(data, day, clock) {
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
       batteryRead, capture, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
+      monthlyWeek, monthlyIsWeeklyToo,
       tracked, morningSeries,
     };
   }, [data, day, clock]);
@@ -11901,7 +11939,14 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
   const tests = fields.filter((f) => f.type !== "note" && f.type !== "scale");
 
   const moveWhole = () => {
-    setData((d) => ({ ...d, deferrals: { ...(d.deferrals || {}), [sk]: moveTo } }));
+    setData((d) => {
+      const next = { ...(d.deferrals || {}), [sk]: moveTo };
+      /* One sitting, one day. If she moves the benchmark, this week's weekly
+         goes with it — otherwise the weekly lands first, the monthly can no
+         longer fill it, and she does the same exercises twice. */
+      if (monthly && coach.monthlyIsWeeklyToo) next[coach.weeklyKey] = moveTo;
+      return { ...d, deferrals: next };
+    });
     setDone({ kind: "moved" });
   };
   const takeOut = (f) => {
@@ -11997,6 +12042,11 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
           {monthly ? "Monthly benchmark" : "Weekly measurements"}
           {late > 0 && (
             <span style={{ fontWeight: 400, color: C.muted }}>{" — "}{late} days late</span>
+          )}
+          {monthly && coach.monthlyIsWeeklyToo && (
+            <span style={{ display: "block", fontWeight: 400, fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+              This is also this week's weekly — one sitting, not two.
+            </span>
           )}
         </span>
         <button onClick={() => setSheet({ kind: which, key: periodKey })} className="tap" style={{
@@ -14536,7 +14586,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px", lineHeight: 1.45 }}>
         {isWeekly
           ? `The short version — ${weeklyCount} of your ${data.fields.weekly.length} tests, about ten minutes. Same list as the monthly, just the quick end of it. Skip anything you didn't test; partial entries are fine.`
-          : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for. Doing this covers this week's weekly check as well — you never do the same exercise twice in a week.`}
+          : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for. Doing this covers this week's weekly check as well — it always lands on a weekly day, so you never do the same exercise twice in a week.`}
       </p>
 
       {/* THE BATTERY IS HERS (rule 12), AND HAS TO LOOK IT (rule 11).
@@ -14697,7 +14747,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
              It never overwrites a weekly she has already filled in (rule 20),
              and it carries fromMonthly so nothing downstream has to guess
              where the numbers came from. */
-          if (!isWeekly && isCurrent && !data.weekly[coach.ws]) {
+          if (!isWeekly && isCurrent && !data.weekly[coach.monthlyWeek || coach.ws]) {
             const weeklyIds = new Set((data.fields.weekly || [])
               .filter((f) => f.inWeekly !== false).map((f) => f.id));
             const carried = {};
@@ -14707,7 +14757,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             });
             if (Object.keys(carried).length) {
               next.weekly = { ...data.weekly,
-                [coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
+                [coach.monthlyWeek || coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
             }
           }
           /* The benchmark is thirty-odd minutes under load — it counts as the
