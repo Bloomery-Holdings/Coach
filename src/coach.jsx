@@ -2491,7 +2491,18 @@ const today = () => iso(new Date());
 const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
 const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
 /* Her week runs Sunday → Saturday. */
-const weekStart = (s) => { const d = parse(s); d.setDate(d.getDate() - d.getDay()); return iso(d); };
+const WEEK_STARTS_ON = 6;   /* Saturday — hers, and her WHOOP day */
+const weekStartOn = (settings) => {
+  const v = Number(settings && settings.weekStartsOn);
+  return Number.isInteger(v) && v >= 0 && v <= 6 ? v : WEEK_STARTS_ON;
+};
+/* the second argument is the weekday her week begins on; left off, it is hers */
+const weekStart = (s, startOn) => {
+  const on = Number.isInteger(startOn) ? startOn : WEEK_STARTS_ON;
+  const d = parse(s);
+  d.setDate(d.getDate() - ((d.getDay() - on + 7) % 7));
+  return iso(d);
+};
 const monthKey = (s) => s.slice(0, 7);
 const prettyShort = (d) =>
   parse(d).toLocaleDateString(undefined, { weekday: "long" }).toLowerCase();
@@ -2566,7 +2577,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 54";
+const BUILD = "10 August 2026 · 55";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -2650,6 +2661,8 @@ const BLANK = {
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
     whoopDay: 6,
+    /* the weekday her training week begins. 6 is Saturday, which is hers. */
+    weekStartsOn: WEEK_STARTS_ON,
     /* which build last tidied the battery; stops the retirement running twice */
     batteryTidy: BATTERY_TIDY,
     /* Off by default. Only useful if she is actually experiencing these, and
@@ -3111,13 +3124,14 @@ function useCoach(data, day) {
     }
     const consistency = sched ? Math.round((hit / sched) * 100) : 0;
 
-    const ws = weekStart(t);
-    /* the calendar week, kept for anything that has to line up with the store */
+    const startOn = weekStartOn(settings);
+    const ws = weekStart(t, startOn);
+    /* the seven days of HER week, whichever day it begins on */
     const calendarWeek = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
-    /* what she has actually just lived: the seven days ending today. Never
-       contains a day that has not happened, and cannot reset to nothing
-       because a new calendar week began this morning. */
-    const weekDays = Array.from({ length: 7 }, (_, i) => addDays(t, -(6 - i)));
+    /* what she is judged on: the days of this week that have actually
+       happened. A day still ahead of her is not a miss, and a day from last
+       week is not this week's. */
+    const weekDays = calendarWeek.filter((d) => d <= t);
     const weekDone = weekDays.filter(done).length;
     const target = weeklyTargetOf(settings);
 
@@ -6202,7 +6216,7 @@ function useCoach(data, day) {
 
 
     return {
-      t, ws, mk, weekDays, calendarWeek, done, isScheduled, consistency,
+      t, ws, mk, weekDays, calendarWeek, startOn, done, isScheduled, consistency,
       weekDone, target, monthDone, monthTarget, totalSessions,
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
@@ -7513,7 +7527,7 @@ function Today({ data, setData, coach, setSheet }) {
   /* how many weeks back the strip is showing. 0 is this week. */
   const [weekBack, setWeekBack] = useState(0);
   const spineDays = weekBack === 0 ? coach.calendarWeek
-    : Array.from({ length: 7 }, (_, i) => addDays(weekStart(addDays(coach.t, -weekBack * 7)), i));
+    : Array.from({ length: 7 }, (_, i) => addDays(weekStart(addDays(coach.t, -weekBack * 7), coach.startOn), i));
   /* If midnight passes while the app is open, the page moves to the new day -
      but only if she was sitting on today. If she had deliberately opened an
      earlier day to log it, she stays there rather than having the page move
