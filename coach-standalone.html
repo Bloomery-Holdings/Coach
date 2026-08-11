@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 95";
+const BUILD = "11 August 2026 · 96";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -8107,12 +8107,22 @@ function ExercisePhoto({ id }) {
 }
 function HowTo({ f }) {
     const [open, setOpen] = useState(false);
-    if (!f || (!f.how && !f.why))
+    /* HER REPORT, 11 August: "the mobility section is missing the how-to
+       videos. I can't find it." They were there — behind a small grey text
+       link, the same invisible-affordance mistake the edit links made, fixed
+       the same way: a bordered chip she can actually see (rule 11, and her
+       word: conformity). And a row with no written how-to no longer shows
+       NOTHING — the video search link exists for every exercise, so the door
+       stays, opening on at least the video (rule 23: the app offers what it
+       has, it does not hide the gap). */
+    if (!f)
         return null;
     return (React.createElement("div", { style: { marginBottom: 8 } },
         React.createElement("button", { onClick: () => setOpen((v) => !v), className: "tap", style: {
-                border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                fontSize: 11.5, color: open ? C.signal : C.muted, fontWeight: 600, fontFamily: "inherit"
+                border: `1px solid ${open ? C.signal : C.line}`, borderRadius: 8,
+                background: open ? C.signal : "transparent",
+                color: open ? C.chalk : C.signal, cursor: "pointer",
+                padding: "5px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit"
             } }, open ? "hide" : "how it's done"),
         open && (React.createElement("div", { style: { background: C.chalk, borderRadius: 12, padding: "12px 14px", marginTop: 8 } },
             f.how && React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.6, color: C.ink } }, f.how),
