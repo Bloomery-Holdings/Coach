@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 93";
+const BUILD = "11 August 2026 · 94";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7863,16 +7863,43 @@ const drillSeconds = (d) => {
         return Math.round(m * 60);
     return secondsFor(d);
 };
+/* A RUNNING CLOCK MUST SURVIVE HER LEAVING THE SCREEN.
+   Her report, 11 August: "I clicked start... as long as I get out and do
+   anything, the counting stops. Even in the app, going from one dashboard to
+   the other, it stops counting, just resets." The clock lived inside the
+   component; leave the screen, the component unmounts, the clock dies. Every
+   timer now writes its wall-clock start into a registry keyed by what it is
+   timing, and a remount picks the count straight back up — the elapsed time
+   is derived from the clock on the wall, not from ticks it happened to be
+   awake for. */
+const TICKING = {};
 function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
     /* seconds: count DOWN from this. null: count UP. */
-    const [ms, setMs] = useState(seconds ? seconds * 1000 : 0);
-    const [running, setRunning] = useState(false);
+    const tid = (label || "t") + "|" + (seconds || "up");
+    const remembered = TICKING[tid];
+    const [ms, setMs] = useState(() => {
+        if (!remembered)
+            return seconds ? seconds * 1000 : 0;
+        if (!remembered.running)
+            return remembered.ms;
+        const gone = Date.now() - remembered.startedAt;
+        return seconds ? Math.max(0, remembered.base - gone) : remembered.base + gone;
+    });
+    const [running, setRunning] = useState(() => {
+        if (!remembered || !remembered.running)
+            return false;
+        if (seconds && remembered.base - (Date.now() - remembered.startedAt) <= 0)
+            return false;
+        return true;
+    });
     const [rang, setRang] = useState(false);
     const tick = useRef(null);
-    const started = useRef(0);
-    const base = useRef(seconds ? seconds * 1000 : 0);
+    const started = useRef(remembered && remembered.running ? remembered.startedAt : 0);
+    const base = useRef(remembered ? remembered.base : (seconds ? seconds * 1000 : 0));
     useEffect(() => () => { if (tick.current)
         clearInterval(tick.current); }, []);
+    /* every state change is remembered under this timer's identity */
+    useEffect(() => { TICKING[tid] = { running, startedAt: started.current, base: base.current, ms }; });
     useEffect(() => {
         if (!running) {
             if (tick.current) {
@@ -8829,7 +8856,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
                 React.createElement("span", { className: "mono", style: { fontSize: 10, letterSpacing: "0.1em",
                         textTransform: "uppercase", color: C.muted } }, "The whole set"),
                 React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "counts up")),
-            React.createElement(Timer, { compact: true })),
+            React.createElement(Timer, { compact: true, label: "the ten minutes \u2014 whole set" })),
         coach.dailyDrills.list.map((d, i) => (React.createElement("div", { key: d.id, style: { padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" } },
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 } },
                 React.createElement("span", { style: { fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink } }, d.label),
@@ -8861,6 +8888,52 @@ function DrillsCard({ coach, setSheet, data, setData }) {
                 React.createElement(HowTo, { f: d })),
             setSheet && (React.createElement("div", { style: { marginTop: 10 } },
                 React.createElement(EditChip, { label: `Edit ${d.label}`, onClick: () => setSheet({ kind: "edit-mobility", focus: d.id }) }))))))));
+}
+function SessionClock({ log, write, coach }) {
+    const clock = log === null || log === void 0 ? void 0 : log.sessionClock;
+    const running = clock && clock.startedAt && !clock.stoppedAt;
+    /* repaint every second while it runs — display only, the truth is the
+       wall clock in the stored start time */
+    const [, force] = useState(0);
+    useEffect(() => {
+        if (!running)
+            return;
+        const t = setInterval(() => force((x) => x + 1), 1000);
+        return () => clearInterval(t);
+    }, [running]);
+    if ((log === null || log === void 0 ? void 0 : log.completed) && !running)
+        return null; /* the day is logged — the clock's job is done */
+    const mins = running ? (Date.now() - clock.startedAt) / 60000 : 0;
+    const face = running
+        ? Math.floor(mins) + ":" + String(Math.floor((mins % 1) * 60)).padStart(2, "0")
+        : null;
+    const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
+    const nevermind = () => write({ sessionClock: undefined });
+    const done = () => {
+        var _a;
+        const m = Math.max(1, Math.round(mins));
+        write({
+            sessionClock: { ...clock, stoppedAt: Date.now() },
+            completed: true,
+            minutes: String(m),
+            type: (log === null || log === void 0 ? void 0 : log.type) || ((_a = coach.prescribed) === null || _a === void 0 ? void 0 : _a.name) || "Session",
+        });
+    };
+    return (React.createElement(Card, { style: { background: running ? C.mint : undefined } },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } }, !running ? (React.createElement(React.Fragment, null,
+            React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+                React.createElement(Eyebrow, null, "Today's session"),
+                React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 3 } }, "Press start when you begin. The clock keeps counting wherever you go, and Done logs the session with the minutes it measured.")),
+            React.createElement(Btn, { kind: "signal", onClick: begin }, "Start"))) : (React.createElement(React.Fragment, null,
+            React.createElement("span", { style: { flex: 1, minWidth: 0 } },
+                React.createElement(Eyebrow, { color: C.moss }, "Session running"),
+                React.createElement("div", { className: "mono", style: { fontSize: 30, fontWeight: 700, color: C.ink, marginTop: 2 } }, face)),
+            React.createElement("span", { style: { display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" } },
+                React.createElement(Btn, { kind: "signal", onClick: done }, "Done"),
+                React.createElement("button", { onClick: nevermind, className: "tap", style: {
+                        border: "none", background: "transparent", cursor: "pointer",
+                        fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px"
+                    } }, "never mind \u2014 I didn't train")))))));
 }
 function MoodCard({ log, write, setSheet, coach }) {
     const moods = [
@@ -9163,6 +9236,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
                     } }, "back to today")))),
         isToday && React.createElement(MedalShelf, { coach: coach, setSheet: setSheet }),
+        isToday && React.createElement(SessionClock, { log: log, write: write, coach: coach }),
         isToday && React.createElement(MoodCard, { log: log, write: write, setSheet: setSheet, coach: coach }),
         isToday && (React.createElement(Card, { style: { background: coach.recValue ? C.card : C.pist, padding: "14px 16px" } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 } },
@@ -14269,8 +14343,17 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             return String(form[f.id + "__L"] || "").trim() !== "";
         return String(form[f.id] || "").trim() !== "";
     };
-    const doneFields = fields.filter(isFilled);
-    const left = fields.filter((f) => !isFilled(f));
+    /* FROZEN AT OPEN. Her report, 11 August: "I input something and it very
+       quickly disappears and goes as done while I still want to add a note."
+       The split re-sorted LIVE, so the first character into a row reclassified
+       it and yanked it into another card — which also killed the microphone
+       mid-dictation on Biggest win, because moving the row remounts it. The
+       split is now decided once, when the sitting opens: saving stays instant,
+       rows stay under her hands, and the sorting happens the NEXT time the
+       battery opens. */
+    const [openEmpty] = useState(() => new Set(fields.filter((f) => !isFilled(f)).map((f) => f.id)));
+    const doneFields = fields.filter((f) => !openEmpty.has(f.id));
+    const left = fields.filter((f) => openEmpty.has(f.id));
     const started = doneFields.length > 0;
     const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
     const batteryMins = Math.round(minsOf(fields) + minsOf(mobTests));
@@ -14302,7 +14385,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between" } },
                 React.createElement(Eyebrow, null, "Stopwatch"),
                 React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "counts up")),
-            React.createElement(Timer, null)),
+            React.createElement(Timer, { label: "the " + which + " sitting stopwatch" })),
         React.createElement("button", { onClick: () => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" }), className: "tap", style: {
                 border: "none", background: "transparent", cursor: "pointer", padding: "0 0 18px",
                 fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit"
