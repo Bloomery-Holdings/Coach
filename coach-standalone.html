@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 103";
+const BUILD = "11 August 2026 · 105";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -9463,21 +9463,36 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     coach.agenda.length,
                     ")"))))),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
-        isToday && coach.dailyDrills.list.length > 0 && (React.createElement(Card, { style: { background: C.mint } },
-            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
-                React.createElement("span", { style: { flex: 1 } },
-                    React.createElement(Eyebrow, { color: C.moss }, "After your session"),
-                    React.createElement("div", { style: { fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45 } },
-                        coach.dailyDrills.mins,
-                        " minutes waiting in Body",
-                        coach.dailyDrills.goalCount > 0
-                            ? ` — ${coach.dailyDrills.goalCount === 1 ? "one movement" : coach.dailyDrills.goalCount + " movements"} for what you want to be able to do`
-                            : " — chosen by what your mobility scores say is short")),
-                React.createElement("button", { onClick: () => goTab && goTab("body"), className: "tap", style: {
-                        padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
-                        fontWeight: 600, border: "none", background: C.moss, color: C.chalk,
-                        fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0
-                    } }, "open")))),
+        isToday && (() => {
+            var _a;
+            const dn = (((_a = data.logs) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}).drillNotes || {};
+            const didToday = (data.bwlog || {})[coach.t] || {};
+            const done = (x) => String(dn[x.id] || "").trim() !== ""
+                || Object.keys(dn).some((k) => k.endsWith(":" + x.id) && String(dn[k] || "").trim() !== "")
+                || (didToday[x.id] && ["w", "reps", "secs"].some((f) => String(didToday[x.id][f] || "").trim() !== ""));
+            const left = (coach.dailyDrills.list || []).filter((x) => !done(x));
+            if (!left.length)
+                return null;
+            const mins = Math.round(left.reduce((a, x) => a + (x.mins || 0), 0) * 10) / 10;
+            const goalCount = left.filter((x) => x.forGoal).length;
+            const started = left.length < (coach.dailyDrills.list || []).length;
+            return (React.createElement(Card, { style: { background: C.mint } },
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } },
+                    React.createElement("span", { style: { flex: 1 } },
+                        React.createElement(Eyebrow, { color: C.moss }, "After your session"),
+                        React.createElement("div", { style: { fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45 } },
+                            started
+                                ? `${mins} minutes still waiting in Body — the rest is logged`
+                                : `${mins} minutes waiting in Body`,
+                            goalCount > 0
+                                ? ` — ${goalCount === 1 ? "one movement" : goalCount + " movements"} for what you want to be able to do`
+                                : " — chosen by what your mobility scores say is short")),
+                    React.createElement("button", { onClick: () => goTab && goTab("body"), className: "tap", style: {
+                            padding: "9px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12.5,
+                            fontWeight: 600, border: "none", background: C.moss, color: C.chalk,
+                            fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0
+                        } }, "open"))));
+        })(),
         isToday && coach.openGoals.length === 0 && (React.createElement(Card, { style: { background: C.pist } },
             React.createElement(Eyebrow, { color: C.signal }, "Start here"),
             React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginBottom: 12 } }, "The ten minutes after every session is built from what you want to be able to do \u2014 so it needs one of those first. Write it in your own words: something you want to be able to do and cannot yet, or can only just. The app picks the work for it straight away, and you score it once a week by trying it."),
@@ -9681,10 +9696,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                             " min")),
                     React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192"))))))),
         React.createElement(Card, null,
-            React.createElement(Eyebrow, null,
-                "Everything you did ",
-                isToday ? "today" : "that day"),
-            !(log === null || log === void 0 ? void 0 : log.type) && extraSessions.length === 0 ? (React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 } }, "Nothing logged yet.")) : (React.createElement("div", { style: { marginBottom: 14 } },
+            !(log === null || log === void 0 ? void 0 : log.type) && extraSessions.length === 0 ? null : (React.createElement("div", { style: { marginBottom: 14 } },
                 (log === null || log === void 0 ? void 0 : log.type) && (() => {
                     var _a;
                     /* HER REPORT, 10 August: "it should also say it is
@@ -9724,18 +9736,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         x.during && (React.createElement(Scale, { label: "How you felt afterwards", value: x.energyAfter, onChange: (v) => patchSession(x.id, { energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
                         ((cls === null || cls === void 0 ? void 0 : cls.resistance) || (cls === null || cls === void 0 ? void 0 : cls.equipment) || x.loads) && (React.createElement("div", { style: { marginTop: 10 } },
                             React.createElement(Note, { label: "Weights and kit you used", value: x.loads, onChange: (v) => patchSession(x.id, { loads: v }) })))));
-                }),
-                ((log === null || log === void 0 ? void 0 : log.type) || extraSessions.length > 0) && (React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, flexWrap: "wrap" } },
-                    React.createElement("span", { className: "mono", style: { fontSize: 10.5, color: C.muted } },
-                        totalMinutes,
-                        " min across ",
-                        extraSessions.length + ((log === null || log === void 0 ? void 0 : log.type) ? 1 : 0),
-                        " session",
-                        extraSessions.length + ((log === null || log === void 0 ? void 0 : log.type) ? 1 : 0) === 1 ? "" : "s"),
-                    React.createElement("span", { style: { fontSize: 11, color: C.moss, fontWeight: 600 } }, "\u2713 saved"),
-                    React.createElement("span", { style: { flexBasis: "100%" } },
-                        React.createElement(InfoNote, { small: true, why: "There is no save button because there is nothing to save. Every tap and every letter is written to this device as you make it. Add another session only if you actually did another one." }, "why there's no save button")))))),
-            isToday && (log === null || log === void 0 ? void 0 : log.type) === "Monthly benchmark" && !adding && extraSessions.length === 0 && (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 } }, "That was the session. Whatever comes after is yours \u2014 a stretch, a full class, or nothing at all.")),
+                }))),
             React.createElement(Btn, { kind: adding ? "quiet" : "ghost", onClick: () => setAdding((a) => !a) }, adding ? "Never mind" : "+ Add another session"),
             adding && (React.createElement("div", { style: { marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 12 } },
                 React.createElement("div", { className: "mono", style: { fontSize: 9.5, letterSpacing: "0.11em",
@@ -12761,7 +12762,12 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
             case "deepread": return chip(coach.calibrating ? "read it" : "read my month", () => setSheet({ kind: "review" }), true, "deepread");
             /* these two open the folded row below rather than a sheet, so she
                answers in the same place the record already lives */
-            case "issue": return chip("answer", () => openQuiet && openQuiet("record"), true, "issue");
+            /* HER REPORT, 11 August: "When I click answer, nothing happens."
+               It was opening the record card further down the page — off screen,
+               so from where she was standing nothing moved. Exactly the fault the
+               note below describes, in the row right beside it. She answers it
+               here now, in the row that asked (rule 11). */
+            case "issue": return chip(doing === "issue" ? "close" : "answer", () => act("issue"), doing !== "issue", "issue");
             /* "The score tab doesn't open to log the activity score" - 8 August.
                It DID open - the folded row further down the page - but nothing on
                screen moved, so from where she was standing nothing happened. Rule
@@ -12798,6 +12804,45 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
             case "during": return React.createElement(DuringTap, { value: log === null || log === void 0 ? void 0 : log.during, onChange: (v) => write({ during: v }) });
             case "felt": return (React.createElement(Scale, { label: "How you felt afterwards", value: log === null || log === void 0 ? void 0 : log.energyAfter, onChange: (v) => write({ energyAfter: v }), max: 5, lo: "wiped", hi: "great" }));
             case "note": return (React.createElement(Note, { label: "A line about how it went", value: log === null || log === void 0 ? void 0 : log.sessionNote, onChange: (v) => write({ sessionNote: v }) }));
+            /* ANSWERING THE FOLLOW-UP WHERE IT IS ASKED. The same two writes the
+               record card already makes — what she tried and whether it helped,
+               or the issue closed because it has settled. Nothing is deleted:
+               a closed issue stays on the record for when it comes back. */
+            case "issue": {
+                const open = coach.issueFollowUp || [];
+                if (!open.length)
+                    return null;
+                const logTried = (id, whatDone, helped) => setData((d) => ({ ...d,
+                    issues: (d.issues || []).map((i) => i.id === id
+                        ? { ...i, tried: [...(i.tried || []), { date: coach.t, what: whatDone, helped }] } : i) }));
+                const settle = (id) => setData((d) => ({ ...d,
+                    issues: (d.issues || []).map((i) => i.id === id
+                        ? { ...i, status: "closed", closedOn: coach.t } : i) }));
+                return (React.createElement("div", null, open.map((iss) => {
+                    const note = String(goalNotes["iss:" + iss.id] || "");
+                    return (React.createElement("div", { key: iss.id, style: { paddingTop: 4, marginBottom: 12 } },
+                        React.createElement("div", { style: { fontSize: 13, lineHeight: 1.45, color: C.ink, fontWeight: 600, marginBottom: 7 } }, iss.text),
+                        React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
+                            React.createElement(AutoText, { value: note, onChange: (v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v })), placeholder: "How is it now \u2014 and what did you try?", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
+                            React.createElement(MicButton, { onText: (v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v })), current: note })),
+                        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, margin: "9px 0 5px" } }, "Did it help?"),
+                        React.createElement("div", { style: { display: "flex", gap: 4 } }, [1, 2, 3, 4, 5].map((n) => (React.createElement("button", { key: n, className: "tap mono", onClick: () => {
+                                logTried(iss.id, note.trim() || "no change reported", n);
+                                setGoalNotes((x) => ({ ...x, ["iss:" + iss.id]: "" }));
+                            }, style: { flex: 1, height: 34, borderRadius: 8, cursor: "pointer",
+                                border: `1.5px solid ${C.line}`, background: C.chalk, color: C.muted, fontSize: 12 } }, n)))),
+                        React.createElement("div", { className: "mono", style: { fontSize: 9.5, color: C.muted, display: "flex",
+                                justifyContent: "space-between", marginTop: 4 } },
+                            React.createElement("span", null, "no help"),
+                            React.createElement("span", null, "resolved it")),
+                        React.createElement("div", { style: { marginTop: 9 } },
+                            React.createElement("button", { onClick: () => settle(iss.id), className: "tap", style: {
+                                    border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                                    cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.signal,
+                                    fontWeight: 600, fontFamily: "inherit"
+                                } }, "It's settled \u2014 take it off the list"))));
+                })));
+            }
             case "goal": {
                 const dueGoals = coach.goalCheckDue || [];
                 if (!dueGoals.length)
@@ -14880,6 +14925,50 @@ function CoachApp() {
     const go = (t) => { if (t !== tab)
         setStack((s) => [...s.slice(-9), t]); };
     const goBack = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+    /* ---- THE PHONE'S BACK BUTTON ---------------------------------------
+       HER REPORT, twice: "When I press my mobile's back button it exits the
+       app. It should take me to the place I was before, not out of the
+       application altogether." It was on the list and never built; this is it.
+  
+       The app already keeps its own history — `stack` for screens, `sheets`
+       for what is open on top of one. All that was missing was giving the
+       phone something to go back TO. While anything is open, one entry is
+       held in the browser's history; the phone's back button spends it, and
+       the app closes the sheet or steps back a screen instead of leaving.
+       Standing on Today with nothing open, back does what it always did and
+       leaves — which is what she expects there. */
+    const deep = sheets.length > 0 || stack.length > 1;
+    const guard = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.history)
+            return;
+        try {
+            if (deep && !guard.current) {
+                window.history.pushState({ coach: 1 }, "");
+                guard.current = true;
+            }
+            /* left by tapping rather than by the back button: spend the spare
+               entry, so one press from Today still closes the app */
+            else if (!deep && guard.current) {
+                guard.current = false;
+                window.history.back();
+            }
+        }
+        catch (e) { }
+    }, [deep]);
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.addEventListener)
+            return;
+        const onPop = () => {
+            guard.current = false;
+            if (sheets.length)
+                setSheets((s) => s.slice(0, -1));
+            else if (stack.length > 1)
+                setStack((s) => s.slice(0, -1));
+        };
+        window.addEventListener("popstate", onPop);
+        return () => window.removeEventListener("popstate", onPop);
+    }, [sheets.length, stack.length]);
     const sheet = sheets[sheets.length - 1] || null;
     const setSheet = (next) => {
         if (next === null)
