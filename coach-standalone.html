@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 102";
+const BUILD = "11 August 2026 · 103";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4136,7 +4136,12 @@ function useCoach(data, day, clock) {
         Object.keys(logs).forEach((d) => { if (logs[d].completed)
             weekMap[weekStart(d)] = (weekMap[weekStart(d)] || 0) + 1; });
         const betsWon = Object.values(logs).filter((l) => { var _a; return ((_a = l === null || l === void 0 ? void 0 : l.bet) === null || _a === void 0 ? void 0 : _a.met) === true; }).length;
-        const betsTaken = Object.values(logs).filter((l) => { var _a, _b; return ((_a = l === null || l === void 0 ? void 0 : l.bet) === null || _a === void 0 ? void 0 : _a.met) !== undefined && ((_b = l === null || l === void 0 ? void 0 : l.bet) === null || _b === void 0 ? void 0 : _b.met) !== null; }).length;
+        /* HER CORRECTION, 11 August: "If it's not achieved, it means I failed to
+           reach the target, which is not true — today I had no time, or I missed
+           it." A day she never got to is not a day she tried and fell short, and
+           it must not be counted against her attempts. Only the two real answers
+           count: it was attempted, or it was attempted and not reached. */
+        const betsTaken = Object.values(logs).filter((l) => { var _a, _b; return ((_a = l === null || l === void 0 ? void 0 : l.bet) === null || _a === void 0 ? void 0 : _a.met) === true || ((_b = l === null || l === void 0 ? void 0 : l.bet) === null || _b === void 0 ? void 0 : _b.met) === false; }).length;
         const dn = dayName(t);
         /* where we are: week -> month (4 weeks) -> quarter (3 months) */
         const plan = data.plan || { startDate: t, themes: { week: {}, month: {}, quarter: {} } };
@@ -9757,9 +9762,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         React.createElement("div", { className: "mono", style: { fontSize: 10, color: C.muted, marginTop: 2 } }, "not in the library \u2014 type it in yourself")),
                     React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "+"))))),
         isToday && coach.bet && (() => {
-            var _a, _b, _c, _d;
-            const answered = ((_a = log === null || log === void 0 ? void 0 : log.bet) === null || _a === void 0 ? void 0 : _a.met) === true || ((_b = log === null || log === void 0 ? void 0 : log.bet) === null || _b === void 0 ? void 0 : _b.met) === false;
-            const won = ((_c = log === null || log === void 0 ? void 0 : log.bet) === null || _c === void 0 ? void 0 : _c.met) === true;
+            var _a, _b, _c, _d, _e, _f;
+            /* Three answers, not two. Hers, 11 August: "I need also NOT DONE,
+               because sometimes I don't have time to do it. If it says not
+               achieved it means I failed to reach the target, which is not
+               true." */
+            const answered = ((_a = log === null || log === void 0 ? void 0 : log.bet) === null || _a === void 0 ? void 0 : _a.met) === true || ((_b = log === null || log === void 0 ? void 0 : log.bet) === null || _b === void 0 ? void 0 : _b.met) === false
+                || ((_c = log === null || log === void 0 ? void 0 : log.bet) === null || _c === void 0 ? void 0 : _c.met) === "skipped";
+            const won = ((_d = log === null || log === void 0 ? void 0 : log.bet) === null || _d === void 0 ? void 0 : _d.met) === true;
+            const skipped = ((_e = log === null || log === void 0 ? void 0 : log.bet) === null || _e === void 0 ? void 0 : _e.met) === "skipped";
             return (React.createElement(Card, { style: { background: answered ? (won ? C.mint : C.card) : C.card,
                     border: answered ? "none" : `1.5px dashed ${C.ochre}` } },
                 React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 } },
@@ -9767,16 +9778,18 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     coach.betsWon > 0 && (React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } },
                         coach.betsWon,
                         " achieved"))),
-                React.createElement("div", { className: "serif-it", style: { fontSize: 17, lineHeight: 1.45, color: C.ink, margin: "4px 0 0" } }, ((_d = log === null || log === void 0 ? void 0 : log.bet) === null || _d === void 0 ? void 0 : _d.text) || coach.bet.text),
+                React.createElement("div", { className: "serif-it", style: { fontSize: 17, lineHeight: 1.45, color: C.ink, margin: "4px 0 0" } }, ((_f = log === null || log === void 0 ? void 0 : log.bet) === null || _f === void 0 ? void 0 : _f.text) || coach.bet.text),
                 !answered && coach.bet.note && (React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.muted, marginTop: 8 } }, coach.bet.note)),
                 !answered ? (React.createElement(React.Fragment, null,
                     React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 14 } },
                         React.createElement("div", { style: { flex: 1 } },
                             React.createElement(Btn, { kind: "signal", onClick: () => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: true } }) }, "Achieved")),
                         React.createElement("div", { style: { flex: 1 } },
-                            React.createElement(Btn, { kind: "quiet", onClick: () => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: false } }) }, "Not achieved"))))) : (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 14 } },
+                            React.createElement(Btn, { kind: "quiet", onClick: () => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: false } }) }, "Not achieved"))),
+                    React.createElement("div", { style: { marginTop: 8 } },
+                        React.createElement(Btn, { kind: "quiet", onClick: () => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: "skipped" } }) }, "Didn't do it")))) : (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 14 } },
                     React.createElement("span", { style: { fontSize: 15, color: won ? C.moss : C.muted } }, won ? "✓" : "—"),
-                    React.createElement("span", { style: { flex: 1, fontSize: 13, color: won ? C.moss : C.muted, fontWeight: won ? 600 : 400 } }, won ? "Achieved" : "Not achieved"),
+                    React.createElement("span", { style: { flex: 1, fontSize: 13, color: won ? C.moss : C.muted, fontWeight: won ? 600 : 400 } }, won ? "Achieved" : skipped ? "Didn't do it" : "Not achieved"),
                     React.createElement("button", { onClick: () => write({ bet: { ...log.bet, met: null } }), className: "tap", style: {
                             border: "none", background: "transparent", cursor: "pointer", padding: 0,
                             fontSize: 11, color: C.muted,
