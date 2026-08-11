@@ -3260,7 +3260,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 110";
+const BUILD = "11 August 2026 · 112";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3964,6 +3964,204 @@ const writeToFolder = async (d) => {
         return "failed";
     }
 };
+/* ============================================================================
+   ONEDRIVE, WITHOUT HER PRESSING ANYTHING
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 11 August: "I already have a OneDrive... I prefer using the
+   OneDrive. Provided that I can make it automatic, not something I push."
+
+   A phone has no folder that OneDrive keeps in sync — that is a desktop thing —
+   so the folder route cannot work here, and the Android folder picker does not
+   offer OneDrive. The app therefore talks to OneDrive itself.
+
+   Sign-in is the authorization-code flow with PKCE, which is the one that
+   works from a browser with no secret to hide. The token lives on this device
+   and nowhere else. The scope is Files.ReadWrite.AppFolder: the app can see
+   ONE folder in her OneDrive — Apps/Coach — and nothing else. It cannot read
+   her documents, her photos, or anything she has not put there.
+
+   Microsoft expires a browser refresh token after about a day, so this cannot
+   be made permanent no matter how it is built. When it lapses the card says so
+   in one line and the button says "Sign in again". It never fails silently and
+   it never pretends a backup happened (rule 23).
+   ========================================================================= */
+const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0";
+/* The registration she made on 11 August. A client ID is not a secret — it
+   travels in the sign-in URL of every browser app there is, and on its own it
+   grants nothing: only her signing in does that. It lives here so she never
+   has to type a UUID on a phone, and Settings still overrides it. */
+const MS_CLIENT_DEFAULT = "f8cdef31-a31e-4b4a-93e4-5f571e91255a";
+const msClientId = (d) => String((d && d.settings && d.settings.msClientId) || MS_CLIENT_DEFAULT).trim();
+const MS_SCOPE = "Files.ReadWrite.AppFolder offline_access";
+const MS_KEY = "coach:onedrive";
+const msRedirect = () => {
+    try {
+        const u = new URL(window.location.href);
+        return u.origin + u.pathname;
+    }
+    catch (e) {
+        return "";
+    }
+};
+const msRead = () => {
+    try {
+        return JSON.parse(window.localStorage.getItem(MS_KEY) || "null");
+    }
+    catch (e) {
+        return null;
+    }
+};
+const msWrite = (v) => {
+    try {
+        if (v)
+            window.localStorage.setItem(MS_KEY, JSON.stringify(v));
+        else
+            window.localStorage.removeItem(MS_KEY);
+    }
+    catch (e) { }
+};
+const msConnected = () => !!(msRead() || {}).refresh;
+/* PKCE: a random secret this device keeps, and the hash of it that Microsoft
+   sees. Without the secret an intercepted code is worthless. */
+const b64url = (bytes) => {
+    let bin = "";
+    const a = new Uint8Array(bytes);
+    for (let i = 0; i < a.length; i++)
+        bin += String.fromCharCode(a[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+};
+const msStart = async (clientId) => {
+    const raw = new Uint8Array(32);
+    window.crypto.getRandomValues(raw);
+    const verifier = b64url(raw);
+    const digest = await window.crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
+    const challenge = b64url(digest);
+    const state = b64url(window.crypto.getRandomValues(new Uint8Array(12)));
+    window.sessionStorage.setItem("coach:msv", verifier);
+    window.sessionStorage.setItem("coach:mss", state);
+    const q = new URLSearchParams({
+        client_id: clientId, response_type: "code", redirect_uri: msRedirect(),
+        scope: MS_SCOPE, code_challenge: challenge, code_challenge_method: "S256",
+        state, prompt: "select_account",
+    });
+    window.location.href = MS_AUTH + "/authorize?" + q.toString();
+};
+/* Back from Microsoft: swap the code for tokens, then clean the address bar so
+   a reload cannot try to spend the same code twice. */
+const msFinish = async (clientId) => {
+    let code = null, state = null;
+    try {
+        const u = new URL(window.location.href);
+        code = u.searchParams.get("code");
+        state = u.searchParams.get("state");
+        if (u.searchParams.get("error")) {
+            window.history.replaceState({}, "", msRedirect());
+            return "refused";
+        }
+    }
+    catch (e) {
+        return "none";
+    }
+    if (!code)
+        return "none";
+    const verifier = window.sessionStorage.getItem("coach:msv");
+    const want = window.sessionStorage.getItem("coach:mss");
+    window.history.replaceState({}, "", msRedirect());
+    if (!verifier || (want && state && want !== state))
+        return "failed";
+    try {
+        const res = await fetch(MS_AUTH + "/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                client_id: clientId, grant_type: "authorization_code", code,
+                redirect_uri: msRedirect(), code_verifier: verifier,
+            }).toString(),
+        });
+        if (!res.ok)
+            return "failed";
+        const j = await res.json();
+        if (!j.access_token)
+            return "failed";
+        msWrite({ access: j.access_token, refresh: j.refresh_token || null,
+            until: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
+        return "ok";
+    }
+    catch (e) {
+        return "failed";
+    }
+};
+const msToken = async (clientId) => {
+    const t = msRead();
+    if (!t)
+        return null;
+    if (t.access && t.until && Date.now() < t.until - 60000)
+        return t.access;
+    if (!t.refresh)
+        return null;
+    try {
+        const res = await fetch(MS_AUTH + "/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+                client_id: clientId, grant_type: "refresh_token", refresh_token: t.refresh,
+                scope: MS_SCOPE, redirect_uri: msRedirect(),
+            }).toString(),
+        });
+        if (!res.ok) {
+            msWrite({ ...t, access: null, refresh: null, lapsed: true });
+            return null;
+        }
+        const j = await res.json();
+        if (!j.access_token) {
+            msWrite({ ...t, access: null, refresh: null, lapsed: true });
+            return null;
+        }
+        msWrite({ access: j.access_token, refresh: j.refresh_token || t.refresh,
+            until: Date.now() + (Number(j.expires_in) || 3600) * 1000 });
+        return j.access_token;
+    }
+    catch (e) {
+        return null;
+    }
+};
+const msLapsed = () => !!(msRead() || {}).lapsed;
+const lastCloudBackup = () => {
+    try {
+        return window.localStorage.getItem("coach:lastCloudBackup") || null;
+    }
+    catch (e) {
+        return null;
+    }
+};
+/* Sends the same file the folder route writes, into Apps/Coach. Returns a
+   short status so the card can say what actually happened. */
+const uploadToOneDrive = async (d, clientId) => {
+    if (!d || d.sample)
+        return "sample";
+    if (!clientId)
+        return "no-id";
+    if (!msConnected())
+        return "not-connected";
+    const token = await msToken(clientId);
+    if (!token)
+        return "lapsed";
+    try {
+        const res = await fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/" + backupName() + ":/content", { method: "PUT",
+            headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+            body: JSON.stringify(d, null, 2) });
+        if (!res.ok)
+            return "failed";
+        try {
+            window.localStorage.setItem("coach:lastCloudBackup", today());
+        }
+        catch (e) { }
+        return "ok";
+    }
+    catch (e) {
+        return "failed";
+    }
+};
 const lastFolderBackup = () => {
     try {
         return window.localStorage.getItem("coach:lastFolderBackup") || null;
@@ -3988,8 +4186,8 @@ const markFileBackup = () => {
 };
 /* How long since anything left this device. Null means never. */
 const backupAgeDays = () => {
-    const a = lastFolderBackup(), b = lastFileBackup();
-    const best = [a, b].filter(Boolean).sort().pop();
+    const a = lastFolderBackup(), b = lastFileBackup(), z = lastCloudBackup();
+    const best = [a, b, z].filter(Boolean).sort().pop();
     if (!best)
         return null;
     return Math.max(0, Math.round((parse(today()) - parse(best)) / 86400000));
@@ -10729,7 +10927,7 @@ function Progress({ data, setData, coach, setSheet }) {
 }
 /* ------------------------------------------------------------ SETTINGS ---- */
 function Settings({ data, setData, setSheet }) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     const s = data.settings;
     const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
     /* A file download navigates this frame away and lands on a blank page, so
@@ -10744,6 +10942,44 @@ function Settings({ data, setData, setSheet }) {
     /* backup: folder grant, status line, snapshot list */
     const [folderName, setFolderName] = useState(null);
     const [backupMsg, setBackupMsg] = useState("");
+    /* OneDrive: connected once, then it uploads itself (her instruction,
+       11 August: "provided that I can make it automatic, not something I push") */
+    const msId = msClientId(data);
+    const [msState, setMsState] = useState(() => (msConnected() ? (msLapsed() ? "lapsed" : "on") : "off"));
+    const connectOneDrive = async () => {
+        if (!msId) {
+            setBackupMsg("Paste the Application (client) ID below first.");
+            return;
+        }
+        setBackupMsg("Sending you to Microsoft to sign in…");
+        try {
+            await msStart(msId);
+        }
+        catch (e) {
+            setBackupMsg("Couldn't open the Microsoft sign-in.");
+        }
+    };
+    const disconnectOneDrive = () => { msWrite(null); setMsState("off"); setBackupMsg("Disconnected. Nothing already in OneDrive was touched."); };
+    const uploadNow = async () => {
+        setBackupMsg("Sending to OneDrive…");
+        const r = await uploadToOneDrive(data, msId);
+        if (r === "ok") {
+            setMsState("on");
+            setBackupMsg("In your OneDrive, under Apps/Coach.");
+            return true;
+        }
+        if (r === "lapsed") {
+            setMsState("lapsed");
+            setBackupMsg("Microsoft wants you to sign in again — one tap and it carries on.");
+            return false;
+        }
+        if (r === "not-connected") {
+            setBackupMsg("Connect OneDrive first.");
+            return false;
+        }
+        setBackupMsg("OneDrive wouldn't take it just then. Nothing is lost — try again, or use Back up now.");
+        return false;
+    };
     const [snaps, setSnaps] = useState([]);
     const ageDays = backupAgeDays();
     useEffect(() => {
@@ -10773,6 +11009,11 @@ function Settings({ data, setData, setSheet }) {
     };
     const backupNow = async () => {
         setBackupMsg("");
+        /* connected to OneDrive is the whole point — try that before anything */
+        if (msState === "on" && msId) {
+            if (await uploadNow())
+                return;
+        }
         if (folderName) {
             const r = await writeToFolder(data);
             if (r === "ok") {
@@ -11056,6 +11297,28 @@ function Settings({ data, setData, setSheet }) {
                 React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 } }, snaps.length
                     ? `${snaps.length} daily snapshot${snaps.length === 1 ? "" : "s"} kept on the device as well.`
                     : "Daily snapshots start once you log something.")),
+            React.createElement("div", { style: { background: msState === "on" ? C.mint : C.pist, borderRadius: 12,
+                    padding: "12px 14px", marginBottom: 12 } },
+                React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 } },
+                    React.createElement(Eyebrow, { color: msState === "on" ? C.moss : C.signal }, "OneDrive"),
+                    lastCloudBackup() && (React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.muted } },
+                        "last sent ",
+                        dayAndMonth(lastCloudBackup())))),
+                React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "6px 0 10px" } }, msState === "on"
+                    ? "Connected. A dated copy goes into Apps/Coach in your OneDrive on its own, once a day, without you pressing anything."
+                    : msState === "lapsed"
+                        ? "Microsoft has expired the sign-in — it does that roughly every day for anything running in a browser, whoever built it. One tap and it carries on. Nothing already in OneDrive is affected."
+                        : "Connect once and the app sends a dated copy into Apps/Coach by itself, once a day. It can see that one folder and nothing else in your OneDrive."),
+                msState === "on" ? (React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+                    React.createElement("span", { style: { flex: "1 1 55%" } },
+                        React.createElement(Btn, { kind: "ghost", onClick: uploadNow }, "Send one now")),
+                    React.createElement("button", { onClick: disconnectOneDrive, className: "tap", style: {
+                            border: "none", background: "transparent", cursor: "pointer", padding: "6px 4px",
+                            fontSize: 11.5, color: C.muted, fontFamily: "inherit"
+                        } }, "disconnect"))) : (React.createElement(Btn, { kind: "signal", onClick: connectOneDrive }, msState === "lapsed" ? "Sign in again" : "Connect OneDrive")),
+                msState !== "on" && (React.createElement("div", { style: { marginTop: 10 } },
+                    React.createElement(Field, { label: "Application (client) ID from Microsoft", unit: "", type: "text", value: ((_d = data.settings) === null || _d === void 0 ? void 0 : _d.msClientId) || MS_CLIENT_DEFAULT, onChange: (v) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), msClientId: v.trim() } })) }),
+                    React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: -6 } }, "Already filled in from the registration you made. It identifies this app to Microsoft; it is not a password and it grants nothing on its own \u2014 only your signing in does. Change it only if you ever register the app again.")))),
             React.createElement(Btn, { kind: "signal", onClick: backupNow }, "Back up now"),
             canPickFolder() && (React.createElement("div", { style: { marginTop: 10 } },
                 React.createElement(Btn, { kind: "ghost", onClick: pickFolder }, folderName ? `Change the folder (now: ${folderName})` : "Choose a folder to back up into"),
@@ -15194,6 +15457,28 @@ function CoachApp() {
                 }
             }
             catch (e) { }
+            /* ---- ONEDRIVE, ON ITS OWN --------------------------------------
+               HER INSTRUCTION, 11 August: "Provided that I can make it
+               automatic, not something I push." Coming back from the Microsoft
+               sign-in, finish it. Then, connected, send today's copy if today's
+               has not gone yet. Silent either way: it never blocks opening the
+               app, and the Settings card is where the truth about it lives. */
+            (async () => {
+                try {
+                    const id = msClientId(d);
+                    if (!id)
+                        return;
+                    await msFinish(id);
+                    if (!d || d.sample || !Object.keys(d.logs || {}).length)
+                        return;
+                    if (!msConnected())
+                        return;
+                    if (lastCloudBackup() === today())
+                        return;
+                    await uploadToOneDrive(d, id);
+                }
+                catch (e) { }
+            })();
         });
     }, []);
     /* SAVE AFTER THE STATE SETTLES, NEVER BEFORE.
