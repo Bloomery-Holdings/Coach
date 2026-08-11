@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 94";
+const BUILD = "11 August 2026 · 95";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4318,13 +4318,19 @@ function useCoach(data, day, clock) {
             }
             return null;
         })();
-        /* her best on any measure, so a finisher can reach past it */
+        /* her best on any measure, so a finisher can reach past it.
+           HER REPORT, 11 August: "it says stand on each leg for thirty seconds —
+           my record is already thirty-three. The challenge has to be based on
+           what I've actually done, not invented in a vacuum." It only ever read
+           the WEEKLY store — and her record was set in the monthly benchmark,
+           which asks every one of the same tests. Both stores count now: a
+           record is a record wherever she set it. */
         const bestOf = (id) => {
             const f = fields.weekly.find((x) => x.id === id);
             if (!f)
                 return null;
             let best = null;
-            Object.values(weekly).forEach((e) => {
+            [...Object.values(weekly), ...Object.values(monthly)].forEach((e) => {
                 const v = readMeasure(e, f);
                 if (!isNaN(v) && (best === null || v > best))
                     best = v;
