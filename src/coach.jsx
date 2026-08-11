@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 107";
+const BUILD = "11 August 2026 · 108";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9758,6 +9758,22 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         )}
       </div>
 
+      {/* THE COACH'S READ, WHERE SHE CAN GET BACK TO IT.
+          Her question, 11 August: "Where do I see the reply?" One line, no
+          duplication — it opens the read itself. The whole of it, and every
+          earlier one, lives in Progress. */}
+      {isToday && coach.lastReview && (
+        <button onClick={() => setSheet({ kind: "review", show: coach.lastReview.id })} className="tap"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+            width: "100%", padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+            border: `1px solid ${C.line}`, background: "transparent", fontFamily: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45 }}>
+            What the coach read on {dayAndMonth(coach.lastReview.date)}
+          </span>
+          <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
+        </button>
+      )}
+
       {/* A past day she has opened, that the calendar is painting white:
           the day says what the app can and cannot see in it, and gives her
           the one tap that settles it. Never on today — today is still
@@ -11443,6 +11459,33 @@ function Progress({ data, setData, coach, setSheet }) {
           was both the confusion and the only cure for it. The day itself now
           carries the three states, on Today. Nothing was deleted with it:
           every day's record is untouched and still feeds every number. */}
+
+      {/* ---------- what the coach read, kept where she can find it ----------
+           Her question, 11 August: "Where do I see the reply?" Here, and on
+           Today, for as long as she keeps them. */}
+      {(coach.reviews || []).length > 0 && (
+        <Fold title="What the coach read"
+          note={`${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever`}>
+          <Explain>Every time you ask the coach to read everything you have logged, its answer is kept here. Tap one to read it again — the reasoning, what it saw, and the month it drew up if it drew one.</Explain>
+          {coach.reviews.slice().reverse().map((r) => (
+            <button key={r.id} onClick={() => setSheet({ kind: "review", show: r.id })} className="tap"
+              aria-label={`open the read from ${r.date}`}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                width: "100%", padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
+                background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, color: C.ink }}>{dayAndMonth(r.date)}</div>
+                <div style={{ fontSize: 11.5, color: r.ok ? C.muted : C.clay, marginTop: 2 }}>
+                  {r.ok
+                    ? (r.block ? `${r.block.name}${r.applied ? " — started" : " — not started"}` : "a reading, no block")
+                    : "did not go through"}
+                </div>
+              </div>
+              <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
+            </button>
+          ))}
+        </Fold>
+      )}
 
       {/* ---------- editable history: weekly checks ---------- */}
       <Fold title="Weekly checks" note={`${recentWeeks.length} weeks, every battery you have filled in`}>
@@ -15859,9 +15902,19 @@ function VitalsAll({ coach, setSheet }) {
    or failed (rules 15 and 20). A failed read is exactly what you want to have
    the next time one fails.
 ========================================================================== */
-function ReviewSheet({ data, setData, coach, setSheet, close }) {
+function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState(null);
+  /* HER QUESTION, 11 August: "I saw a tab that let me send everything I've
+     logged to the coach for feedback. I don't know where the answer to it is.
+     Where do I see the reply?"
+
+     Nowhere, and that was a real gap. Every read is kept forever, but the
+     only door to it was the row on Today that started it — and that row
+     marks itself done the moment a read has been run, so the door shut
+     behind the answer on the very day she asked for it. Progress and Today
+     both open this sheet on a named read now. */
+  const [result, setResult] = useState(() =>
+    (show ? (coach.reviews || []).find((r) => r && r.id === show) : null) || null);
   const [showPayload, setShowPayload] = useState(false);
   const mode = coach.deepMode;
   const reviews = coach.reviews || [];
@@ -17701,7 +17754,7 @@ function CoachApp() {
           ) : sheet.kind === "mobility" ? (
             <MobilitySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "review" ? (
-            <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
+            <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} show={sheet.show} close={() => setSheet(null)} />
           ) : sheet.kind === "briefing" ? (
             <Briefing coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "chat" ? (
