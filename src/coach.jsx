@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 101";
+const BUILD = "11 August 2026 · 102";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3272,13 +3272,20 @@ const fillFromSeed = (list, seed, keys) => {
 const repairLogs = (d) => {
   if (d.sample) return d.logs || {};
   const logs = { ...(d.logs || {}) };
+  /* WHAT MAKES A DAY A DAY SHE TRAINED. Her instruction, 11 August, asked
+     directly: "only training. Any notes or questions do not qualify the day
+     to be trained. Classes, sessions, measurements, area list, mobility
+     sessions — anything that is training."
+
+     So the work counts and the writing does not. Session notes counted from
+     build 91 and drill notes from build 100; both are out, on her say-so. A
+     day whose only trace is something she wrote is a day she wrote something,
+     which is worth having and is not a session. */
   const afterSession = (l) => !!l &&
     (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined ||
      l.when !== undefined || l.energyAfter !== undefined ||
-     String(l.sessionNote || "").trim() !== "" ||
-     /* a note written against a drill or an exercise that day is the work
-        itself speaking (her Saturday, still white on 11 August) */
-     Object.values(l.drillNotes || {}).some((v) => String(v || "").trim() !== ""));
+     (Array.isArray(l.extraSessions)
+       && l.extraSessions.some((x) => String((x && x.type) || "").trim() !== "")));
   const nowDay = today();
   Object.keys(logs).forEach((day) => {
     const l = logs[day];
@@ -3287,8 +3294,14 @@ const repairLogs = (d) => {
        "everything you did" that day, so painting the chip white was the app
        disagreeing with its own record (her Saturday, 11 August). TODAY stays
        strict — a class just started is not yet a class done. */
-    if (afterSession(l) || (day < nowDay && String(l.type || "").trim() !== ""))
-      logs[day] = { ...l, completed: true };
+    /* A class or a duration sitting in a PAST day is a session she did — the
+       app lists it under everything she did that day. TODAY stays strict:
+       the class the coach proposed this morning is a plan until there is
+       something to show it happened, and a day that says TRAINED before she
+       has trained is worse than one that says nothing. */
+    const past = day < nowDay
+      && (String(l.type || "").trim() !== "" || String(l.minutes ?? "").trim() !== "");
+    if (afterSession(l) || past) logs[day] = { ...l, completed: true };
   });
   const bwDays = new Set();
   Object.keys(d.bwlog || {}).forEach((day) => {
@@ -9167,6 +9180,46 @@ function SessionClock({ log, write, coach }) {
    tap, because the day she is looking at is where the answer belongs
    (rule 11). Never a reproach: a day she didn't train is a day she didn't
    train, nothing more (rule 24). */
+/* ---- WHAT THAT DAY WAS, CHANGED ON THE DAY ITSELF ------------------
+   Her instruction, 11 August: "Take it out. I should be able to edit
+   anything on the day itself. I don't see the value of the list."
+
+   The list on Progress could turn a day trained, rest, or empty again —
+   and it was the only thing that could. It is gone, so the day carries
+   it. Three states, named and tapped directly rather than cycled through,
+   because a tap that means something different each time is how a day she
+   trained ended up saying MISSED. Clearing a day clears the two flags and
+   nothing else: whatever she wrote or measured that day stays (rule 20). */
+function DayState({ log, write }) {
+  const state = log?.completed ? "trained" : log?.rest ? "rest" : "none";
+  const opts = [
+    { k: "trained", label: "Trained", patch: { completed: true, rest: false } },
+    { k: "rest", label: "Rest day", patch: { completed: false, rest: true } },
+    { k: "none", label: "Neither", patch: { completed: false, rest: false } },
+  ];
+  return (
+    <Card>
+      <Eyebrow>That day</Eyebrow>
+      <div style={{ display: "flex", gap: 6, marginTop: 9 }}>
+        {opts.map((o) => {
+          const on = state === o.k;
+          return (
+            <button key={o.k} className="tap" onClick={() => write(o.patch)} style={{
+              flex: 1, padding: "11px 6px", borderRadius: 10, cursor: "pointer", fontSize: 12.5,
+              border: `1.5px solid ${on ? C.ochre : C.line}`,
+              background: on ? C.pist : "transparent",
+              color: on ? C.ink : C.muted, fontWeight: on ? 600 : 400, fontFamily: "inherit",
+            }}>{o.label}</button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
+        Nothing you wrote or measured that day is touched by this.
+      </div>
+    </Card>
+  );
+}
+
 function WhyWhite({ data, day, log, write }) {
   const l = log || null;
   const trim = (x) => String(x ?? "").trim();
@@ -9242,7 +9295,7 @@ function WhyWhite({ data, day, log, write }) {
       ))}
 
       <div style={{ marginTop: 13 }}>
-        <Btn kind="signal" onClick={() => write({ completed: true, type: l?.type || "Session" })}>
+        <Btn kind="signal" onClick={() => write({ completed: true, rest: false })}>
           It was a training day — count it
         </Btn>
       </div>
@@ -9675,6 +9728,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           the day says what the app can and cannot see in it, and gives her
           the one tap that settles it. Never on today — today is still
           happening — and never on a day she logged as rest. */}
+      {!isToday && <DayState log={log} write={write} />}
       {!isToday && !log?.completed && !log?.rest && (
         <WhyWhite data={data} day={t} log={log} write={write} />
       )}
@@ -11331,36 +11385,13 @@ function Progress({ data, setData, coach, setSheet }) {
       })()}
 
       {/* ---------- editable history: days ---------- */}
-      <Fold title="Every day so far" note={`${recentDays.length} days, day by day, editable`}>
-        <Explain>Tap any day to change it: empty → trained → rest → empty. Use this to fix a mistake or fill in a day you forgot.</Explain>
-        <div style={{ display: "flex", flexDirection: "column" }}>
-          {recentDays.map((d) => {
-            const l = data.logs[d];
-            const state = l?.completed ? "trained" : l?.rest ? "rest" : coach.isScheduled(d) && d < coach.t ? "missed" : "—";
-            /* Same rule: a missed day is stated, not alarmed. */
-            const col = state === "trained" ? C.ink : state === "rest" ? C.moss : state === "missed" ? C.muted : "#9FB39C";
-            return (
-              <button key={d} onClick={() => cycleDay(d)} className="tap" style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
-                padding: "10px 2px", border: "none", borderBottom: `1px solid ${C.chalk}`,
-                background: "transparent", cursor: "pointer", textAlign: "left",
-              }}>
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: d === coach.t ? 600 : 400 }}>
-                    {parse(d).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
-                  </span>
-                  {d === coach.t && <span className="mono" style={{ fontSize: 10, color: C.signal, marginLeft: 8 }}>TODAY</span>}
-                  {l?.type && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{l.type}{l.minutes ? ` · ${l.minutes} min` : ""}</div>}
-                </div>
-                <span className="mono" style={{
-                  fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: col,
-                  border: `1px solid ${state === "—" ? C.line : col}`, borderRadius: 20, padding: "3px 9px",
-                }}>{state}</span>
-              </button>
-            );
-          })}
-        </div>
-            </Fold>
+      {/* "Every day so far" stood here. Her instruction, 11 August: "Take it
+          out. I should be able to edit anything on the day itself. I don't
+          see the value of the list." It was the only place that could say a
+          day was MISSED, and it said it about days she had trained — so it
+          was both the confusion and the only cure for it. The day itself now
+          carries the three states, on Today. Nothing was deleted with it:
+          every day's record is untouched and still feeds every number. */}
 
       {/* ---------- editable history: weekly checks ---------- */}
       <Fold title="Weekly checks" note={`${recentWeeks.length} weeks, every battery you have filled in`}>
@@ -17346,6 +17377,28 @@ function CoachApp() {
      starting state from overwriting real data before `loadData()` returns. */
   const setData = useCallback((next) => setDataRaw(next), []);
   useEffect(() => { if (ready) saveData(data); }, [data, ready]);
+
+  /* THE RECORD KEEPS UP WITH HER INSTEAD OF WAITING FOR THE NEXT START-UP.
+
+     HER REPORT, 11 August: "I enter everything, and it still said missed."
+     She was right, and it is the whole of the Saturday business. The rule
+     that decides whether a day counts as trained ran once, inside
+     `loadData`. So everything she entered during a day — the measurements,
+     the mobility tests, the body lists, the class — went into the record,
+     and the record went on saying MISSED until the next time the app was
+     started from cold. Her instruction: "whenever I input anything, it is
+     automatically set as trained."
+
+     Same rule, same function, now applied every time anything changes.
+     It only ever adds; it converges in one pass, so it cannot loop. */
+  useEffect(() => {
+    if (!ready || !data || data.sample) return;
+    const repaired = repairLogs(data);
+    const before = data.logs || {};
+    const changed = Object.keys(repaired).length !== Object.keys(before).length
+      || Object.keys(repaired).some((d) => repaired[d] !== before[d]);
+    if (changed) setDataRaw((cur) => ({ ...cur, logs: repairLogs(cur) }));
+  }, [data, ready]);
 
   /* If the store was there and unreadable, do not quietly present an empty app
      — her data may be intact underneath. Throwing here hands it to the rescue
