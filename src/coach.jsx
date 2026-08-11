@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 97";
+const BUILD = "11 August 2026 · 98";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -17783,15 +17783,21 @@ const designBodyWork = async ({ area, mins, apiKey, context, onProgress }) => {
 /* Which list comes next, and how far round she is. Kept as plain arithmetic so
    it survives without the model and reads the same every time. */
 const bodyworkState = (prog) => {
+  /* HER INSTRUCTION, 11 August: "Maybe I decide today to do list number
+     three and tomorrow list number five and the day after list number one.
+     Don't impose on me a single sequence." So a round is no longer a
+     rotation — it is the SET of lists she has ticked, in whatever order she
+     chose. Old entries (one plain date per key) still count exactly as they
+     always did (rule 20); new ticks are keyed date#index so more than one
+     list can be done on the same day. */
   const log = prog.log || {};
-  const dates = Object.keys(log).sort();
-  const doneCount = dates.length;
   const lists = prog.lists || [];
-  const nextIndex = lists.length ? doneCount % lists.length : 0;
-  const round = lists.length ? Math.floor(doneCount / lists.length) : 0;
-  const inRound = lists.length ? doneCount % lists.length : 0;
-  return { doneCount, nextIndex, round, inRound, total: lists.length, dates,
-           roundComplete: lists.length > 0 && doneCount > 0 && inRound === 0 };
+  const doneSet = new Set(Object.values(log).map(Number).filter((v) => !isNaN(v) && v >= 0 && v < Math.max(lists.length, 1)));
+  const doneCount = doneSet.size;
+  const dates = Object.keys(log).map((k) => String(k).split("#")[0]).sort();
+  const round = (prog.rounds || []).length;
+  return { doneCount, doneSet, round, inRound: doneCount, total: lists.length, dates,
+           roundComplete: lists.length > 0 && doneCount >= lists.length };
 };
 
 /* Everything she has ever logged against one body-work exercise, newest
@@ -17954,33 +17960,40 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
      List one, List two, List three, with the name of the list, and it tells
      me whether it's done or not." So: an always-visible index of every list
      in the round, each row named and marked, and tapping a row opens it. */
-  const [viewId, setViewId] = useState(null);
+  /* HER DESIGN, 11 August, in her words: the area is a tab; tapping it drops
+     down the menu of lists; each row can be flipped done or not done right
+     there and opened from there; lists open independently, never in an
+     imposed sequence; everything stays editable. */
+  const [unfolded, setUnfolded] = useState(false);
+  const [openIds, setOpenIds] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const st = bodyworkState(prog);
   const lists = prog.lists || [];
-  const live = lists[st.nextIndex] || null;
-  /* List one is index 0, and !!0 is false — so the first list of every round
-     would have been asked for twice on the same day. Presence, not truthiness. */
-  const doneToday = (prog.log || {})[coach.t] !== undefined;
 
-  /* Closing a list IS a session — the calendar fills the moment it happens,
-     not on the next app open (her report, 11 August). A day she ticked or
-     logged as rest is left exactly as she set it. */
-  const markDone = () => setData((d) => {
+  const toggleOpen = (id) => setOpenIds((xs) =>
+    xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
+
+  /* Ticking a list done IS body work done — the calendar fills the moment it
+     happens. Un-ticking removes only that tick; the day log is never
+     un-stamped by it (what she trained stays trained, rule 20). */
+  const toggleDone = (i) => setData((d) => {
+    const pg0 = (d.bodywork || []).find((x) => x.id === prog.id) || prog;
+    const log = { ...(pg0.log || {}) };
+    const isDone = Object.values(log).map(Number).includes(i);
+    if (isDone) {
+      Object.keys(log).forEach((k) => { if (Number(log[k]) === i) delete log[k]; });
+      return { ...d, bodywork: (d.bodywork || []).map((pg) =>
+        pg.id !== prog.id ? pg : { ...pg, log }) };
+    }
+    log[coach.t + "#" + i] = i;
     const l = (d.logs || {})[coach.t] || {};
     return { ...d,
-      bodywork: (d.bodywork || []).map((pg) =>
-        pg.id !== prog.id ? pg : { ...pg, log: { ...(pg.log || {}), [coach.t]: st.nextIndex } }),
+      bodywork: (d.bodywork || []).map((pg) => (pg.id !== prog.id ? pg : { ...pg, log })),
       logs: (l.completed || l.rest) ? (d.logs || {})
         : { ...(d.logs || {}), [coach.t]: { ...l, completed: true, type: l.type || "Body work" } },
     };
   });
-  const undo = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
-    if (pg.id !== prog.id) return pg;
-    const log = { ...(pg.log || {}) }; delete log[coach.t];
-    return { ...pg, log };
-  }) }));
   const removeProg = () => setData((d) => ({ ...d,
     bodywork: (d.bodywork || []).filter((pg) => pg.id !== prog.id) }));
 
@@ -18024,16 +18037,23 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
 
   return (
     <Card style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
-        <Eyebrow color={C.signal}>{prog.area}</Eyebrow>
-        <span className="mono" style={{ fontSize: 10, color: C.muted }}>
-          {st.inRound || (st.doneCount ? lists.length : 0)} of {lists.length} this round
-          {st.round > 0 ? ` · round ${st.round + (st.roundComplete ? 0 : 1)}` : ""}
+      <button onClick={() => setUnfolded((v) => !v)} className="tap" style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10,
+        width: "100%", border: "none", background: "transparent", cursor: "pointer",
+        padding: 0, textAlign: "left", fontFamily: "inherit" }}>
+        <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 12, color: C.signal }}>{unfolded ? "▾" : "▸"}</span>
+          <Eyebrow color={C.signal}>{prog.area}</Eyebrow>
         </span>
-      </div>
-      {prog.line && (
-        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "4px 0 12px" }}>{prog.line}</div>
+        <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+          {st.doneCount} of {lists.length} this round{st.round > 0 ? ` · round ${st.round + 1}` : ""}
+        </span>
+      </button>
+      {unfolded && prog.line && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "8px 0 12px" }}>{prog.line}</div>
       )}
+      {unfolded && (
+        <div>
 
       {st.roundComplete && (
         <Card style={{ background: C.mint, marginBottom: 12 }}>
@@ -18051,96 +18071,66 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
         </Card>
       )}
 
-      {/* THE INDEX. Every list of the round, by number and name, with its
-          state — done, next, or still to come. Tap one and it opens below. */}
-      {lists.length > 0 && (() => {
-        const doneSet = new Set(Object.values(prog.log || {}).map(Number));
+      {/* THE MENU. Every list by number and name; done flipped on the row;
+          each list opens and closes on its own, in any order she likes. */}
+      {lists.map((l, i) => {
+        const isDone = st.doneSet.has(i);
+        const isOpen = openIds.includes(l.id);
         return (
-          <div style={{ margin: "2px 0 12px" }}>
-            {lists.map((l, i) => {
-              const isDone = doneSet.has(i);
-              const isNext = live && l.id === live.id;
-              const isOpen = (viewId || (live && live.id)) === l.id;
-              return (
-                <button key={l.id} onClick={() => setViewId(l.id)} className="tap" style={{
-                  display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
-                  padding: "10px 12px", marginBottom: 5, borderRadius: 10, cursor: "pointer",
-                  fontFamily: "inherit",
-                  border: `1.5px solid ${isOpen ? C.signal : C.line}`,
-                  background: isDone ? C.mint : "transparent" }}>
-                  <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
-                    List {l.n}
-                  </span>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600,
-                    color: isOpen ? C.signal : C.ink }}>{l.title}</span>
-                  <span className="mono" style={{ fontSize: 10, flexShrink: 0,
-                    color: isDone ? C.moss : isNext ? C.signal : C.muted }}>
-                    {isDone ? "✓ done" : isNext ? "next" : "to come"}
-                  </span>
+          <div key={l.id} style={{ marginBottom: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8,
+              padding: "9px 12px", borderRadius: 10,
+              border: `1.5px solid ${isOpen ? C.signal : C.line}`,
+              background: isDone ? C.mint : "transparent" }}>
+              <button onClick={() => toggleOpen(l.id)} className="tap" style={{
+                flex: 1, display: "flex", alignItems: "center", gap: 8, border: "none",
+                background: "transparent", cursor: "pointer", padding: 0, textAlign: "left",
+                fontFamily: "inherit" }}>
+                <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
+                  List {l.n}
+                </span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600,
+                  color: isOpen ? C.signal : C.ink }}>{l.title}</span>
+                <span style={{ fontSize: 11, color: C.muted }}>{isOpen ? "▾" : "▸"}</span>
+              </button>
+              <button onClick={() => toggleDone(i)} className="tap" style={{
+                border: `1px solid ${isDone ? C.moss : C.line}`, borderRadius: 8,
+                background: isDone ? C.moss : "transparent",
+                color: isDone ? C.chalk : C.muted, cursor: "pointer", flexShrink: 0,
+                padding: "5px 10px", fontSize: 10.5, fontWeight: 600, fontFamily: "inherit" }}>
+                {isDone ? "✓ done" : "not done"}
+              </button>
+            </div>
+            {isOpen && (
+              <div style={{ padding: "4px 2px 8px" }}>
+                {l.focus && (
+                  <div style={{ fontSize: 12, color: C.moss, margin: "6px 0 0" }}>{l.focus}</div>
+                )}
+                {(l.exercises || []).map((ex) => (
+                  <BodyWorkExercise key={ex.id} prog={prog} list={l} ex={ex}
+                    data={data} setData={setData} coach={coach} setSheet={setSheet} />
+                ))}
+                <button onClick={() => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+                    pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
+                      ls.id !== l.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
+                        id: newId(), name: "New exercise", tool: "", dose: "3 x 10", mins: 2,
+                        how: "", targets: "", label: "New exercise", search: "", video: "" }] }) }) }))}
+                  className="tap" style={{
+                    border: `1.5px dashed ${C.line}`, borderRadius: 10, background: "transparent",
+                    cursor: "pointer", padding: "10px 0", width: "100%", marginTop: 10,
+                    fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                  + add an exercise to this list
                 </button>
-              );
-            })}
+                <div style={{ marginTop: 10 }}>
+                  <Btn kind={st.doneSet.has(i) ? "quiet" : "signal"} onClick={() => toggleDone(i)}>
+                    {st.doneSet.has(i) ? "Not done after all — untick it" : "Done — tick this list off"}
+                  </Btn>
+                </div>
+              </div>
+            )}
           </div>
         );
-      })()}
-
-      {(() => { const viewing = lists.find((l) => l.id === viewId) || live; if (!viewing) return null;
-        const isLive = live && viewing.id === live.id;
-        return (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-            <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>
-              {isLive && doneToday ? "Today's list — done" : `${isLive ? "Next: " : ""}${viewing.title}`}
-            </span>
-            <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
-              list {viewing.n} of {lists.length}
-            </span>
-          </div>
-          {viewing.focus && (
-            <div style={{ fontSize: 12, color: C.moss, marginTop: 3 }}>{viewing.focus}</div>
-          )}
-          {!(isLive && doneToday) ? (
-            <div>
-              {(viewing.exercises || []).map((ex) => (
-                <BodyWorkExercise key={ex.id} prog={prog} list={viewing} ex={ex}
-                  data={data} setData={setData} coach={coach} setSheet={setSheet} />
-              ))}
-              {/* HER INSTRUCTION, 10 August: "make sure I can edit any set of
-                  exercises... or the area of the body exercises." Editing and
-                  removing existed; adding did not. It does now, and the new
-                  row opens straight into its own editor. */}
-              <button onClick={() => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
-                  pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
-                    ls.id !== viewing.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
-                      id: newId(), name: "New exercise", tool: "", dose: "3 x 10", mins: 2,
-                      how: "", targets: "", label: "New exercise", search: "", video: "" }] }) }) }))}
-                className="tap" style={{
-                  border: `1.5px dashed ${C.line}`, borderRadius: 10, background: "transparent",
-                  cursor: "pointer", padding: "10px 0", width: "100%", marginTop: 10,
-                  fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
-                + add an exercise to this list
-              </button>
-              {isLive ? (
-                <div style={{ marginTop: 12 }}>
-                  <Btn kind="signal" onClick={markDone}>Done — move to the next list</Btn>
-                </div>
-              ) : (
-                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
-                  Today's list is number {live ? live.n : "—"} — this one is open to look at or
-                  work from, and comes round on its own day.
-                </div>
-              )}
-            </div>
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginBottom: 8 }}>
-                You did this one today. The next one comes round on your next training day.
-              </div>
-              <Btn kind="quiet" onClick={undo}>I haven't actually done it — put it back</Btn>
-            </div>
-          )}
-        </div>
-      ); })()}
+      })}
 
       {err && (
         <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>
@@ -18155,6 +18145,8 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
           </button>
         </div>
       </div>
+        </div>
+      )}
     </Card>
   );
 }
