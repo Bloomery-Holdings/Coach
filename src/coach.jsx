@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 93";
+const BUILD = "11 August 2026 · 94";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7654,16 +7654,39 @@ const drillSeconds = (d) => {
   return secondsFor(d);
 };
 
+/* A RUNNING CLOCK MUST SURVIVE HER LEAVING THE SCREEN.
+   Her report, 11 August: "I clicked start... as long as I get out and do
+   anything, the counting stops. Even in the app, going from one dashboard to
+   the other, it stops counting, just resets." The clock lived inside the
+   component; leave the screen, the component unmounts, the clock dies. Every
+   timer now writes its wall-clock start into a registry keyed by what it is
+   timing, and a remount picks the count straight back up — the elapsed time
+   is derived from the clock on the wall, not from ticks it happened to be
+   awake for. */
+const TICKING = {};
 function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
   /* seconds: count DOWN from this. null: count UP. */
-  const [ms, setMs] = useState(seconds ? seconds * 1000 : 0);
-  const [running, setRunning] = useState(false);
+  const tid = (label || "t") + "|" + (seconds || "up");
+  const remembered = TICKING[tid];
+  const [ms, setMs] = useState(() => {
+    if (!remembered) return seconds ? seconds * 1000 : 0;
+    if (!remembered.running) return remembered.ms;
+    const gone = Date.now() - remembered.startedAt;
+    return seconds ? Math.max(0, remembered.base - gone) : remembered.base + gone;
+  });
+  const [running, setRunning] = useState(() => {
+    if (!remembered || !remembered.running) return false;
+    if (seconds && remembered.base - (Date.now() - remembered.startedAt) <= 0) return false;
+    return true;
+  });
   const [rang, setRang] = useState(false);
   const tick = useRef(null);
-  const started = useRef(0);
-  const base = useRef(seconds ? seconds * 1000 : 0);
+  const started = useRef(remembered && remembered.running ? remembered.startedAt : 0);
+  const base = useRef(remembered ? remembered.base : (seconds ? seconds * 1000 : 0));
 
   useEffect(() => () => { if (tick.current) clearInterval(tick.current); }, []);
+  /* every state change is remembered under this timer's identity */
+  useEffect(() => { TICKING[tid] = { running, startedAt: started.current, base: base.current, ms }; });
 
   useEffect(() => {
     if (!running) { if (tick.current) { clearInterval(tick.current); tick.current = null; } return; }
@@ -8951,7 +8974,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
             textTransform: "uppercase", color: C.muted }}>The whole set</span>
           <span className="mono" style={{ fontSize: 10, color: C.muted }}>counts up</span>
         </div>
-        <Timer compact />
+        <Timer compact label="the ten minutes — whole set" />
       </div>
 
       {coach.dailyDrills.list.map((d, i) => (
@@ -9015,6 +9038,74 @@ function DrillsCard({ coach, setSheet, data, setData }) {
           )}
         </div>
       ))}
+    </Card>
+  );
+}
+
+function SessionClock({ log, write, coach }) {
+  const clock = log?.sessionClock;
+  const running = clock && clock.startedAt && !clock.stoppedAt;
+  /* repaint every second while it runs — display only, the truth is the
+     wall clock in the stored start time */
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => force((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+
+  if (log?.completed && !running) return null;   /* the day is logged — the clock's job is done */
+
+  const mins = running ? (Date.now() - clock.startedAt) / 60000 : 0;
+  const face = running
+    ? Math.floor(mins) + ":" + String(Math.floor((mins % 1) * 60)).padStart(2, "0")
+    : null;
+
+  const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
+  const nevermind = () => write({ sessionClock: undefined });
+  const done = () => {
+    const m = Math.max(1, Math.round(mins));
+    write({
+      sessionClock: { ...clock, stoppedAt: Date.now() },
+      completed: true,
+      minutes: String(m),
+      type: log?.type || coach.prescribed?.name || "Session",
+    });
+  };
+
+  return (
+    <Card style={{ background: running ? C.mint : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        {!running ? (
+          <>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <Eyebrow>Today's session</Eyebrow>
+              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>
+                Press start when you begin. The clock keeps counting wherever you go,
+                and Done logs the session with the minutes it measured.
+              </div>
+            </span>
+            <Btn kind="signal" onClick={begin}>Start</Btn>
+          </>
+        ) : (
+          <>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <Eyebrow color={C.moss}>Session running</Eyebrow>
+              <div className="mono" style={{ fontSize: 30, fontWeight: 700, color: C.ink, marginTop: 2 }}>
+                {face}
+              </div>
+            </span>
+            <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+              <Btn kind="signal" onClick={done}>Done</Btn>
+              <button onClick={nevermind} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer",
+                fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px" }}>
+                never mind — I didn't train
+              </button>
+            </span>
+          </>
+        )}
+      </div>
     </Card>
   );
 }
@@ -9446,6 +9537,16 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                it tells her what to train, so it can offer something else
                rather than push the session it had in mind. It cannot answer
                a feeling it has not been told about yet. */}
+      {/* HER INSTRUCTION, 11 August: "I want a timer on my landing page that
+          counts upwards. When I start the day of exercising it starts
+          counting... I don't want you to ask me at the end of the session how
+          long it lasted. I have to have the starting and then the done
+          button." The moment she presses Start, the wall-clock time is written
+          into the day — so the count survives leaving the app, other tabs,
+          even a restart. Done stops it, logs the session with the measured
+          minutes, and nothing ever asks her the duration again: the clock
+          already answered. */}
+      {isToday && <SessionClock log={log} write={write} coach={coach} />}
       {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
       {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
@@ -16625,8 +16726,17 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     if (f.bilateral) return String(form[f.id + "__L"] || "").trim() !== "";
     return String(form[f.id] || "").trim() !== "";
   };
-  const doneFields = fields.filter(isFilled);
-  const left = fields.filter((f) => !isFilled(f));
+  /* FROZEN AT OPEN. Her report, 11 August: "I input something and it very
+     quickly disappears and goes as done while I still want to add a note."
+     The split re-sorted LIVE, so the first character into a row reclassified
+     it and yanked it into another card — which also killed the microphone
+     mid-dictation on Biggest win, because moving the row remounts it. The
+     split is now decided once, when the sitting opens: saving stays instant,
+     rows stay under her hands, and the sorting happens the NEXT time the
+     battery opens. */
+  const [openEmpty] = useState(() => new Set(fields.filter((f) => !isFilled(f)).map((f) => f.id)));
+  const doneFields = fields.filter((f) => !openEmpty.has(f.id));
+  const left = fields.filter((f) => openEmpty.has(f.id));
   const started = doneFields.length > 0;
 
   const minsOf = (list) => list.reduce((a, f) => a + (Number(f.mins) || 0), 0);
@@ -16694,7 +16804,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           <Eyebrow>Stopwatch</Eyebrow>
           <span className="mono" style={{ fontSize: 10, color: C.muted }}>counts up</span>
         </div>
-        <Timer />
+        <Timer label={"the " + which + " sitting stopwatch"} />
       </Card>
 
       <button onClick={() => setSheet({ kind: isWeekly ? "edit-weekly" : "edit-monthly" })}
