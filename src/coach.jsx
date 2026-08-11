@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 106";
+const BUILD = "11 August 2026 · 107";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6757,12 +6757,19 @@ function useCoach(data, day, clock) {
          moment either one is actually asking her something — a followed-up
          issue, a goal due a score — it comes up here instead, because a
          thing the app needs from her should never be behind a tap. */
-      if (issueFollowUp.length)
+      /* An issue she has answered TODAY keeps its row — done, so it is out of
+         what she is being asked for, but still there, so the answer she is in
+         the middle of writing does not vanish from under her hand the moment
+         the first letter reaches the record. */
+      const answeredToday = openIssues.filter((i) => (i.tried || []).some((x) => x && x.date === t));
+      if (issueFollowUp.length || answeredToday.length)
         add("issue", "day",
           issueFollowUp.length === 1
             ? `You mentioned ${issueFollowUp[0].text} — how is it now?`
-            : `${issueFollowUp.length} things you mentioned — how are they now?`,
-          false,
+            : issueFollowUp.length
+              ? `${issueFollowUp.length} things you mentioned — how are they now?`
+              : "Answered — thank you",
+          issueFollowUp.length === 0,
           "You told me about this two days ago. Whether it settled, stayed the same or got worse is the whole point of writing it down — without the second reading there is nothing to compare, and next time it happens I would be starting from scratch again.",
           issueFollowUp.length === 1
             ? `You mentioned ${issueFollowUp[0].text} a couple of days ago. How is it now?`
@@ -14618,18 +14625,44 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
          or the issue closed because it has settled. Nothing is deleted:
          a closed issue stays on the record for when it comes back. */
       case "issue": {
-        const open = coach.issueFollowUp || [];
+        /* One she has answered today is no longer "due" the moment the first
+           letter lands — so it would vanish from under her hand mid-sentence,
+           which is the fault she reported on the battery rows. Anything
+           answered today stays on screen until she closes the row. */
+        const open = [...(coach.issueFollowUp || [])];
+        (coach.openIssues || []).forEach((i) => {
+          if (!open.some((o) => o.id === i.id)
+            && (i.tried || []).some((x) => x && x.date === coach.t)) open.push(i);
+        });
         if (!open.length) return null;
-        const logTried = (id, whatDone, helped) => setData((d) => ({ ...d,
-          issues: (d.issues || []).map((i) => i.id === id
-            ? { ...i, tried: [...(i.tried || []), { date: coach.t, what: whatDone, helped }] } : i) }));
+        /* HER REPORT, 11 August: "I answered this when it asked on the landing
+           page. The answer was not reflected at all on this page."
+
+           It wasn't, and it was my fault: what she wrote only reached the
+           record when she also tapped a number for how much it helped. So the
+           number was a save button in disguise — the one thing this app has
+           never had, and the one thing that loses what she wrote. Her words
+           now go into the record as she types them, exactly like everything
+           else since build 71, and the number is an addition to that entry,
+           not the price of keeping it. One entry per day: typing more edits
+           today's answer rather than filing a second one. */
+        const upsert = (id, patch) => setData((d) => ({ ...d,
+          issues: (d.issues || []).map((i) => {
+            if (i.id !== id) return i;
+            const tried = [...(i.tried || [])];
+            const at = tried.findIndex((x) => x && x.date === coach.t);
+            if (at >= 0) tried[at] = { ...tried[at], ...patch };
+            else tried.push({ date: coach.t, what: "", ...patch });
+            return { ...i, tried };
+          }) }));
         const settle = (id) => setData((d) => ({ ...d,
           issues: (d.issues || []).map((i) => i.id === id
             ? { ...i, status: "closed", closedOn: coach.t } : i) }));
         return (
           <div>
             {open.map((iss) => {
-              const note = String(goalNotes["iss:" + iss.id] || "");
+              const todays = (iss.tried || []).find((x) => x && x.date === coach.t) || null;
+              const note = String((todays && todays.what) || "");
               return (
                 <div key={iss.id} style={{ paddingTop: 4, marginBottom: 12 }}>
                   <div style={{ fontSize: 13, lineHeight: 1.45, color: C.ink, fontWeight: 600, marginBottom: 7 }}>
@@ -14637,23 +14670,29 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                     <AutoText value={note}
-                      onChange={(v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v }))}
+                      onChange={(v) => upsert(iss.id, { what: v })}
                       placeholder="How is it now — and what did you try?"
                       style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 }} />
-                    <MicButton onText={(v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v }))}
+                    <MicButton onText={(v) => upsert(iss.id, { what: v })}
                       current={note} />
                   </div>
-                  <div style={{ fontSize: 11.5, color: C.muted, margin: "9px 0 5px" }}>Did it help?</div>
+                  <div style={{ fontSize: 11.5, color: C.muted, margin: "9px 0 5px" }}>
+                    Did it help? {note.trim() ? "— what you wrote is already on the record" : ""}
+                  </div>
                   <div style={{ display: "flex", gap: 4 }}>
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} className="tap mono"
-                        onClick={() => { logTried(iss.id, note.trim() || "no change reported", n);
-                          setGoalNotes((x) => ({ ...x, ["iss:" + iss.id]: "" })); }}
-                        style={{ flex: 1, height: 34, borderRadius: 8, cursor: "pointer",
-                          border: `1.5px solid ${C.line}`, background: C.chalk, color: C.muted, fontSize: 12 }}>
-                        {n}
-                      </button>
-                    ))}
+                    {[1, 2, 3, 4, 5].map((n) => {
+                      const on = todays && Number(todays.helped) === n;
+                      return (
+                        <button key={n} className="tap mono"
+                          onClick={() => upsert(iss.id, { helped: n })}
+                          style={{ flex: 1, height: 34, borderRadius: 8, cursor: "pointer",
+                            border: `1.5px solid ${on ? C.signal : C.line}`,
+                            background: on ? C.signal : C.chalk,
+                            color: on ? "#fff" : C.muted, fontSize: 12 }}>
+                          {n}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="mono" style={{ fontSize: 9.5, color: C.muted, display: "flex",
                     justifyContent: "space-between", marginTop: 4 }}>
