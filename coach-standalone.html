@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 92";
+const BUILD = "11 August 2026 · 93";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3468,11 +3468,16 @@ const repairLogs = (d) => {
         (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined ||
             l.when !== undefined || l.energyAfter !== undefined ||
             String(l.sessionNote || "").trim() !== "");
+    const nowDay = today();
     Object.keys(logs).forEach((day) => {
         const l = logs[day];
         if (!l || l.completed || l.rest)
             return;
-        if (afterSession(l))
+        /* A class in a past day's log counts: the app itself lists it under
+           "everything you did" that day, so painting the chip white was the app
+           disagreeing with its own record (her Saturday, 11 August). TODAY stays
+           strict — a class just started is not yet a class done. */
+        if (afterSession(l) || (day < nowDay && String(l.type || "").trim() !== ""))
             logs[day] = { ...l, completed: true };
     });
     const bwDays = new Set();
@@ -3900,7 +3905,7 @@ const saveData = async (d) => {
    ==========================================================================*/
 function useCoach(data, day, clock) {
     return useMemo(() => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7;
         const { settings, logs, weekly, monthly, fields } = data;
         const morning = data.morning || {};
         const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -5241,8 +5246,16 @@ function useCoach(data, day, clock) {
            satisfies the week it was actually taken in — an old monthly with no
            day stamp cannot name its week and satisfies nothing (rule 23). */
         const monthlyDone = sittingFinished(monthly[mk]);
-        const monthlyCoversWeek = monthlyDone && !!((_r = monthly[mk]) === null || _r === void 0 ? void 0 : _r.on)
-            && weekStart(monthly[mk].on, startOn) === ws;
+        /* "Done" was too strict a bar (her report, 11 August): she was partway
+           through the benchmark — every row of it feeds the weekly — and the
+           weekly kept asking anyway. A monthly with real values in it, taken
+           this week, covers the weekly ask from the moment it is underway; the
+           close then fills the weekly's store for real. One battery at a time. */
+        const mEntry = monthly[mk];
+        const mHasValues = !!mEntry && Object.keys(mEntry).some((k) => !["on", "started", "finished", "fromMonthly"].includes(k)
+            && mEntry[k] !== undefined && String(mEntry[k]).trim() !== "");
+        const mDay = mEntry && (mEntry.on || mEntry.started);
+        const monthlyCoversWeek = mHasValues && !!mDay && weekStart(mDay, startOn) === ws;
         const weeklyDone = sittingFinished(weekly[ws]) || monthlyCoversWeek;
         const weeklyDue = !weeklyDone && t >= weeklyFrom;
         const monthlyDue = !monthlyDone && t >= monthlyFrom;
@@ -5644,8 +5657,8 @@ function useCoach(data, day, clock) {
         const worstGap = sideRows.slice().sort((a, b) => b.gap - a.gap)[0] || null;
         /* body composition against the clock */
         const mKeys = Object.keys(monthly).sort();
-        const muscleNow = mKeys.length ? Number((_s = monthly[mKeys[mKeys.length - 1]]) === null || _s === void 0 ? void 0 : _s.muscle) : NaN;
-        const muscleFirst = mKeys.length ? Number((_t = monthly[mKeys[0]]) === null || _t === void 0 ? void 0 : _t.muscle) : NaN;
+        const muscleNow = mKeys.length ? Number((_r = monthly[mKeys[mKeys.length - 1]]) === null || _r === void 0 ? void 0 : _r.muscle) : NaN;
+        const muscleFirst = mKeys.length ? Number((_s = monthly[mKeys[0]]) === null || _s === void 0 ? void 0 : _s.muscle) : NaN;
         const monthsSpan = mKeys.length > 1
             ? Math.max(1, Math.round((parse(mKeys[mKeys.length - 1] + "-01") - parse(mKeys[0] + "-01")) / 2592000000)) : 0;
         const expectedLoss = monthsSpan ? (0.75 / 12) * monthsSpan : 0; /* ~0.75%/yr untrained after 50 */
@@ -5698,9 +5711,9 @@ function useCoach(data, day, clock) {
            by the next morning. Same-or-better means progress the load; worse
            means step back one. The during-session score can't tell you this. */
         const yesterday = addDays(t, -1);
-        const trainedYesterday = !!((_u = logs[yesterday]) === null || _u === void 0 ? void 0 : _u.completed);
-        const shoulderAM = ((_v = morning === null || morning === void 0 ? void 0 : morning[t]) === null || _v === void 0 ? void 0 : _v.shoulderAM) || "";
-        const shoulderPM = ((_w = logs[yesterday]) === null || _w === void 0 ? void 0 : _w.shoulder) || "";
+        const trainedYesterday = !!((_t = logs[yesterday]) === null || _t === void 0 ? void 0 : _t.completed);
+        const shoulderAM = ((_u = morning === null || morning === void 0 ? void 0 : morning[t]) === null || _u === void 0 ? void 0 : _u.shoulderAM) || "";
+        const shoulderPM = ((_v = logs[yesterday]) === null || _v === void 0 ? void 0 : _v.shoulder) || "";
         const shoulderVerdict = (() => {
             if (!trainedYesterday || !shoulderAM)
                 return null;
@@ -6280,17 +6293,17 @@ function useCoach(data, day, clock) {
                     : voicePatterns.length ? null
                         : `${voice.length} entries read, and no theme repeats often enough to call a pattern. That is an honest nothing, not a gap — it fills in as you write more.` }),
             M({ group: "month", id: "learned", label: "What I've learned", scope: "patterns in you, not in training",
-                display: ((_x = learned.motivators) === null || _x === void 0 ? void 0 : _x.length) || ((_y = learned.brakes) === null || _y === void 0 ? void 0 : _y.length)
-                    ? String((((_z = learned.motivators) === null || _z === void 0 ? void 0 : _z.length) || 0) + (((_0 = learned.brakes) === null || _0 === void 0 ? void 0 : _0.length) || 0)) : "—",
+                display: ((_w = learned.motivators) === null || _w === void 0 ? void 0 : _w.length) || ((_x = learned.brakes) === null || _x === void 0 ? void 0 : _x.length)
+                    ? String((((_y = learned.motivators) === null || _y === void 0 ? void 0 : _y.length) || 0) + (((_z = learned.brakes) === null || _z === void 0 ? void 0 : _z.length) || 0)) : "—",
                 sub: !learned.base ? "needs a few weeks"
-                    : ((_1 = learned.brakes) === null || _1 === void 0 ? void 0 : _1.length) ? `${learned.brakes.length} thing${learned.brakes.length > 1 ? "s" : ""} slowing you`
+                    : ((_0 = learned.brakes) === null || _0 === void 0 ? void 0 : _0.length) ? `${learned.brakes.length} thing${learned.brakes.length > 1 ? "s" : ""} slowing you`
                         : "nothing slowing you",
-                color: ((_2 = learned.motivators) === null || _2 === void 0 ? void 0 : _2.length) ? C.signal : C.muted,
+                color: ((_1 = learned.motivators) === null || _1 === void 0 ? void 0 : _1.length) ? C.signal : C.muted,
                 plain: "The conditions that reliably precede you training, and the ones that precede you not.",
                 how: "Twelve weeks of scheduled days, split by what happened before each: which weekday, what your recovery said, how you slept, whether you'd had body work, whether you were coming off a rest day. Anything that shifts your completion rate by fifteen points or more against your own average gets named.",
-                meaning: `This is the app learning you rather than learning training. ${((_3 = learned.motivators) === null || _3 === void 0 ? void 0 : _3.length) ? `What moves you: ${learned.motivators.join("; ")}.` : ""} ${((_4 = learned.brakes) === null || _4 === void 0 ? void 0 : _4.length) ? `What stops you: ${learned.brakes.join("; ")}.` : ""} None of it is a judgement — it is a description, and it corrects itself as you change. The point is that the coach stops guessing what works for you and starts knowing.`,
+                meaning: `This is the app learning you rather than learning training. ${((_2 = learned.motivators) === null || _2 === void 0 ? void 0 : _2.length) ? `What moves you: ${learned.motivators.join("; ")}.` : ""} ${((_3 = learned.brakes) === null || _3 === void 0 ? void 0 : _3.length) ? `What stops you: ${learned.brakes.join("; ")}.` : ""} None of it is a judgement — it is a description, and it corrects itself as you change. The point is that the coach stops guessing what works for you and starts knowing.`,
                 need: !learned.base ? "Needs a few weeks of scheduled days to find patterns."
-                    : (((_5 = learned.motivators) === null || _5 === void 0 ? void 0 : _5.length) || ((_6 = learned.brakes) === null || _6 === void 0 ? void 0 : _6.length)) ? null
+                    : (((_4 = learned.motivators) === null || _4 === void 0 ? void 0 : _4.length) || ((_5 = learned.brakes) === null || _5 === void 0 ? void 0 : _5.length)) ? null
                         : "Nothing has shifted your completion rate by fifteen points yet, so there is nothing worth naming. It fills in as more scheduled days accumulate — silence here is honest, not empty." }),
             M({ group: "month", id: "goals", label: "What you're chasing", scope: "your own goals",
                 display: openGoals.length ? String(openGoals.length) : "—",
@@ -7024,7 +7037,7 @@ function useCoach(data, day, clock) {
         /* The capture line above may already have said this. Two agenda items
            about the same missing number is how the coach starts sounding like a
            form rather than a person. */
-        if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && !loggedToday.rpe && ((_7 = capture.due[0]) === null || _7 === void 0 ? void 0 : _7.id) !== "rpe")
+        if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && !loggedToday.rpe && ((_6 = capture.due[0]) === null || _6 === void 0 ? void 0 : _6.id) !== "rpe")
             raise("day", "push", "Session's in — it needs an effort score to count properly. The tap is on this screen, just below; guessing at it tomorrow isn't the same thing.");
         if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && loggedToday.rpe)
             raise("day", "warm", `Logged at ${loggedToday.rpe} out of 10. That's ${Math.round(Number(loggedToday.minutes || 0) * Number(loggedToday.rpe))} of load on the board, and it counts whether or not it felt like much at the time.`);
@@ -7116,7 +7129,7 @@ function useCoach(data, day, clock) {
             raise("day", "push", "Circuit work covers push, pull, squat, hinge and carry in one session — it's the most efficient thing in your library for whole-body coverage. Move well before you move fast; the clock isn't the point.");
         /* MOOD LEADS. If she has said she's struggling, nothing about training
            goes first. The session can wait; being heard cannot. */
-        const moodToday = ((_8 = logs[t]) === null || _8 === void 0 ? void 0 : _8.mood) || null;
+        const moodToday = ((_7 = logs[t]) === null || _7 === void 0 ? void 0 : _7.mood) || null;
         if (moodToday && moodToday !== "good") {
             const lines = {
                 flat: "You said you're flat today. That's worth taking at face value rather than pushing against — flat usually has a reason even when it won't name itself. Nothing is required of you today. If you want to talk it through rather than train, I'm here for that.",
@@ -9037,7 +9050,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     /* On the monthly benchmark day the battery IS the session — thirty-odd
        minutes of real work under load. The coach doesn't stack a class on top
        of it; it offers something gentle afterwards instead. */
-    const benchmarkIsSession = isToday && coach.monthlyDue && !(log === null || log === void 0 ? void 0 : log.type);
+    /* Her report, 11 August: "Today is not the monthly benchmark day. You
+       changed the carry on... you put it start." She did the benchmark on
+       Monday — what is left is ENTERING the last numbers, and the door to that
+       is the carry-on card, which this gate was hiding by claiming the whole
+       day again. Once the sitting is started, today is an ordinary training
+       day and the carry-on takes over. */
+    const benchmarkIsSession = isToday && coach.monthlyDue && !coach.monthlyStarted && !(log === null || log === void 0 ? void 0 : log.type);
     /* One battery at a time. The monthly supersedes the weekly on a day they
        both land — it measures everything the weekly does and more. Neither
        appears on a day it isn't due; for that, Your numbers. */
