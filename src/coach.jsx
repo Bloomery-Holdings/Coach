@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 98";
+const BUILD = "11 August 2026 · 99";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9070,8 +9070,12 @@ function SessionClock({ log, write, coach }) {
     return () => clearInterval(t);
   }, [running]);
 
-  if (log?.completed && !running) return null;   /* the day is logged — the clock's job is done */
-
+  /* HER REPORT, 11 August, twice: "I still can't see the timer on the
+     landing page." It hid itself the moment the day counted as logged — and
+     since almost anything she does (a measurement typed, a body-work tick)
+     logs the day, the card was never there when she looked. It does not
+     hide any more. On a day already logged, Start times another session and
+     Done ADDS its minutes to the day's total — never overwrites. */
   const mins = running ? (Date.now() - clock.startedAt) / 60000 : 0;
   const face = running
     ? Math.floor(mins) + ":" + String(Math.floor((mins % 1) * 60)).padStart(2, "0")
@@ -9081,10 +9085,11 @@ function SessionClock({ log, write, coach }) {
   const nevermind = () => write({ sessionClock: undefined });
   const done = () => {
     const m = Math.max(1, Math.round(mins));
+    const already = Number(log?.minutes) || 0;
     write({
       sessionClock: { ...clock, stoppedAt: Date.now() },
       completed: true,
-      minutes: String(m),
+      minutes: String(log?.completed ? already + m : m),
       type: log?.type || coach.prescribed?.name || "Session",
     });
   };
