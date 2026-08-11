@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 103";
+const BUILD = "11 August 2026 · 105";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9879,15 +9879,36 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           the same kind of work as the body-area lists and belongs in the same
           place — one home for everything you do after a session. What stays
           here is the doorway, so Today still says it is waiting. */}
-      {isToday && coach.dailyDrills.list.length > 0 && (
+      {/* WHAT IS ACTUALLY LEFT, NOT WHAT WAS SET.
+          HER REPORT, 11 August: "It didn't read my notes on the exercises and
+          didn't see my scores on them. It assumes I didn't do them and that I
+          have to do them regardless of the note I logged."
+          She is right — this counted the whole ten minutes every time,
+          whatever she had already done and written. It now subtracts anything
+          she has logged against today: a note written on the movement, or
+          anything entered for it. When none is left, the card goes. */}
+      {isToday && (() => {
+        const dn = (data.logs?.[coach.t] || {}).drillNotes || {};
+        const didToday = (data.bwlog || {})[coach.t] || {};
+        const done = (x) => String(dn[x.id] || "").trim() !== ""
+          || Object.keys(dn).some((k) => k.endsWith(":" + x.id) && String(dn[k] || "").trim() !== "")
+          || (didToday[x.id] && ["w", "reps", "secs"].some((f) => String(didToday[x.id][f] || "").trim() !== ""));
+        const left = (coach.dailyDrills.list || []).filter((x) => !done(x));
+        if (!left.length) return null;
+        const mins = Math.round(left.reduce((a, x) => a + (x.mins || 0), 0) * 10) / 10;
+        const goalCount = left.filter((x) => x.forGoal).length;
+        const started = left.length < (coach.dailyDrills.list || []).length;
+        return (
         <Card style={{ background: C.mint }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ flex: 1 }}>
               <Eyebrow color={C.moss}>After your session</Eyebrow>
               <div style={{ fontSize: 13.5, color: C.ink, marginTop: 3, lineHeight: 1.45 }}>
-                {coach.dailyDrills.mins} minutes waiting in Body
-                {coach.dailyDrills.goalCount > 0
-                  ? ` — ${coach.dailyDrills.goalCount === 1 ? "one movement" : coach.dailyDrills.goalCount + " movements"} for what you want to be able to do`
+                {started
+                  ? `${mins} minutes still waiting in Body — the rest is logged`
+                  : `${mins} minutes waiting in Body`}
+                {goalCount > 0
+                  ? ` — ${goalCount === 1 ? "one movement" : goalCount + " movements"} for what you want to be able to do`
                   : " — chosen by what your mobility scores say is short"}
               </div>
             </span>
@@ -9897,7 +9918,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>open</button>
           </div>
         </Card>
-      )}
+        );
+      })()}
 
       {/* And when there is no goal at all, the ten minutes cannot exist — so
           the app says that plainly instead of showing nothing (rule 23). */}
@@ -10322,14 +10344,17 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                words: "if there is something decided by the coach and I add
                something else after it, this all should be at the beginning
                of the page." Whatever she did today is one block. */}
+          {/* HER INSTRUCTION, 11 August: "'Everything you did today' is
+              redundant. I already log my sessions and measurements and they
+              appear on the landing page. Why do I need a card saying
+              everything you did today — it's needless clutter."
+              The heading, the "nothing logged yet" line, the running total,
+              the ✓ saved reassurance and the sentence about what comes after
+              the benchmark all said again what the card above already says.
+              Gone. What is left is the part that exists nowhere else: a
+              second session, and the way to add one. */}
           <Card>
-            <Eyebrow>Everything you did {isToday ? "today" : "that day"}</Eyebrow>
-
-            {!log?.type && extraSessions.length === 0 ? (
-              <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 }}>
-                Nothing logged yet.
-              </div>
-            ) : (
+            {!log?.type && extraSessions.length === 0 ? null : (
               <div style={{ marginBottom: 14 }}>
                 {log?.type && (() => {
                   /* HER REPORT, 10 August: "it should also say it is
@@ -10413,28 +10438,9 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     unsaved, and adding a second session looked like the thing
                     that committed the first. Saying it plainly costs one
                     line and removes the doubt. */}
-                {(log?.type || extraSessions.length > 0) && (
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                    <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-                      {totalMinutes} min across {extraSessions.length + (log?.type ? 1 : 0)} session
-                      {extraSessions.length + (log?.type ? 1 : 0) === 1 ? "" : "s"}
-                    </span>
-                    <span style={{ fontSize: 11, color: C.moss, fontWeight: 600 }}>
-                      ✓ saved
-                    </span>
-                    <span style={{ flexBasis: "100%" }}>
-                      <InfoNote small why="There is no save button because there is nothing to save. Every tap and every letter is written to this device as you make it. Add another session only if you actually did another one.">why there's no save button</InfoNote>
-                    </span>
-                  </div>
-                )}
               </div>
             )}
 
-            {isToday && log?.type === "Monthly benchmark" && !adding && extraSessions.length === 0 && (
-              <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginBottom: 10 }}>
-                That was the session. Whatever comes after is yours — a stretch, a full class, or nothing at all.
-              </div>
-            )}
             <Btn kind={adding ? "quiet" : "ghost"} onClick={() => setAdding((a) => !a)}>
               {adding ? "Never mind" : "+ Add another session"}
             </Btn>
@@ -14523,7 +14529,12 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
       case "deepread": return chip(coach.calibrating ? "read it" : "read my month", () => setSheet({ kind: "review" }), true, "deepread");
       /* these two open the folded row below rather than a sheet, so she
          answers in the same place the record already lives */
-      case "issue":    return chip("answer", () => openQuiet && openQuiet("record"), true, "issue");
+      /* HER REPORT, 11 August: "When I click answer, nothing happens."
+         It was opening the record card further down the page — off screen,
+         so from where she was standing nothing moved. Exactly the fault the
+         note below describes, in the row right beside it. She answers it
+         here now, in the row that asked (rule 11). */
+      case "issue":    return chip(doing === "issue" ? "close" : "answer", () => act("issue"), doing !== "issue", "issue");
       /* "The score tab doesn't open to log the activity score" - 8 August.
          It DID open - the folded row further down the page - but nothing on
          screen moved, so from where she was standing nothing happened. Rule
@@ -14580,6 +14591,66 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
         <Note label="A line about how it went" value={log?.sessionNote}
           onChange={(v) => write({ sessionNote: v })} />
       );
+      /* ANSWERING THE FOLLOW-UP WHERE IT IS ASKED. The same two writes the
+         record card already makes — what she tried and whether it helped,
+         or the issue closed because it has settled. Nothing is deleted:
+         a closed issue stays on the record for when it comes back. */
+      case "issue": {
+        const open = coach.issueFollowUp || [];
+        if (!open.length) return null;
+        const logTried = (id, whatDone, helped) => setData((d) => ({ ...d,
+          issues: (d.issues || []).map((i) => i.id === id
+            ? { ...i, tried: [...(i.tried || []), { date: coach.t, what: whatDone, helped }] } : i) }));
+        const settle = (id) => setData((d) => ({ ...d,
+          issues: (d.issues || []).map((i) => i.id === id
+            ? { ...i, status: "closed", closedOn: coach.t } : i) }));
+        return (
+          <div>
+            {open.map((iss) => {
+              const note = String(goalNotes["iss:" + iss.id] || "");
+              return (
+                <div key={iss.id} style={{ paddingTop: 4, marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.45, color: C.ink, fontWeight: 600, marginBottom: 7 }}>
+                    {iss.text}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                    <AutoText value={note}
+                      onChange={(v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v }))}
+                      placeholder="How is it now — and what did you try?"
+                      style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 }} />
+                    <MicButton onText={(v) => setGoalNotes((n) => ({ ...n, ["iss:" + iss.id]: v }))}
+                      current={note} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: C.muted, margin: "9px 0 5px" }}>Did it help?</div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button key={n} className="tap mono"
+                        onClick={() => { logTried(iss.id, note.trim() || "no change reported", n);
+                          setGoalNotes((x) => ({ ...x, ["iss:" + iss.id]: "" })); }}
+                        style={{ flex: 1, height: 34, borderRadius: 8, cursor: "pointer",
+                          border: `1.5px solid ${C.line}`, background: C.chalk, color: C.muted, fontSize: 12 }}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mono" style={{ fontSize: 9.5, color: C.muted, display: "flex",
+                    justifyContent: "space-between", marginTop: 4 }}>
+                    <span>no help</span><span>resolved it</span>
+                  </div>
+                  <div style={{ marginTop: 9 }}>
+                    <button onClick={() => settle(iss.id)} className="tap" style={{
+                      border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                      cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.signal,
+                      fontWeight: 600, fontFamily: "inherit" }}>
+                      It's settled — take it off the list
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
       case "goal": {
         const dueGoals = coach.goalCheckDue || [];
         if (!dueGoals.length) return null;
@@ -17430,6 +17501,40 @@ function CoachApp() {
   const tab = stack[stack.length - 1];
   const go = (t) => { if (t !== tab) setStack((s) => [...s.slice(-9), t]); };
   const goBack = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+
+  /* ---- THE PHONE'S BACK BUTTON ---------------------------------------
+     HER REPORT, twice: "When I press my mobile's back button it exits the
+     app. It should take me to the place I was before, not out of the
+     application altogether." It was on the list and never built; this is it.
+
+     The app already keeps its own history — `stack` for screens, `sheets`
+     for what is open on top of one. All that was missing was giving the
+     phone something to go back TO. While anything is open, one entry is
+     held in the browser's history; the phone's back button spends it, and
+     the app closes the sheet or steps back a screen instead of leaving.
+     Standing on Today with nothing open, back does what it always did and
+     leaves — which is what she expects there. */
+  const deep = sheets.length > 0 || stack.length > 1;
+  const guard = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.history) return;
+    try {
+      if (deep && !guard.current) { window.history.pushState({ coach: 1 }, ""); guard.current = true; }
+      /* left by tapping rather than by the back button: spend the spare
+         entry, so one press from Today still closes the app */
+      else if (!deep && guard.current) { guard.current = false; window.history.back(); }
+    } catch (e) {}
+  }, [deep]);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.addEventListener) return;
+    const onPop = () => {
+      guard.current = false;
+      if (sheets.length) setSheets((s) => s.slice(0, -1));
+      else if (stack.length > 1) setStack((s) => s.slice(0, -1));
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [sheets.length, stack.length]);
 
   const sheet = sheets[sheets.length - 1] || null;
   const setSheet = (next) => {
