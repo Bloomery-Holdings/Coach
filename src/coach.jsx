@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 92";
+const BUILD = "11 August 2026 · 93";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3276,10 +3276,16 @@ const repairLogs = (d) => {
     (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined ||
      l.when !== undefined || l.energyAfter !== undefined ||
      String(l.sessionNote || "").trim() !== "");
+  const nowDay = today();
   Object.keys(logs).forEach((day) => {
     const l = logs[day];
     if (!l || l.completed || l.rest) return;
-    if (afterSession(l)) logs[day] = { ...l, completed: true };
+    /* A class in a past day's log counts: the app itself lists it under
+       "everything you did" that day, so painting the chip white was the app
+       disagreeing with its own record (her Saturday, 11 August). TODAY stays
+       strict — a class just started is not yet a class done. */
+    if (afterSession(l) || (day < nowDay && String(l.type || "").trim() !== ""))
+      logs[day] = { ...l, completed: true };
   });
   const bwDays = new Set();
   Object.keys(d.bwlog || {}).forEach((day) => {
@@ -4936,8 +4942,17 @@ function useCoach(data, day, clock) {
        satisfies the week it was actually taken in — an old monthly with no
        day stamp cannot name its week and satisfies nothing (rule 23). */
     const monthlyDone = sittingFinished(monthly[mk]);
-    const monthlyCoversWeek = monthlyDone && !!monthly[mk]?.on
-      && weekStart(monthly[mk].on, startOn) === ws;
+    /* "Done" was too strict a bar (her report, 11 August): she was partway
+       through the benchmark — every row of it feeds the weekly — and the
+       weekly kept asking anyway. A monthly with real values in it, taken
+       this week, covers the weekly ask from the moment it is underway; the
+       close then fills the weekly's store for real. One battery at a time. */
+    const mEntry = monthly[mk];
+    const mHasValues = !!mEntry && Object.keys(mEntry).some((k) =>
+      !["on", "started", "finished", "fromMonthly"].includes(k)
+      && mEntry[k] !== undefined && String(mEntry[k]).trim() !== "");
+    const mDay = mEntry && (mEntry.on || mEntry.started);
+    const monthlyCoversWeek = mHasValues && !!mDay && weekStart(mDay, startOn) === ws;
     const weeklyDone = sittingFinished(weekly[ws]) || monthlyCoversWeek;
     const weeklyDue = !weeklyDone && t >= weeklyFrom;
     const monthlyDue = !monthlyDone && t >= monthlyFrom;
@@ -9251,7 +9266,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   /* On the monthly benchmark day the battery IS the session — thirty-odd
      minutes of real work under load. The coach doesn't stack a class on top
      of it; it offers something gentle afterwards instead. */
-  const benchmarkIsSession = isToday && coach.monthlyDue && !log?.type;
+  /* Her report, 11 August: "Today is not the monthly benchmark day. You
+     changed the carry on... you put it start." She did the benchmark on
+     Monday — what is left is ENTERING the last numbers, and the door to that
+     is the carry-on card, which this gate was hiding by claiming the whole
+     day again. Once the sitting is started, today is an ordinary training
+     day and the carry-on takes over. */
+  const benchmarkIsSession = isToday && coach.monthlyDue && !coach.monthlyStarted && !log?.type;
   /* One battery at a time. The monthly supersedes the weekly on a day they
      both land — it measures everything the weekly does and more. Neither
      appears on a day it isn't due; for that, Your numbers. */
