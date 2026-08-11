@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 102";
+const BUILD = "11 August 2026 · 103";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3856,7 +3856,12 @@ function useCoach(data, day, clock) {
     const weekMap = {};
     Object.keys(logs).forEach((d) => { if (logs[d].completed) weekMap[weekStart(d)] = (weekMap[weekStart(d)] || 0) + 1; });
     const betsWon = Object.values(logs).filter((l) => l?.bet?.met === true).length;
-    const betsTaken = Object.values(logs).filter((l) => l?.bet?.met !== undefined && l?.bet?.met !== null).length;
+    /* HER CORRECTION, 11 August: "If it's not achieved, it means I failed to
+       reach the target, which is not true — today I had no time, or I missed
+       it." A day she never got to is not a day she tried and fell short, and
+       it must not be counted against her attempts. Only the two real answers
+       count: it was attempted, or it was attempted and not reached. */
+    const betsTaken = Object.values(logs).filter((l) => l?.bet?.met === true || l?.bet?.met === false).length;
 
     const dn = dayName(t);
 
@@ -10477,8 +10482,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                At the bottom of the page it was an afterthought she read once
                the moment for it had passed. */}
       {isToday && coach.bet && (() => {
-        const answered = log?.bet?.met === true || log?.bet?.met === false;
+        /* Three answers, not two. Hers, 11 August: "I need also NOT DONE,
+           because sometimes I don't have time to do it. If it says not
+           achieved it means I failed to reach the target, which is not
+           true." */
+        const answered = log?.bet?.met === true || log?.bet?.met === false
+          || log?.bet?.met === "skipped";
         const won = log?.bet?.met === true;
+        const skipped = log?.bet?.met === "skipped";
         return (
           <Card style={{ background: answered ? (won ? C.mint : C.card) : C.card,
             border: answered ? "none" : `1.5px dashed ${C.ochre}` }}>
@@ -10514,12 +10525,17 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     </Btn>
                   </div>
                 </div>
+                <div style={{ marginTop: 8 }}>
+                  <Btn kind="quiet" onClick={() => write({ bet: { id: coach.bet.id, text: coach.bet.text, target: coach.bet.target, met: "skipped" } })}>
+                    Didn't do it
+                  </Btn>
+                </div>
               </>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
                 <span style={{ fontSize: 15, color: won ? C.moss : C.muted }}>{won ? "✓" : "—"}</span>
                 <span style={{ flex: 1, fontSize: 13, color: won ? C.moss : C.muted, fontWeight: won ? 600 : 400 }}>
-                  {won ? "Achieved" : "Not achieved"}
+                  {won ? "Achieved" : skipped ? "Didn't do it" : "Not achieved"}
                 </span>
                 <button onClick={() => write({ bet: { ...log.bet, met: null } })} className="tap" style={{
                   border: "none", background: "transparent", cursor: "pointer", padding: 0,
