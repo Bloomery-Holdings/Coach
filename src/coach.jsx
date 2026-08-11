@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 96";
+const BUILD = "11 August 2026 · 97";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -17949,7 +17949,12 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
 }
 
 function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
-  const [showAll, setShowAll] = useState(false);
+  /* HER INSTRUCTION, 11 August: "put the lists under the area's tab — I
+     don't want it loose, I keep scrolling. When I touch the tab it opens
+     List one, List two, List three, with the name of the list, and it tells
+     me whether it's done or not." So: an always-visible index of every list
+     in the round, each row named and marked, and tapping a row opens it. */
+  const [viewId, setViewId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const st = bodyworkState(prog);
@@ -18046,23 +18051,58 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
         </Card>
       )}
 
-      {live && (
+      {/* THE INDEX. Every list of the round, by number and name, with its
+          state — done, next, or still to come. Tap one and it opens below. */}
+      {lists.length > 0 && (() => {
+        const doneSet = new Set(Object.values(prog.log || {}).map(Number));
+        return (
+          <div style={{ margin: "2px 0 12px" }}>
+            {lists.map((l, i) => {
+              const isDone = doneSet.has(i);
+              const isNext = live && l.id === live.id;
+              const isOpen = (viewId || (live && live.id)) === l.id;
+              return (
+                <button key={l.id} onClick={() => setViewId(l.id)} className="tap" style={{
+                  display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left",
+                  padding: "10px 12px", marginBottom: 5, borderRadius: 10, cursor: "pointer",
+                  fontFamily: "inherit",
+                  border: `1.5px solid ${isOpen ? C.signal : C.line}`,
+                  background: isDone ? C.mint : "transparent" }}>
+                  <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
+                    List {l.n}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600,
+                    color: isOpen ? C.signal : C.ink }}>{l.title}</span>
+                  <span className="mono" style={{ fontSize: 10, flexShrink: 0,
+                    color: isDone ? C.moss : isNext ? C.signal : C.muted }}>
+                    {isDone ? "✓ done" : isNext ? "next" : "to come"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {(() => { const viewing = lists.find((l) => l.id === viewId) || live; if (!viewing) return null;
+        const isLive = live && viewing.id === live.id;
+        return (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
             <span style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>
-              {doneToday ? "Today's list — done" : `Next: ${live.title}`}
+              {isLive && doneToday ? "Today's list — done" : `${isLive ? "Next: " : ""}${viewing.title}`}
             </span>
             <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
-              list {live.n} of {lists.length}
+              list {viewing.n} of {lists.length}
             </span>
           </div>
-          {live.focus && (
-            <div style={{ fontSize: 12, color: C.moss, marginTop: 3 }}>{live.focus}</div>
+          {viewing.focus && (
+            <div style={{ fontSize: 12, color: C.moss, marginTop: 3 }}>{viewing.focus}</div>
           )}
-          {!doneToday ? (
+          {!(isLive && doneToday) ? (
             <div>
-              {(live.exercises || []).map((ex) => (
-                <BodyWorkExercise key={ex.id} prog={prog} list={live} ex={ex}
+              {(viewing.exercises || []).map((ex) => (
+                <BodyWorkExercise key={ex.id} prog={prog} list={viewing} ex={ex}
                   data={data} setData={setData} coach={coach} setSheet={setSheet} />
               ))}
               {/* HER INSTRUCTION, 10 August: "make sure I can edit any set of
@@ -18071,7 +18111,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                   row opens straight into its own editor. */}
               <button onClick={() => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
                   pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
-                    ls.id !== live.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
+                    ls.id !== viewing.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
                       id: newId(), name: "New exercise", tool: "", dose: "3 x 10", mins: 2,
                       how: "", targets: "", label: "New exercise", search: "", video: "" }] }) }) }))}
                 className="tap" style={{
@@ -18080,9 +18120,16 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                   fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
                 + add an exercise to this list
               </button>
-              <div style={{ marginTop: 12 }}>
-                <Btn kind="signal" onClick={markDone}>Done — move to the next list</Btn>
-              </div>
+              {isLive ? (
+                <div style={{ marginTop: 12 }}>
+                  <Btn kind="signal" onClick={markDone}>Done — move to the next list</Btn>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 10, lineHeight: 1.5 }}>
+                  Today's list is number {live ? live.n : "—"} — this one is open to look at or
+                  work from, and comes round on its own day.
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ marginTop: 8 }}>
@@ -18093,38 +18140,14 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
             </div>
           )}
         </div>
-      )}
+      ); })()}
 
       {err && (
         <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>
       )}
 
       <div style={{ marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 10 }}>
-        <button onClick={() => setShowAll((v) => !v)} className="tap" style={{
-          border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
-          fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
-          {showAll ? "Hide the other lists" : `See all ${lists.length} lists`}
-        </button>
-        {showAll && (
-          <div style={{ marginTop: 8 }}>
-            {lists.map((l) => (
-              <div key={l.id} style={{ padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: l.id === (live && live.id) ? C.signal : C.ink }}>
-                    {l.n}. {l.title}
-                  </span>
-                  <span className="mono" style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                    {(l.exercises || []).length} exercises
-                  </span>
-                </div>
-                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
-                  {(l.exercises || []).map((x) => x.name).join(" · ")}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 2 }}>
           <button onClick={removeProg} className="tap" style={{
             border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
             fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
