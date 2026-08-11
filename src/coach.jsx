@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 108";
+const BUILD = "11 August 2026 · 109";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -11463,10 +11463,29 @@ function Progress({ data, setData, coach, setSheet }) {
       {/* ---------- what the coach read, kept where she can find it ----------
            Her question, 11 August: "Where do I see the reply?" Here, and on
            Today, for as long as she keeps them. */}
-      {(coach.reviews || []).length > 0 && (
-        <Fold title="What the coach read"
-          note={`${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever`}>
-          <Explain>Every time you ask the coach to read everything you have logged, its answer is kept here. Tap one to read it again — the reasoning, what it saw, and the month it drew up if it drew one.</Explain>
+      {/* HER WORDS, 11 August: "I can't find anything in the progress pages.
+          I don't see clearly where I should do this, and it should be left to
+          me how often I do."
+
+          So this is here whether or not a read has ever been run, and whether
+          or not the app thinks one is due. The app can say a read would be
+          worth doing; it does not get to decide when she may ask for one. */}
+      <Fold title="The coach's read"
+        note={(coach.reviews || []).length
+          ? `${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever`
+          : "ask for one whenever you want"}>
+        <Explain>You can ask the coach to read everything you have logged — every measurement, every morning, every calculation, the record, your goals and everything you have written — as often as you like. It is never on a schedule you have to keep. Its answer is kept here forever; tap one to read it again.</Explain>
+        <div style={{ marginBottom: 12 }}>
+          <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
+            Ask the coach to read everything
+          </Btn>
+        </div>
+        {!(coach.reviews || []).length ? (
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+            No read yet. The button above shows you exactly what would be sent before anything happens.
+          </div>
+        ) : (
+          <>
           {coach.reviews.slice().reverse().map((r) => (
             <button key={r.id} onClick={() => setSheet({ kind: "review", show: r.id })} className="tap"
               aria-label={`open the read from ${r.date}`}
@@ -11484,8 +11503,9 @@ function Progress({ data, setData, coach, setSheet }) {
               <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
             </button>
           ))}
-        </Fold>
-      )}
+          </>
+        )}
+      </Fold>
 
       {/* ---------- editable history: weekly checks ---------- */}
       <Fold title="Weekly checks" note={`${recentWeeks.length} weeks, every battery you have filled in`}>
