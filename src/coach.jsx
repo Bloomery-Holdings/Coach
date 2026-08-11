@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 99";
+const BUILD = "11 August 2026 · 100";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3275,7 +3275,10 @@ const repairLogs = (d) => {
   const afterSession = (l) => !!l &&
     (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined ||
      l.when !== undefined || l.energyAfter !== undefined ||
-     String(l.sessionNote || "").trim() !== "");
+     String(l.sessionNote || "").trim() !== "" ||
+     /* a note written against a drill or an exercise that day is the work
+        itself speaking (her Saturday, still white on 11 August) */
+     Object.values(l.drillNotes || {}).some((v) => String(v || "").trim() !== ""));
   const nowDay = today();
   Object.keys(logs).forEach((day) => {
     const l = logs[day];
@@ -9412,7 +9415,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     : `${remaining} more classes to go.`;
 
   const choose = (w) => {
-    write({ type: w.name, minutes: String(w.durations[0] || "") });
+    /* On TODAY this is a class about to happen, so the tick waits for the
+       evidence. On a PAST day she is telling us what she DID — history, not
+       intention — so the day counts the moment she says it (her Saturday,
+       11 August: a training day the calendar kept painting white). */
+    write(isToday
+      ? { type: w.name, minutes: String(w.durations[0] || "") }
+      : { type: w.name, minutes: String(w.durations[0] || ""), completed: true });
     setChoosing(false);
   };
 
