@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "10 August 2026 · 90";
+const BUILD = "11 August 2026 · 91";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3444,6 +3444,54 @@ const fillFromSeed = (list, seed, keys) => {
         return out;
     });
 };
+/* ---- A DAY SHE TRAINED IS A DAY SHE TRAINED -------------------------------
+   Her report, 11 August: she trained on Saturday, logged the work, found it
+   all still there — and the calendar chip stayed white. The chip fills from
+   `completed`, and `completed` was only ever set by the tick or by typing a
+   session length. Answering the after-session questions did not set it, and
+   doing her body-work lists — logging weight and reps against every exercise,
+   closing the list — never touched the day log at all. So the app held the
+   evidence of a session in one hand and painted the day untrained with the
+   other.
+
+   Repaired here, at load, so her PAST days come right too, not just future
+   ones: a day whose log carries an after-session answer (RPE, sets, how it
+   felt during or after, when she trained, a line about how it went), or a day
+   with body-work actually logged, is completed. Starting a class is NOT
+   counted — choosing a class says nothing about doing it — and a day she
+   logged as rest, or already ticked, is never touched (rules 20, 23). */
+const repairLogs = (d) => {
+    if (d.sample)
+        return d.logs || {};
+    const logs = { ...(d.logs || {}) };
+    const afterSession = (l) => !!l &&
+        (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined ||
+            l.when !== undefined || l.energyAfter !== undefined ||
+            String(l.sessionNote || "").trim() !== "");
+    Object.keys(logs).forEach((day) => {
+        const l = logs[day];
+        if (!l || l.completed || l.rest)
+            return;
+        if (afterSession(l))
+            logs[day] = { ...l, completed: true };
+    });
+    const bwDays = new Set();
+    Object.keys(d.bwlog || {}).forEach((day) => {
+        const ex = d.bwlog[day] || {};
+        const real = Object.values(ex).some((e) => e &&
+            (String(e.w || "").trim() || String(e.reps || "").trim() || String(e.secs || "").trim()));
+        if (real)
+            bwDays.add(day);
+    });
+    (d.bodywork || []).forEach((pg) => Object.keys(pg.log || {}).forEach((day) => bwDays.add(day)));
+    bwDays.forEach((day) => {
+        const l = logs[day];
+        if (l && (l.completed || l.rest))
+            return;
+        logs[day] = { ...(l || {}), completed: true, type: (l && l.type) || "Body work" };
+    });
+    return logs;
+};
 async function loadData() {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     try {
@@ -3452,6 +3500,7 @@ async function loadData() {
             const d = JSON.parse(r);
             return {
                 ...BLANK, ...d,
+                logs: repairLogs(d),
                 settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION },
                 /* `label` and `bilateral` are new to this list, and they are the
                    reason a correction could never reach her. Split squat said "L/R"
@@ -14299,12 +14348,14 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                     React.createElement(Eyebrow, null, "The session itself"),
                     React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, margin: "4px 0 10px" } }, "This sitting counts as today's session. Say how it went here \u2014 none of it sits on the landing page any more."),
                     React.createElement(Field, { label: "How long", unit: "min", value: (_a = dayLog.minutes) !== null && _a !== void 0 ? _a : "", onChange: (v) => putLog({ minutes: v, type: dayLog.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark"), completed: true }) }),
-                    React.createElement(RpeTap, { value: dayLog.rpe, onChange: (v) => putLog({ rpe: v }) }),
+                    React.createElement(RpeTap, { value: dayLog.rpe, onChange: (v) => putLog({ rpe: v,
+                            type: dayLog.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark"), completed: true }) }),
                     dayLog.rpe && React.createElement(SetsTap, { value: dayLog.sets, onChange: (v) => putLog({ sets: v }) }),
                     dayLog.rpe && React.createElement(DuringTap, { value: dayLog.during, onChange: (v) => putLog({ during: v }) }),
                     dayLog.during && React.createElement(WhenTap, { value: dayLog.when, onChange: (v) => putLog({ when: v }) }),
                     dayLog.during && (React.createElement(Scale, { label: "How you felt afterwards", value: dayLog.energyAfter, onChange: (v) => putLog({ energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
-                    React.createElement(Note, { label: "A line about how it went", value: dayLog.sessionNote, onChange: (v) => putLog({ sessionNote: v }) })));
+                    React.createElement(Note, { label: "A line about how it went", value: dayLog.sessionNote, onChange: (v) => putLog({ sessionNote: v,
+                            type: dayLog.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark"), completed: true }) })));
             })(),
             (() => {
                 const filled = (f) => {
@@ -14955,8 +15006,14 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
     const did = ((data.bwlog || {})[today] || {})[ex.id] || {};
     const putDid = (k, v) => setData((d) => {
         const day = (d.bwlog || {})[today] || {};
+        /* "What you did" is past tense — a weight or a rep count entered here is
+           evidence of training, so the day counts from the first one (11 August). */
+        const l = (d.logs || {})[today] || {};
         return { ...d, bwlog: { ...(d.bwlog || {}),
-                [today]: { ...day, [ex.id]: { ...(day[ex.id] || {}), [k]: v } } } };
+                [today]: { ...day, [ex.id]: { ...(day[ex.id] || {}), [k]: v } } },
+            logs: (l.completed || l.rest || !String(v).trim()) ? (d.logs || {})
+                : { ...(d.logs || {}), [today]: { ...l, completed: true, type: l.type || "Body work" } },
+        };
     });
     const past = bwHistory(data, ex.id, today);
     const lastTime = past.find((x) => bwSay(x));
@@ -15030,7 +15087,17 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
     /* List one is index 0, and !!0 is false — so the first list of every round
        would have been asked for twice on the same day. Presence, not truthiness. */
     const doneToday = (prog.log || {})[coach.t] !== undefined;
-    const markDone = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => pg.id !== prog.id ? pg : { ...pg, log: { ...(pg.log || {}), [coach.t]: st.nextIndex } }) }));
+    /* Closing a list IS a session — the calendar fills the moment it happens,
+       not on the next app open (her report, 11 August). A day she ticked or
+       logged as rest is left exactly as she set it. */
+    const markDone = () => setData((d) => {
+        const l = (d.logs || {})[coach.t] || {};
+        return { ...d,
+            bodywork: (d.bodywork || []).map((pg) => pg.id !== prog.id ? pg : { ...pg, log: { ...(pg.log || {}), [coach.t]: st.nextIndex } }),
+            logs: (l.completed || l.rest) ? (d.logs || {})
+                : { ...(d.logs || {}), [coach.t]: { ...l, completed: true, type: l.type || "Body work" } },
+        };
+    });
     const undo = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
             if (pg.id !== prog.id)
                 return pg;
