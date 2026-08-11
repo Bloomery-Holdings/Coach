@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 108";
+const BUILD = "11 August 2026 · 109";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -10416,9 +10416,13 @@ function Progress({ data, setData, coach, setSheet }) {
                             r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
                         React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text)))))))));
         })(),
-        (coach.reviews || []).length > 0 && (React.createElement(Fold, { title: "What the coach read", note: `${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever` },
-            React.createElement(Explain, null, "Every time you ask the coach to read everything you have logged, its answer is kept here. Tap one to read it again \u2014 the reasoning, what it saw, and the month it drew up if it drew one."),
-            coach.reviews.slice().reverse().map((r) => (React.createElement("button", { key: r.id, onClick: () => setSheet({ kind: "review", show: r.id }), className: "tap", "aria-label": `open the read from ${r.date}`, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+        React.createElement(Fold, { title: "The coach's read", note: (coach.reviews || []).length
+                ? `${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever`
+                : "ask for one whenever you want" },
+            React.createElement(Explain, null, "You can ask the coach to read everything you have logged \u2014 every measurement, every morning, every calculation, the record, your goals and everything you have written \u2014 as often as you like. It is never on a schedule you have to keep. Its answer is kept here forever; tap one to read it again."),
+            React.createElement("div", { style: { marginBottom: 12 } },
+                React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "review" }) }, "Ask the coach to read everything")),
+            !(coach.reviews || []).length ? (React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.55 } }, "No read yet. The button above shows you exactly what would be sent before anything happens.")) : (React.createElement(React.Fragment, null, coach.reviews.slice().reverse().map((r) => (React.createElement("button", { key: r.id, onClick: () => setSheet({ kind: "review", show: r.id }), className: "tap", "aria-label": `open the read from ${r.date}`, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
                     width: "100%", padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
                     background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" } },
                 React.createElement("div", { style: { minWidth: 0 } },
@@ -10426,7 +10430,7 @@ function Progress({ data, setData, coach, setSheet }) {
                     React.createElement("div", { style: { fontSize: 11.5, color: r.ok ? C.muted : C.clay, marginTop: 2 } }, r.ok
                         ? (r.block ? `${r.block.name}${r.applied ? " — started" : " — not started"}` : "a reading, no block")
                         : "did not go through")),
-                React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192")))))),
+                React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192"))))))),
         React.createElement(Fold, { title: "Weekly checks", note: `${recentWeeks.length} weeks, every battery you have filled in` },
             React.createElement(Explain, null, "Tap a week to fill it in or change what you entered. Past weeks stay open \u2014 you can always go back."),
             recentWeeks.map((ws) => {
