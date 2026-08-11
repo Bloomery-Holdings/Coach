@@ -3144,7 +3144,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 107";
+const BUILD = "11 August 2026 · 108";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -9445,6 +9445,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         border: "none", background: "transparent", cursor: "pointer", padding: 0,
                         fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
                     } }, "back to today")))),
+        isToday && coach.lastReview && (React.createElement("button", { onClick: () => setSheet({ kind: "review", show: coach.lastReview.id }), className: "tap", style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                width: "100%", padding: "11px 14px", borderRadius: 12, cursor: "pointer",
+                border: `1px solid ${C.line}`, background: "transparent", fontFamily: "inherit", textAlign: "left" } },
+            React.createElement("span", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.45 } },
+                "What the coach read on ",
+                dayAndMonth(coach.lastReview.date)),
+            React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192"))),
         !isToday && React.createElement(DayState, { log: log, write: write }),
         !isToday && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(WhyWhite, { data: data, day: t, log: log, write: write })),
         isToday && React.createElement(MedalShelf, { coach: coach, setSheet: setSheet }),
@@ -10409,6 +10416,17 @@ function Progress({ data, setData, coach, setSheet }) {
                             r.value !== undefined && r.value !== null ? ` · ${r.value}/10` : ""),
                         React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.ink } }, r.text)))))))));
         })(),
+        (coach.reviews || []).length > 0 && (React.createElement(Fold, { title: "What the coach read", note: `${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever` },
+            React.createElement(Explain, null, "Every time you ask the coach to read everything you have logged, its answer is kept here. Tap one to read it again \u2014 the reasoning, what it saw, and the month it drew up if it drew one."),
+            coach.reviews.slice().reverse().map((r) => (React.createElement("button", { key: r.id, onClick: () => setSheet({ kind: "review", show: r.id }), className: "tap", "aria-label": `open the read from ${r.date}`, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                    width: "100%", padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
+                    background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" } },
+                React.createElement("div", { style: { minWidth: 0 } },
+                    React.createElement("div", { style: { fontSize: 13.5, color: C.ink } }, dayAndMonth(r.date)),
+                    React.createElement("div", { style: { fontSize: 11.5, color: r.ok ? C.muted : C.clay, marginTop: 2 } }, r.ok
+                        ? (r.block ? `${r.block.name}${r.applied ? " — started" : " — not started"}` : "a reading, no block")
+                        : "did not go through")),
+                React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192")))))),
         React.createElement(Fold, { title: "Weekly checks", note: `${recentWeeks.length} weeks, every battery you have filled in` },
             React.createElement(Explain, null, "Tap a week to fill it in or change what you entered. Past weeks stay open \u2014 you can always go back."),
             recentWeeks.map((ws) => {
@@ -13638,9 +13656,18 @@ function VitalsAll({ coach, setSheet }) {
    or failed (rules 15 and 20). A failed read is exactly what you want to have
    the next time one fails.
 ========================================================================== */
-function ReviewSheet({ data, setData, coach, setSheet, close }) {
+function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState(null);
+    /* HER QUESTION, 11 August: "I saw a tab that let me send everything I've
+       logged to the coach for feedback. I don't know where the answer to it is.
+       Where do I see the reply?"
+  
+       Nowhere, and that was a real gap. Every read is kept forever, but the
+       only door to it was the row on Today that started it — and that row
+       marks itself done the moment a read has been run, so the door shut
+       behind the answer on the very day she asked for it. Progress and Today
+       both open this sheet on a named read now. */
+    const [result, setResult] = useState(() => (show ? (coach.reviews || []).find((r) => r && r.id === show) : null) || null);
     const [showPayload, setShowPayload] = useState(false);
     const mode = coach.deepMode;
     const reviews = coach.reviews || [];
@@ -15078,7 +15105,7 @@ function CoachApp() {
                        little or the last one wraps */
                     fontSize: 9.5, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase",
                 } }, label))))),
-        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "written" ? (React.createElement(WrittenSheet, { data: data, coach: coach })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) }))))));
+        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "written" ? (React.createElement(WrittenSheet, { data: data, coach: coach })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, show: sheet.show, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null) })) : (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) }))))));
 }
 /* ============================================================================
    9. THE SAFETY NET
