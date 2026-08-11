@@ -1513,7 +1513,11 @@ const validateReview = (parsed, ctx) => {
    away the whole read. */
 const rvSafe = (fn, fallback = "") => { try { const v = fn(); return v === undefined || v === null ? fallback : v; } catch (e) { return fallback; } };
 
-const reviewPayload = (data, coach) => {
+/* `cut` is the earliest date she asked this read to look at (build 110). Given
+   one, the day-by-day and the conversations span exactly her window instead of
+   the fixed five weeks — longer if she asked for longer, shorter if she asked
+   for shorter. Given none, nothing changes. */
+const reviewPayload = (data, coach, cut) => {
   const L = [];
   const S = (title, body) => { const b = String(body || "").trim(); L.push(`\n### ${title}\n${b || "(nothing recorded)"}`); };
   const d = data || {}, c = coach || {};
@@ -1521,7 +1525,7 @@ const reviewPayload = (data, coach) => {
   const s = d.settings || {};
 
   /* how far back to read: the live block if there is one, otherwise 35 days */
-  const from = rvSafe(() => {
+  const from = cut || rvSafe(() => {
     const ph = c.livePhase;
     if (ph && c.blockCalendar && c.blockCalendar.from) return c.blockCalendar.from;
     return addDays(t, -35);
@@ -1858,7 +1862,11 @@ const reviewPayload = (data, coach) => {
     + "here is instruction, not commentary: if she asked for something, changed her\n"
     + "mind, or told you how she wants to be coached, it binds the month you design.",
     rvSafe(() =>
-    (d.chats || []).filter((ch) => !ch.date || parse(ch.date) >= parse(t) - 35 * 86400000)
+    /* Her instruction, 11 August: "If there's a discussion that happens
+       between me and him, include that discussion — because it includes my
+       feedback on what he gave me." So the conversations span whatever window
+       she chose, not a fixed five weeks. */
+    (d.chats || []).filter((ch) => !ch.date || String(ch.date) >= (cut || addDays(t, -35)))
       .map((ch) =>
       `--- ${ch.date || ""}${ch.about ? ` — ${ch.about}` : ""}\n`
       + (ch.messages || ch.msgs || []).map((m) =>
@@ -1905,6 +1913,10 @@ She is 51, holding muscle through her fifties, with a right shoulder that is reh
   if (mode === "read") {
     return `${voice}
 
+HER INSTRUCTION, 11 August: "Read my data, analyse it, interpret it, and give me conclusions and results and recommendations and advice. Not just read and interpret — give advice, give recommendations, set rules, set recommended areas to train more."
+
+So a reading that stops at description has not done the job. Every read ends with what you CONCLUDE, what she should DO, where the work should go, and the few rules worth holding to until the next read. Say it to her, in her language, and never pad it: three real recommendations beat ten hedged ones.
+
 This is her CALIBRATION month. You have not got a month of her own data yet, so YOU DESIGN NOTHING. Do not propose a block, do not name days, do not prescribe. Your job is to read what exists, say honestly what it does and does not yet show, and name precisely what is still missing and why each missing thing matters.
 
 Return ONLY a JSON object, no prose around it, no code fence:
@@ -1912,6 +1924,10 @@ Return ONLY a JSON object, no prose around it, no code fence:
   "interpretation": "what her numbers actually say so far, in plain language, naming what is real and what is still too thin to read",
   "reasoning": "3 to 5 short paragraphs addressed to her, second person",
   "missing": ["each thing still not logged, and one line on why it matters"],
+  "conclusions": ["what you actually conclude, one plain sentence each — the findings, not the working"],
+  "advice": ["what she should DO about it, one action per line, specific enough to start today"],
+  "focus": [ { "area": "the body area, movement or capability", "why": "what in her own numbers says it needs the work" } ],
+  "rules": ["a rule to hold to until the next read — few, plain, and each one hers to break knowingly"],
   "profile": [ { "claim": "one plain sentence about her", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "her own words or what she did" } ] } ]
 }
 Every profile claim must point at dated evidence in what you were given. A claim you cannot point at is an assertion — leave it out.`;
@@ -1949,8 +1965,13 @@ Return ONLY a JSON object, no prose around it, no code fence:
   "profile": [ { "claim": "...", "kind": "preference|barrier|motivator|response|limit|routine", "evidence": [ { "date": "YYYY-MM-DD", "quote": "..." } ] } ],
   "keptGoals": ["the id of every open goal you have kept in view"],
   "prescription": [ { "label": "...", "goalIds": ["every goal id this one movement serves"], "targets": "the muscles or ranges it reaches", "sets": "3", "reps": "8", "mins": 2, "freq": "after every session you train", "how": "how to do it, in plain language", "why": "which goal this builds towards and what it is doing for it" } ],
-  "horizons": [ { "goalId": "...", "weeks": "a realistic estimate, in weeks or months", "firstSigns": "what she notices first and roughly when", "thisMonth": "what should measurably move inside these four weeks" } ]
+  "horizons": [ { "goalId": "...", "weeks": "a realistic estimate, in weeks or months", "firstSigns": "what she notices first and roughly when", "thisMonth": "what should measurably move inside these four weeks" } ],
+  "conclusions": ["what you actually conclude, one plain sentence each — the findings, not the working"],
+  "advice": ["what she should DO about it, one action per line, specific enough to start this week"],
+  "focus": [ { "area": "the body area, movement or capability to train more", "why": "what in her own numbers says so" } ],
+  "rules": ["a rule to hold to for this block — few, plain, and each one hers to break knowingly"]
 }
+HER INSTRUCTION, 11 August: "Read my data, analyse it, interpret it, and give me conclusions and results and recommendations and advice. Not just read and interpret — give advice, give recommendations, set rules, set recommended areas to train more." A month designed without those four is half an answer. Three real recommendations beat ten hedged ones.
 "prescription" is her ten minutes after every session and must cover EVERY open goal — never empty while she has one. It is not conditional on her library. The total must fit in ten minutes. "horizons" has one entry for every open goal.
 Every profile claim must point at dated evidence. A claim you cannot point at is an assertion — leave it out.
 
@@ -1975,27 +1996,90 @@ const parseReview = (text) => {
 
 /* The whole thing, end to end. Returns a record — never throws at the caller,
    because a failed read still has to be shown to her honestly (rule 23). */
-const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
+/* ---- HOW FAR BACK THIS READ LOOKS ------------------------------------
+   HER INSTRUCTION, 11 August: "Give me an optional tab where I can decide
+   how many months I need and how many weeks I need. Maybe I need to review
+   one week, maybe two. And there's also an option of all. Not all of them —
+   I take a choice of any one."
+
+   One choice: all, or a number of weeks, or a number of months. It narrows
+   the RAW history only. What every previous read concluded is always sent in
+   full, whatever the window — that is the whole point of keeping them: the
+   summaries carry what the window no longer reaches, so nothing is missed
+   and nothing is paid for twice. Anything still open — an issue she has not
+   closed — is always sent too, however old it is. */
+const SCOPE_ALL = { kind: "all" };
+const scopeLabel = (s) => {
+  if (!s || s.kind === "all") return "everything";
+  const n = Math.max(1, Number(s.n) || 1);
+  return s.kind === "weeks" ? `the last ${n} week${n === 1 ? "" : "s"}`
+    : `the last ${n} month${n === 1 ? "" : "s"}`;
+};
+const scopeCutoff = (s, t) => {
+  if (!s || s.kind === "all") return null;
+  const n = Math.max(1, Number(s.n) || 1);
+  if (s.kind === "weeks") return addDays(t, -7 * n);
+  const d = parse(t); d.setMonth(d.getMonth() - n);
+  return iso(d);
+};
+const narrowTo = (data, scope, t) => {
+  const cut = scopeCutoff(scope, t);
+  if (!cut) return data;
+  const byDate = (obj) => {
+    const out = {};
+    Object.keys(obj || {}).forEach((k) => { if (String(k).slice(0, 10) >= cut) out[k] = obj[k]; });
+    return out;
+  };
+  const byMonth = (obj) => {
+    const out = {};
+    Object.keys(obj || {}).forEach((k) => { if (String(k) >= cut.slice(0, 7)) out[k] = obj[k]; });
+    return out;
+  };
+  return {
+    ...data,
+    logs: byDate(data.logs), morning: byDate(data.morning),
+    weekly: byDate(data.weekly), mobility: byDate(data.mobility),
+    monthly: byMonth(data.monthly),
+    bwlog: byDate(data.bwlog),
+    chats: (data.chats || []).filter((c) => !c.date || String(c.date) >= cut),
+    journal: (data.journal || []).filter((j) => !j.date || String(j.date) >= cut),
+    /* open issues survive any window — a thing she has not closed is current */
+    issues: (data.issues || []).filter((i) => i.status !== "closed" || String(i.date || "") >= cut),
+  };
+};
+
+const runDeepReview = async ({ data, coach, mode, ruleBlock, scope }) => {
   const stamp = coach?.t || today();
-  const base = { id: newId(), date: stamp, mode, ok: false, errors: [], applied: false };
+  const sc = scope || SCOPE_ALL;
+  const base = { id: newId(), date: stamp, mode, ok: false, errors: [], applied: false,
+    scope: sc, scopeLabel: scopeLabel(sc) };
   let payload = "";
-  try { payload = reviewPayload(data, coach); } catch (e) {
+  try { payload = reviewPayload(narrowTo(data, sc, stamp), coach, scopeCutoff(sc, stamp)); } catch (e) {
     return { ...base, errors: ["I could not assemble your month to read it. Nothing has been changed."] };
   }
-  const user = mode === "read" ? payload
-    : `${payload}\n\n### THE BLOCK THE APP'S OWN RULES PRODUCED\n${ruleBlock ? [
+  /* What she chose to send, said out loud to the coach, so it never treats a
+     window as an absence: what is outside it is carried by the earlier reads,
+     which are always included in full. */
+  const window = `### HOW FAR BACK THIS READ GOES\nShe asked you to read ${scopeLabel(sc)}.`
+    + (sc.kind === "all" ? " Everything she has is below."
+      : ` The raw history below is limited to that window ON HER INSTRUCTION — it is not missing and it is not a gap. Everything older is carried by "WHAT EVERY PREVIOUS READ CONCLUDED", which is always given to you in full. Start from what you concluded last time, add what has happened since, and say plainly if the window is too short to answer something she needs answered.`)
+    + "\n\n";
+  const user = mode === "read" ? window + payload
+    : `${window}${payload}\n\n### THE BLOCK THE APP'S OWN RULES PRODUCED\n${ruleBlock ? [
         `Name: ${ruleBlock.name}`,
         `Week: ${(ruleBlock.week || []).join(", ")}`,
         `Why: ${(ruleBlock.basis || []).join(" ")}`,
       ].join("\n") : "(none — the rules had nothing to go on)"}`;
 
   let raw = "";
+  const usage = {};
   try {
     raw = await askModel({
       system: reviewSystem(mode),
       messages: [{ role: "user", content: user }],
       apiKey: data?.settings?.apiKey,
       maxTokens: 4000,
+      usage,
     });
   } catch (e) {
     const why = String(e && e.message) === "no-key"
@@ -2005,7 +2089,21 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
   }
 
   const parsed = parseReview(raw);
-  if (!parsed) return { ...base, errors: ["What came back was not readable. Nothing has been changed."], raw, chars: payload.length };
+  /* what it actually cost, kept on the record so she can watch it over time */
+  const spend = {
+    tokensIn: usage.in || 0, tokensOut: usage.out || 0,
+    cost: Math.round(((usage.in || 0) / 1e6 * PRICE_IN + (usage.out || 0) / 1e6 * PRICE_OUT) * 100),
+  };
+  /* the four things she asked every read to end with */
+  const lines = (x) => (Array.isArray(x) ? x.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 12) : []);
+  const said = !parsed ? {} : {
+    conclusions: lines(parsed.conclusions),
+    advice: lines(parsed.advice),
+    rules: lines(parsed.rules),
+    focus: (Array.isArray(parsed.focus) ? parsed.focus : []).filter((f) => f && f.area)
+      .map((f) => ({ area: String(f.area).trim(), why: String(f.why || "").trim() })).slice(0, 8),
+  };
+  if (!parsed) return { ...base, ...spend, errors: ["What came back was not readable. Nothing has been changed."], raw, chars: payload.length };
 
   if (mode === "read") {
     const claims = Array.isArray(parsed.profile) ? parsed.profile : [];
@@ -2013,7 +2111,7 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
       && Array.isArray(p.evidence) && p.evidence.length
       && p.evidence.every((e) => e && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date || ""))));
     return {
-      ...base, ok: true, chars: payload.length, raw,
+      ...base, ...spend, ...said, ok: true, chars: payload.length, raw,
       interpretation: String(parsed.interpretation || "").trim(),
       reasoning: String(parsed.reasoning || "").trim(),
       missing: Array.isArray(parsed.missing) ? parsed.missing.map(String).slice(0, 12) : [],
@@ -2034,7 +2132,7 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock }) => {
     currentStrengthDays: (coach?.livePhase?.week || []).filter((x) => x === "strength").length,
   });
   return {
-    ...base, ok: verdict.ok, errors: verdict.errors, raw, chars: payload.length,
+    ...base, ...spend, ...said, ok: verdict.ok, errors: verdict.errors, raw, chars: payload.length,
     block: verdict.block, interpretation: verdict.block ? verdict.block.interpretation : "",
     reasoning: verdict.block ? verdict.block.reasoning : "",
     profile: verdict.profile, rejectedClaims: verdict.rejectedClaims,
@@ -2914,7 +3012,14 @@ const store = {
 ========================================================================== */
 const insideClaude = () => typeof window !== "undefined" && !!window.storage?.get;
 
-const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
+/* HER INSTRUCTION, 11 August: "I will review the tokens and how many tokens it
+   used versus the cost. It's very important to see that, because if after a
+   year it's getting data from things I don't need followed up on any more, I
+   will adjust it."
+   So the call reports what it actually spent. `usage` is an optional object
+   the caller passes in and reads afterwards — nothing else changes. */
+const PRICE_IN = 3, PRICE_OUT = 15;   /* dollars per million tokens */
+const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage }) => {
   const headers = { "Content-Type": "application/json" };
   if (!insideClaude()) {
     if (!apiKey) throw new Error("no-key");
@@ -2928,6 +3033,10 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000 }) => {
   });
   if (!res.ok) throw new Error("request-failed");
   const data = await res.json();
+  if (usage && data && data.usage) {
+    usage.in = Number(data.usage.input_tokens) || 0;
+    usage.out = Number(data.usage.output_tokens) || 0;
+  }
   return (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
 };
 
@@ -2977,7 +3086,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 109";
+const BUILD = "11 August 2026 · 110";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9214,6 +9323,67 @@ function SessionClock({ log, write, coach }) {
    tap, because the day she is looking at is where the answer belongs
    (rule 11). Never a reproach: a day she didn't train is a day she didn't
    train, nothing more (rule 24). */
+/* ---- READ MY DATA, ON THE LANDING PAGE ------------------------------
+   HER INSTRUCTION, 11 August: "This does not need to be inside the tab, it
+   needs to be visible. And it needs to be also visible on the landing page.
+   And when I click it and the coach reads everything, I should have access
+   to what the coach said... Even if you throw the read on another page, make
+   sure the read is accessible immediately under the tab that says read my
+   data."
+
+   So: the choice of how far back, the button, and the last answer — the
+   conclusions, the advice, the rules and where to put the work — all in one
+   place, on Today, without opening anything. The whole read is one tap
+   further for the reasoning and the month it drew up. */
+function ReadCard({ data, setData, coach, setSheet }) {
+  const last = coach.lastReview;
+  const scope = data.settings?.readScope || SCOPE_ALL;
+  const setScope = (s) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: s } }));
+  return (
+    <Card style={{ background: C.pist }}>
+      <Eyebrow color={C.signal}>Read my data</Eyebrow>
+      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "5px 0 11px" }}>
+        Everything you have logged, read and interpreted — with what it concludes, what to do
+        about it, where to put the work, and the rules worth holding to. Ask for it whenever
+        you like; it shows you exactly what would be sent first.
+      </div>
+      <ScopePicker scope={scope} onPick={setScope} />
+      <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
+        Ask the coach to read everything
+      </Btn>
+
+      {last && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+          <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase",
+            color: C.muted, marginBottom: 6 }}>
+            what it said on {dayAndMonth(last.date)}
+          </div>
+          {!last.ok ? (
+            <div style={{ fontSize: 12.5, color: C.clay, lineHeight: 1.55 }}>
+              That read did not go through. Nothing was changed — open it to see why, and run it again
+              whenever you like.
+            </div>
+          ) : (
+            <>
+              {last.interpretation && (
+                <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, whiteSpace: "pre-wrap" }}>
+                  {last.interpretation}
+                </div>
+              )}
+              <ReadAnswer rec={last} />
+            </>
+          )}
+          <button onClick={() => setSheet({ kind: "review", show: last.id })} className="tap" style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
+            fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+            The whole read →
+          </button>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---- WHAT THAT DAY WAS, CHANGED ON THE DAY ITSELF ------------------
    Her instruction, 11 August: "Take it out. I should be able to edit
    anything on the day itself. I don't see the value of the list."
@@ -9762,17 +9932,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           Her question, 11 August: "Where do I see the reply?" One line, no
           duplication — it opens the read itself. The whole of it, and every
           earlier one, lives in Progress. */}
-      {isToday && coach.lastReview && (
-        <button onClick={() => setSheet({ kind: "review", show: coach.lastReview.id })} className="tap"
-          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-            width: "100%", padding: "11px 14px", borderRadius: 12, cursor: "pointer",
-            border: `1px solid ${C.line}`, background: "transparent", fontFamily: "inherit", textAlign: "left" }}>
-          <span style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45 }}>
-            What the coach read on {dayAndMonth(coach.lastReview.date)}
-          </span>
-          <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
-        </button>
-      )}
+      {isToday && <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
       {/* A past day she has opened, that the calendar is painting white:
           the day says what the app can and cannot see in it, and gives her
@@ -11470,11 +11630,19 @@ function Progress({ data, setData, coach, setSheet }) {
           So this is here whether or not a read has ever been run, and whether
           or not the app thinks one is due. The app can say a read would be
           worth doing; it does not get to decide when she may ask for one. */}
-      <Fold title="The coach's read"
-        note={(coach.reviews || []).length
-          ? `${coach.reviews.length} read${coach.reviews.length === 1 ? "" : "s"}, kept forever`
-          : "ask for one whenever you want"}>
-        <Explain>You can ask the coach to read everything you have logged — every measurement, every morning, every calculation, the record, your goals and everything you have written — as often as you like. It is never on a schedule you have to keep. Its answer is kept here forever; tap one to read it again.</Explain>
+      {/* HER INSTRUCTION, 11 August: "This does not need to be inside the tab.
+          It needs to be visible." So it is a card, not a fold. */}
+      <Card style={{ marginBottom: 11 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+          <Eyebrow color={C.signal}>The coach's read</Eyebrow>
+          <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+            {(coach.reviews || []).length ? `${coach.reviews.length} kept` : "whenever you want"}
+          </span>
+        </div>
+        <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "6px 0 11px" }}>
+          Everything you have logged, read and interpreted — conclusions, advice, where to put the
+          work, and the rules worth holding to. As often as you like; never on a schedule.
+        </div>
         <div style={{ marginBottom: 12 }}>
           <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
             Ask the coach to read everything
@@ -11505,7 +11673,7 @@ function Progress({ data, setData, coach, setSheet }) {
           ))}
           </>
         )}
-      </Fold>
+      </Card>
 
       {/* ---------- editable history: weekly checks ---------- */}
       <Fold title="Weekly checks" note={`${recentWeeks.length} weeks, every battery you have filled in`}>
@@ -15922,6 +16090,104 @@ function VitalsAll({ coach, setSheet }) {
    or failed (rules 15 and 20). A failed read is exactly what you want to have
    the next time one fails.
 ========================================================================== */
+/* The four things she asked every read to end with. Each one only appears if
+   the coach actually said it — an empty heading is worse than no heading
+   (rule 23). Older reads have none of these and simply show nothing. */
+function ReadAnswer({ rec }) {
+  if (!rec || !rec.ok) return null;
+  const blocks = [
+    { key: "conclusions", title: "What it concludes", colour: C.ink, rows: rec.conclusions },
+    { key: "advice", title: "What to do about it", colour: C.signal, rows: rec.advice },
+    { key: "rules", title: "Rules until the next read", colour: C.moss, rows: rec.rules },
+  ].filter((b) => Array.isArray(b.rows) && b.rows.length);
+  const focus = Array.isArray(rec.focus) ? rec.focus : [];
+  if (!blocks.length && !focus.length) return null;
+  return (
+    <>
+      {blocks.map((b) => (
+        <Card key={b.key} style={{ marginBottom: 12 }}>
+          <Eyebrow color={b.colour}>{b.title}</Eyebrow>
+          {b.rows.map((line, i) => (
+            <div key={i} style={{ display: "flex", gap: 9, marginTop: 8 }}>
+              <span style={{ color: C.ochre, fontSize: 13, flexShrink: 0 }}>·</span>
+              <span style={{ fontSize: 13.5, lineHeight: 1.6, color: C.ink }}>{line}</span>
+            </div>
+          ))}
+        </Card>
+      ))}
+      {focus.length > 0 && (
+        <Card style={{ marginBottom: 12, background: C.mint }}>
+          <Eyebrow color={C.moss}>Where to put the work</Eyebrow>
+          {focus.map((f, i) => (
+            <div key={i} style={{ marginTop: 9 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{f.area}</div>
+              {f.why && (
+                <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, marginTop: 2 }}>{f.why}</div>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+    </>
+  );
+}
+
+/* ---- HOW FAR BACK, HER CHOICE -----------------------------------------
+   HER INSTRUCTION, 11 August: "Give me an optional tab whereby I can decide
+   how many months I need and how many weeks I need... and there's also an
+   option of all. So I will take a choice of any of them, not all of them."
+   One of the three, never a form to fill in. What the window leaves out is
+   carried by the earlier reads, which always go in full. */
+function ScopePicker({ scope, onPick }) {
+  const s = scope || SCOPE_ALL;
+  const opts = [
+    { k: "all", label: "Everything" },
+    { k: "weeks", label: "Weeks" },
+    { k: "months", label: "Months" },
+  ];
+  const n = Math.max(1, Number(s.n) || (s.kind === "months" ? 3 : 2));
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <Eyebrow>How far back</Eyebrow>
+      <div style={{ display: "flex", gap: 6, margin: "9px 0" }}>
+        {opts.map((o) => {
+          const on = (s.kind || "all") === o.k;
+          return (
+            <button key={o.k} className="tap"
+              onClick={() => onPick(o.k === "all" ? SCOPE_ALL : { kind: o.k, n })}
+              style={{ flex: 1, padding: "11px 6px", borderRadius: 10, cursor: "pointer", fontSize: 12.5,
+                border: `1.5px solid ${on ? C.ochre : C.line}`,
+                background: on ? C.pist : "transparent",
+                color: on ? C.ink : C.muted, fontWeight: on ? 600 : 400, fontFamily: "inherit" }}>
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      {s.kind && s.kind !== "all" && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          {(s.kind === "weeks" ? [1, 2, 3, 4, 6, 8] : [1, 2, 3, 6, 9, 12]).map((v) => {
+            const on = Number(s.n) === v;
+            return (
+              <button key={v} className="tap mono" onClick={() => onPick({ kind: s.kind, n: v })}
+                style={{ flex: "1 1 14%", minWidth: 40, padding: "9px 0", borderRadius: 8, cursor: "pointer",
+                  fontSize: 12, border: `1.5px solid ${on ? C.signal : C.line}`,
+                  background: on ? C.signal : "transparent", color: on ? "#fff" : C.muted,
+                  fontFamily: "'IBM Plex Mono', monospace" }}>{v}</button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
+        Reading {scopeLabel(s)}.
+        {s.kind && s.kind !== "all"
+          ? " Anything older is still carried by what the coach concluded in every earlier read — those always go in full, so nothing is lost and nothing is paid for twice."
+          : " Everything you have ever logged."}
+      </div>
+    </Card>
+  );
+}
+
 function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   const [busy, setBusy] = useState(false);
   /* HER QUESTION, 11 August: "I saw a tab that let me send everything I've
@@ -15939,10 +16205,19 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   const mode = coach.deepMode;
   const reviews = coach.reviews || [];
 
+  /* Her choice of how far back this read looks — one of them, never all
+     three. Kept in her settings so the app opens on whatever she chose last,
+     and changeable every single time (rules 12, 13). */
+  const scope = data.settings?.readScope || SCOPE_ALL;
+  const setScope = (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: sc } }));
+
   /* built here rather than in the engine: it is only wanted on this screen,
      and it is the largest string the app ever makes */
-  const payload = useMemo(() => { try { return reviewPayload(data, coach); } catch (e) { return ""; } }, [data, coach]);
-  const cents = Math.max(1, Math.round(((payload.length / 3.8) * 3 + 1200 * 15) / 10000));
+  const payload = useMemo(() => {
+    try { return reviewPayload(narrowTo(data, scope, coach.t), coach, scopeCutoff(scope, coach.t)); } catch (e) { return ""; }
+  }, [data, coach, scope]);
+  const tokensIn = Math.round(payload.length / 3.8);
+  const cents = Math.max(1, Math.round((tokensIn * PRICE_IN + 1600 * PRICE_OUT) / 10000));
 
   const store = (rec) => setData((d) => ({ ...d, reviews: [...(Array.isArray(d.reviews) ? d.reviews : []), rec] }));
 
@@ -15951,7 +16226,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     let rec;
     try {
       rec = await runDeepReview({
-        data, coach, mode,
+        data, coach, mode, scope,
         ruleBlock: mode === "design" ? (coach.proposal || coach.readableProposal()) : null,
       });
     } catch (e) {
@@ -16047,11 +16322,13 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
           : "This sends the whole block. Every battery measurement one by one, every mobility test, every body region, every calculation, all of your WHOOP, the record, your goals and everything you wrote — and asks for the next four weeks, with the reasoning shown. Nothing it returns becomes your month until you start it."}
       </div>
 
+      <ScopePicker scope={scope} onPick={setScope} />
+
       <Card style={{ background: C.pist, marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
           <Eyebrow color={C.signal}>What gets sent</Eyebrow>
           <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
-            {payload ? `${Math.round(payload.length / 1000)}k characters · about ${cents}c` : "nothing to read yet"}
+            {payload ? `~${tokensIn.toLocaleString()} tokens in · about ${cents}c` : "nothing to read yet"}
           </span>
         </div>
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>
@@ -16106,6 +16383,19 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
                 {shown.interpretation}
               </div>
             </Card>
+          )}
+
+          {/* HER INSTRUCTION, 11 August: "Not just read and interpret. Read,
+              interpret, give advice, give recommendations, set rules, set
+              recommended areas to train more." */}
+          <ReadAnswer rec={shown} />
+
+          {(shown.tokensIn || shown.tokensOut) && (
+            <div className="mono" style={{ fontSize: 9.5, color: C.muted, marginBottom: 12 }}>
+              {shown.scopeLabel ? `read ${shown.scopeLabel} · ` : ""}
+              {(shown.tokensIn || 0).toLocaleString()} tokens in · {(shown.tokensOut || 0).toLocaleString()} out
+              {shown.cost ? ` · ${shown.cost}c` : ""}
+            </div>
           )}
 
           {shown.ok && shown.block && (
