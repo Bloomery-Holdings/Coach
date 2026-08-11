@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 100";
+const BUILD = "11 August 2026 · 101";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3297,7 +3297,26 @@ const repairLogs = (d) => {
       (String(e.w || "").trim() || String(e.reps || "").trim() || String(e.secs || "").trim()));
     if (real) bwDays.add(day);
   });
-  (d.bodywork || []).forEach((pg) => Object.keys(pg.log || {}).forEach((day) => bwDays.add(day)));
+  /* BODY-WORK TICKS ARE KEYED `date#index` SINCE THE LISTS BECAME FREE ORDER
+     (build 98) — she can do list three today and list five tomorrow, so the
+     day alone can no longer identify a tick. This repair still read the key
+     as a plain date, which meant a ticked list wrote a nonsense day
+     ("2026-08-08#3") into the record and left the real day white. The date is
+     taken off the front of the key, and anything that isn't a date is
+     ignored rather than invented (rule 23). */
+  const dayOfKey = (k) => String(k).split("#")[0];
+  (d.bodywork || []).forEach((pg) => Object.keys(pg.log || {}).forEach((k) => {
+    const day = dayOfKey(k);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) bwDays.add(day);
+  }));
+  /* And the days already spoiled by that bug are put right rather than
+     deleted: a nonsense key in the record is evidence that the real day was
+     trained, so the real day is counted. Nothing is removed (rule 20). */
+  Object.keys(logs).forEach((k) => {
+    if (!/^\d{4}-\d{2}-\d{2}#/.test(k)) return;
+    const day = dayOfKey(k);
+    if (logs[k] && logs[k].completed) bwDays.add(day);
+  });
   bwDays.forEach((day) => {
     const l = logs[day];
     if (l && (l.completed || l.rest)) return;
@@ -9134,6 +9153,103 @@ function SessionClock({ log, write, coach }) {
   );
 }
 
+/* ---- WHY THIS DAY IS WHITE -----------------------------------------
+   HER INSTRUCTION, 11 August: "Go to Saturday itself and check each and
+   every tab whether it's done properly and what makes Saturday unable to
+   show like this. Because maybe it is something I forgot to do."
+
+   Her training lives on her phone and cannot be read from anywhere else,
+   which is why three narrow fixes in a row missed. So the day answers the
+   question itself, out of her own file: every place the app looks for
+   evidence of a session, named, with what it actually found there. No
+   guessing, no invented number — a place with nothing in it says nothing
+   is in it (rule 23). And the way to settle it is in the same card, one
+   tap, because the day she is looking at is where the answer belongs
+   (rule 11). Never a reproach: a day she didn't train is a day she didn't
+   train, nothing more (rule 24). */
+function WhyWhite({ data, day, log, write }) {
+  const l = log || null;
+  const trim = (x) => String(x ?? "").trim();
+  const rows = [];
+  const R = (label, value) => rows.push({ label, value: value || null });
+
+  const answers = ["rpe", "sets", "during", "when", "energyAfter"]
+    .filter((k) => l && l[k] !== undefined && trim(l[k]) !== "");
+  const note = trim(l?.sessionNote);
+  const drills = Object.values(l?.drillNotes || {}).map(trim).filter(Boolean);
+
+  R("A class named for the day", l?.type ? l.type : null);
+  R("How the session went", answers.length ? answers.length + " of 5 answered" : null);
+  R("Something you wrote about it", note ? "“" + note.slice(0, 34) + (note.length > 34 ? "…" : "") + "”" : null);
+  R("Notes against the drills", drills.length ? drills.length + " written" : null);
+  R("Minutes", trim(l?.minutes) ? l.minutes + " min" : null);
+  R("The session clock", l?.sessionClock?.startedAt ? "started" : null);
+
+  const bw = data.bwlog?.[day] || {};
+  const bwCount = Object.values(bw).filter((e) => e &&
+    (trim(e.w) || trim(e.reps) || trim(e.secs))).length;
+  const ticks = (data.bodywork || []).reduce((n, pg) =>
+    n + Object.keys(pg.log || {}).filter((k) => String(k).split("#")[0] === day).length, 0);
+  R("Body work", (bwCount || ticks)
+    ? [bwCount ? bwCount + " logged" : null, ticks ? ticks + " list" + (ticks === 1 ? "" : "s") + " ticked off" : null]
+        .filter(Boolean).join(" · ") : null);
+
+  /* the same test the record itself uses, so this can never disagree with it */
+  const sittingDay = (entry, fallback) => {
+    if (!entry) return null;
+    const meta = ["on", "started", "finished", "fromMonthly"];
+    const real = Object.keys(entry).some((k) => {
+      if (meta.includes(k)) return false;
+      const x = entry[k];
+      if (x === undefined || x === null) return false;
+      if (typeof x === "object") return [x.v, x.l, x.r].some((s) => trim(s) !== "");
+      return trim(x) !== "";
+    });
+    if (!real) return null;
+    const dd = entry.on || entry.started || fallback;
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(dd || "")) ? dd : null;
+  };
+  const hasSit = (store, useKey) => Object.keys(store || {})
+    .some((k) => sittingDay(store[k], useKey ? k : null) === day);
+  R("Weekly measurements", hasSit(data.weekly, true) ? "measured that day" : null);
+  R("Monthly benchmark", hasSit(data.monthly, false) ? "measured that day" : null);
+  R("Mobility tests", hasSit(data.mobility, true) ? "tested that day" : null);
+
+  const anyFound = rows.some((r) => r.value);
+
+  return (
+    <Card style={{ background: C.chalk }}>
+      <Eyebrow>Why this day is white</Eyebrow>
+      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, margin: "6px 0 12px" }}>
+        {data.sample
+          ? "Sample data is switched on, so nothing here is being read as your own training. Settings, then Your data, to clear it."
+          : anyFound
+            ? "There is work in this day and it still isn't counted. That is a fault in the app, not something you forgot — tell me and I'll fix it."
+            : "Everywhere the app looks for a session on this day, it finds nothing. If you did train, the button below settles it."}
+      </div>
+
+      {rows.map((r) => (
+        <div key={r.label} style={{ display: "flex", alignItems: "baseline", gap: 8,
+          padding: "6px 0", borderTop: `1px solid ${C.line}` }}>
+          <span style={{ width: 13, flexShrink: 0, fontSize: 12, color: r.value ? C.moss : C.line }}>
+            {r.value ? "✓" : "—"}
+          </span>
+          <span style={{ flex: 1, fontSize: 12.5, color: r.value ? C.ink : C.muted }}>{r.label}</span>
+          <span className="mono" style={{ fontSize: 10.5, color: r.value ? C.moss : C.muted, textAlign: "right" }}>
+            {r.value || "nothing"}
+          </span>
+        </div>
+      ))}
+
+      <div style={{ marginTop: 13 }}>
+        <Btn kind="signal" onClick={() => write({ completed: true, type: l?.type || "Session" })}>
+          It was a training day — count it
+        </Btn>
+      </div>
+    </Card>
+  );
+}
+
 function MoodCard({ log, write, setSheet, coach }) {
   const moods = [
     { v: "flat", label: "Flat", line: "I'm flat today and I don't know why." },
@@ -9554,6 +9670,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           </div>
         )}
       </div>
+
+      {/* A past day she has opened, that the calendar is painting white:
+          the day says what the app can and cannot see in it, and gives her
+          the one tap that settles it. Never on today — today is still
+          happening — and never on a day she logged as rest. */}
+      {!isToday && !log?.completed && !log?.rest && (
+        <WhyWhite data={data} day={t} log={log} write={write} />
+      )}
 
       {/* THE MEDALS, AT THE TOP, WHERE SHE ASKED FOR THEM.
           Only appears once there is one — an empty shelf is a reminder of
