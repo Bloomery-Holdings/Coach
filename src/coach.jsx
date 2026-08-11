@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 91";
+const BUILD = "11 August 2026 · 92";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3294,6 +3294,35 @@ const repairLogs = (d) => {
     if (l && (l.completed || l.rest)) return;
     logs[day] = { ...(l || {}), completed: true, type: (l && l.type) || "Body work" };
   });
+  /* THE SITTINGS ARE SESSIONS. The sitting card says so itself — "this
+     sitting counts as today's session" — and closing the MONTHLY has logged
+     one since 10 August. The weekly never did, and the weekly is what her
+     Saturday was: squats, push-ups, planks, the lot, measured and entered,
+     and the day stayed white (her report, 11 August). A sitting with real
+     values in it names its day from the stamp the app itself wrote — `on`
+     at close, `started` at the first keystroke — and counts. A monthly with
+     neither stamp has no honest day to point at, so it is skipped rather
+     than guessed (rule 23). */
+  const sit = (entry, fallbackDay, type) => {
+    if (!entry) return;
+    const meta = ["on", "started", "finished", "fromMonthly"];
+    const real = Object.keys(entry).some((k) => {
+      if (meta.includes(k)) return false;
+      const x = entry[k];
+      if (x === undefined || x === null) return false;
+      if (typeof x === "object") return [x.v, x.l, x.r].some((s) => String(s ?? "").trim() !== "");
+      return String(x).trim() !== "";
+    });
+    if (!real) return;
+    const day = entry.on || entry.started || fallbackDay;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(day || ""))) return;
+    const l = logs[day];
+    if (l && (l.completed || l.rest)) return;
+    logs[day] = { ...(l || {}), completed: true, type: (l && l.type) || type };
+  };
+  Object.keys(d.weekly || {}).forEach((wk) => sit(d.weekly[wk], wk, "Weekly measurements"));
+  Object.keys(d.monthly || {}).forEach((mo) => sit(d.monthly[mo], null, "Monthly benchmark"));
+  Object.keys(d.mobility || {}).forEach((wk) => sit(d.mobility[wk], wk, "Mobility tests"));
   return logs;
 };
 
@@ -4900,8 +4929,16 @@ function useCoach(data, day, clock) {
     };
 
     /* due the moment its day arrives, and it stays due until it's done */
-    const weeklyDone = sittingFinished(weekly[ws]);
+    /* THE MONTHLY OVERRIDES THE WEEKLY. Her instruction, 11 August: "the week
+       measurements are still open — if a monthly battery is done, it should
+       override." The monthly asks every row the weekly asks and more, so a
+       finished monthly taken THIS week leaves the weekly nothing to add. It
+       satisfies the week it was actually taken in — an old monthly with no
+       day stamp cannot name its week and satisfies nothing (rule 23). */
     const monthlyDone = sittingFinished(monthly[mk]);
+    const monthlyCoversWeek = monthlyDone && !!monthly[mk]?.on
+      && weekStart(monthly[mk].on, startOn) === ws;
+    const weeklyDone = sittingFinished(weekly[ws]) || monthlyCoversWeek;
     const weeklyDue = !weeklyDone && t >= weeklyFrom;
     const monthlyDue = !monthlyDone && t >= monthlyFrom;
     const weeklyToday = !weeklyDone && t === weeklyFrom;
@@ -16499,7 +16536,16 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   const form = data[which][key] || {};
   const set = (k, v) => setData((d) => {
     const prev = (d[which] || {})[key] || {};
-    return { ...d, [which]: { ...(d[which] || {}),
+    /* A measurement entered is a test physically done — the day counts from
+       the first one, the same rule body work follows, so the chip fills
+       while she is standing there rather than on the next app open. Only the
+       CURRENT sitting: typing into an old week says nothing about today. */
+    const l = (d.logs || {})[coach.t] || {};
+    const stamp = isCurrent && String(v ?? "").trim() !== "" && !l.completed && !l.rest
+      ? { logs: { ...(d.logs || {}), [coach.t]: { ...l, completed: true,
+          type: l.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark") } } }
+      : {};
+    return { ...d, ...stamp, [which]: { ...(d[which] || {}),
       [key]: { ...prev, [k]: v, started: prev.started || coach.t } } };
   });
 
@@ -16897,17 +16943,32 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
                for is already in this sitting, so it is written into that
                week's store as well. Never over a weekly she already did
                (rule 20), and flagged so nothing downstream has to guess. */
-            if (!isWeekly && isCurrent && !(d.weekly || {})[coach.monthlyWeek || coach.ws]) {
+            if (!isWeekly && isCurrent) {
+              /* Used to run only when NO weekly existed — so a weekly she had
+                 STARTED kept nagging after the monthly answered every row it
+                 asks (her report, 11 August). Now it merges: every weekly row
+                 the monthly has and the weekly does not is filled in, nothing
+                 she typed is ever overwritten (rule 20), and the weekly is
+                 closed — the monthly overrides it, in her words. */
+              /* the week it was ACTUALLY taken in — not the week it was
+                 scheduled for. A benchmark done days late used to carry into
+                 the old week and leave the current one nagging. */
+              const wkKey = coach.ws;
+              const existing = (d.weekly || {})[wkKey] || null;
               const weeklyIds = new Set((d.fields.weekly || [])
                 .filter((f) => f.inWeekly !== false).map((f) => f.id));
               const carried = {};
               Object.keys(cur).forEach((k) => {
                 const base = String(k).split("__")[0];
-                if (weeklyIds.has(base) && cur[k] !== undefined && cur[k] !== "") carried[k] = cur[k];
+                if (!weeklyIds.has(base)) return;
+                if (cur[k] === undefined || cur[k] === "") return;
+                if (existing && existing[k] !== undefined && existing[k] !== "") return;
+                carried[k] = cur[k];
               });
-              if (Object.keys(carried).length) {
+              if (Object.keys(carried).length || existing) {
                 next.weekly = { ...(d.weekly || {}),
-                  [coach.monthlyWeek || coach.ws]: { ...carried, on: coach.t, fromMonthly: true } };
+                  [wkKey]: { ...(existing || {}), ...carried,
+                    on: (existing && existing.on) || coach.t, finished: true, fromMonthly: true } };
               }
             }
             /* The benchmark is thirty-odd minutes under load — it counts as
@@ -16915,6 +16976,14 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
             if (!isWeekly && isCurrent && !(d.logs || {})[coach.t]?.type) {
               next.logs = { ...(d.logs || {}), [coach.t]: {
                 ...((d.logs || {})[coach.t] || {}), type: "Monthly benchmark", minutes: "30", completed: true } };
+            }
+            /* And the weekly is the same work at a smaller dose. It counted
+               for the monthly and not for the weekly — the inconsistency her
+               white Saturday exposed (11 August). Same guard: never over a
+               day that already has a session, never over a rest day. */
+            if (isWeekly && isCurrent && !(d.logs || {})[coach.t]?.type && !(d.logs || {})[coach.t]?.rest) {
+              next.logs = { ...(d.logs || {}), [coach.t]: {
+                ...((d.logs || {})[coach.t] || {}), type: "Weekly measurements", minutes: "10", completed: true } };
             }
             return next;
           });
