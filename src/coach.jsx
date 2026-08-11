@@ -2977,7 +2977,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 105";
+const BUILD = "11 August 2026 · 106";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4104,13 +4104,35 @@ function useCoach(data, day, clock) {
        the WEEKLY store — and her record was set in the monthly benchmark,
        which asks every one of the same tests. Both stores count now: a
        record is a record wherever she set it. */
+    /* WHAT THE FINISHER GROWS OUT OF — AND WHAT IT MUST NOT READ.
+
+       HER REPORT, 11 August: "173 squats without stopping. I never did
+       anything close to 173 squats. Where did the card get this reading?"
+
+       From her own squat score, read wrong. Squat, split squat and band row
+       are scored kg × reps — the number the app keeps for them is a LOAD.
+       Ten kilos for seventeen reps is stored as 170, and the finisher
+       printed that load as a rep count and added three.
+
+       A finisher counts repetitions, so it reads repetitions: the rep half
+       of the score, never the load. On a two-sided measure it takes the
+       average of the sides, because the bet is per side. */
     const bestOf = (id) => {
       const f = fields.weekly.find((x) => x.id === id);
       if (!f) return null;
+      const repsOf = (e) => {
+        if (f.type !== "weightreps") return readMeasure(e, f);
+        if (f.bilateral) {
+          const both = [Number(e[f.id + "__L"]), Number(e[f.id + "__R"])]
+            .filter((v) => !isNaN(v) && v > 0);
+          return both.length ? both.reduce((a, b) => a + b, 0) / both.length : NaN;
+        }
+        return Number(e[f.id]);
+      };
       let best = null;
       [...Object.values(weekly), ...Object.values(monthly)].forEach((e) => {
-        const v = readMeasure(e, f);
-        if (!isNaN(v) && (best === null || v > best)) best = v;
+        const v = repsOf(e);
+        if (!isNaN(v) && v > 0 && (best === null || v > best)) best = v;
       });
       return best;
     };
