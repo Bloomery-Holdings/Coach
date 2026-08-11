@@ -3086,7 +3086,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 111";
+const BUILD = "11 August 2026 · 112";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3752,6 +3752,12 @@ const writeToFolder = async (d) => {
    it never pretends a backup happened (rule 23).
    ========================================================================= */
 const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0";
+/* The registration she made on 11 August. A client ID is not a secret — it
+   travels in the sign-in URL of every browser app there is, and on its own it
+   grants nothing: only her signing in does that. It lives here so she never
+   has to type a UUID on a phone, and Settings still overrides it. */
+const MS_CLIENT_DEFAULT = "f8cdef31-a31e-4b4a-93e4-5f571e91255a";
+const msClientId = (d) => String((d && d.settings && d.settings.msClientId) || MS_CLIENT_DEFAULT).trim();
 const MS_SCOPE = "Files.ReadWrite.AppFolder offline_access";
 const MS_KEY = "coach:onedrive";
 const msRedirect = () => {
@@ -12099,7 +12105,7 @@ function Settings({ data, setData, setSheet }) {
   const [backupMsg, setBackupMsg] = useState("");
   /* OneDrive: connected once, then it uploads itself (her instruction,
      11 August: "provided that I can make it automatic, not something I push") */
-  const msId = String(data.settings?.msClientId || "").trim();
+  const msId = msClientId(data);
   const [msState, setMsState] = useState(() => (msConnected() ? (msLapsed() ? "lapsed" : "on") : "off"));
   const connectOneDrive = async () => {
     if (!msId) { setBackupMsg("Paste the Application (client) ID below first."); return; }
@@ -12546,14 +12552,15 @@ function Settings({ data, setData, setSheet }) {
               {msState === "lapsed" ? "Sign in again" : "Connect OneDrive"}
             </Btn>
           )}
-          {!msId && (
+          {msState !== "on" && (
             <div style={{ marginTop: 10 }}>
               <Field label="Application (client) ID from Microsoft" unit="" type="text"
-                value={data.settings?.msClientId || ""}
+                value={data.settings?.msClientId || MS_CLIENT_DEFAULT}
                 onChange={(v) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), msClientId: v.trim() } }))} />
               <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: -6 }}>
-                One-off. It identifies this app to Microsoft; it is not a password and it grants
-                nothing on its own.
+                Already filled in from the registration you made. It identifies this app to
+                Microsoft; it is not a password and it grants nothing on its own — only your
+                signing in does. Change it only if you ever register the app again.
               </div>
             </div>
           )}
@@ -18090,7 +18097,7 @@ function CoachApp() {
          app, and the Settings card is where the truth about it lives. */
       (async () => {
         try {
-          const id = String((d && d.settings && d.settings.msClientId) || "").trim();
+          const id = msClientId(d);
           if (!id) return;
           await msFinish(id);
           if (!d || d.sample || !Object.keys(d.logs || {}).length) return;
