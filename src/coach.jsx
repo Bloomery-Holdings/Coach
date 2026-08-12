@@ -3086,7 +3086,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 113";
+const BUILD = "12 August 2026 · 114";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3783,7 +3783,14 @@ const MS_CLIENT_DEFAULT = "";
 const G_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const G_KEY = "coach:gdrive";
 const G_FOLDER = "Coach backups";
-const gClientId = (d) => String((d && d.settings && d.settings.gClientId) || "").trim();
+/* The client she registered on 12 August, in her own Google Cloud project.
+   A client ID is not a secret — it travels in the sign-in URL of every browser
+   app there is, and on its own it grants nothing: only her signing in does. It
+   lives here so she never types it on a phone, and Settings still overrides it.
+   (The client SECRET that Google showed alongside it is not used, not stored,
+   and not needed: this app never does the flow that requires one.) */
+const G_CLIENT_DEFAULT = "1067639620060-3kmbi66j5505mbu609mn8rk21a6o3dgd.apps.googleusercontent.com";
+const gClientId = (d) => String((d && d.settings && d.settings.gClientId) || G_CLIENT_DEFAULT).trim();
 const gRead = () => { try { return JSON.parse(window.localStorage.getItem(G_KEY) || "null"); } catch (e) { return null; } };
 const gWrite = (v) => { try { if (v) window.localStorage.setItem(G_KEY, JSON.stringify(v)); else window.localStorage.removeItem(G_KEY); } catch (e) {} };
 /* "Connected" means she granted it once. The hour-long token is not the
@@ -12703,16 +12710,18 @@ function Settings({ data, setData, setSheet }) {
               {gBusy ? "Opening Google…" : gState === "lapsed" ? "Sign in again" : "Connect Google Drive"}
             </Btn>
           )}
+          {gState !== "on" && (
           <div style={{ marginTop: 10 }}>
             <Field label="Client ID from Google" unit="" type="text"
-              value={data.settings?.gClientId || ""}
+              value={data.settings?.gClientId || G_CLIENT_DEFAULT}
               onChange={(v) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), gClientId: v.trim() } }))} />
             <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: -6 }}>
-              One-off, from your own Google Cloud project. It ends in .apps.googleusercontent.com.
-              It identifies this app to Google; it is not a password and grants nothing on its own —
-              only your signing in does.
+              Already filled in from the project you set up. It identifies this app to Google; it is
+              not a password and grants nothing on its own — only your signing in does. Change it
+              only if you ever register the app again.
             </div>
           </div>
+          )}
         </div>
 
         {msId ? (
