@@ -1734,6 +1734,8 @@ const reviewPayload = (data, coach, cut) => {
                     mb.push(`recovery ${mg.recovery}%`);
                 if (mg.sleep || lg.sleep)
                     mb.push(`slept ${mg.sleep || lg.sleep}h`);
+                if (lg.nap)
+                    mb.push(`napped ${lg.nap}h during the day`);
                 if (mg.hrv)
                     mb.push(`HRV ${mg.hrv}`);
                 if (mg.rhr)
@@ -3282,7 +3284,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 116";
+const BUILD = "12 August 2026 · 118";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -10034,6 +10036,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         !isToday && !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(WhyWhite, { data: data, day: t, log: log, write: write })),
         isToday && React.createElement(MedalShelf, { coach: coach, setSheet: setSheet }),
         isToday && React.createElement(SessionClock, { log: log, write: write, coach: coach }),
+        !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(Btn, { kind: "quiet", onClick: () => write({ rest: true, completed: false }) }, "Log this as a rest day")),
         isToday && (React.createElement(Card, { style: { background: coach.recValue ? C.card : C.pist, padding: "14px 16px" } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 } },
                 React.createElement(Eyebrow, { color: coach.recValue ? C.muted : C.signal }, "This morning"),
@@ -10049,6 +10052,10 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Sleep", unit: "hours", value: log === null || log === void 0 ? void 0 : log.sleep, onChange: (v) => write({ sleep: v }) }))),
+            React.createElement("div", { style: { display: "flex", gap: 12 } },
+                React.createElement("div", { style: { flex: 1 } },
+                    React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) })),
+                React.createElement("div", { style: { flex: 1 } })),
             React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "flex-end" } },
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Woke at", unit: "hh:mm", type: "text", value: coach.wokeRaw, onChange: (v) => setData((d) => {
@@ -10116,7 +10123,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         isToday && !(log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.state) !== "moved" && !restDay
             && coach.moodToday && coach.moodToday !== "good" && (React.createElement(LadderCard, { data: data, setData: setData, coach: coach })),
         isToday && measureDue && (React.createElement(MeasureDueCard, { data: data, setData: setData, coach: coach, setSheet: setSheet, monthly: showMonthlyCall })),
-        !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(Btn, { kind: "quiet", onClick: () => write({ rest: true, completed: false }) }, "Log this as a rest day")),
         !isFuture && (React.createElement(Card, { style: { padding: 20 } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between" } },
                 React.createElement(Eyebrow, { color: C.signal }, benchmarkIsSession ? "Benchmark day"
@@ -14812,6 +14818,7 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
             const am = [
                 mg.recovery ? `recovery ${mg.recovery}%` : null,
                 mg.sleep ? `slept ${mg.sleep}h` : null,
+                (l && l.nap) ? `napped ${l.nap}h during the day` : null,
                 mg.shoulderAM ? `shoulder woke ${mg.shoulderAM}/5` : null,
             ].filter(Boolean).join(", ");
             if (!l && !am)
