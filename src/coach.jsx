@@ -1629,6 +1629,8 @@ const reviewPayload = (data, coach, cut) => {
         if (l.during) bits.push(`felt ${l.during}/5 during`);
         if (l.energyAfter) bits.push(`${l.energyAfter}/5 after`);
         if (l.shoulder) bits.push(`shoulder comfort ${l.shoulder}/5`);
+        { const dd = Object.values(l.drillsDone || {}).filter(Boolean).length;
+          if (dd) bits.push(`${dd} of the ten-minutes drills marked done`); }
         (l.extras || []).forEach((x) => bits.push(`plus ${x}`));
         (l.extraSessions || []).forEach((x) => bits.push(`plus ${x.type} ${x.minutes}min${x.note ? ` ("${x.note}")` : ""}`));
       } else if (l && l.state === "moved") {
@@ -3183,7 +3185,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 128";
+const BUILD = "12 August 2026 · 129";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4387,6 +4389,42 @@ function useCoach(data, day, clock) {
     const pos = { week: rawWeek, month: Math.ceil(rawWeek / 4), quarter: Math.ceil(Math.ceil(rawWeek / 4) / 3) };
     const themePos = pos;  /* resolved against phase + season just below */
 
+    /* HER INSTRUCTION, 12 August: "protections should be built from what I
+       tell the coach. The coach should be my ultimate source of truth."
+       The scored shoulder went in the calculation review — nothing asks for
+       a 1-5 any more. What protects her now is the record itself:
+       * an open entry that reads as the shoulder hurting, tight or weak,
+         touched in the last 7 days -> nothing high-load on the shoulder;
+       * an open entry, quieter than that -> high load marked down, not banned;
+       * she marks it resolved -> the protection retires (rule 19).
+       A question ABOUT the shoulder is not a complaint and protects nothing.
+       The old settings flag still counts as "rehabilitating" for the coach's
+       framing, but the day-to-day guard is what she has told it. */
+    const shoulderTold = (data.issues || []).filter((i) =>
+      i.status !== "closed"
+      && (i.tags?.regions || []).includes("shoulders")
+      && (i.tags?.kinds || []).some((k) => ["pain", "tight", "weak"].includes(k)));
+    const shoulderFresh = shoulderTold.filter((i) => {
+      const dates = [i.date, ...(i.tried || []).map((x) => x.date)].filter(Boolean).sort();
+      const last = dates[dates.length - 1];
+      return last && Math.round((parse(t) - parse(last)) / 86400000) <= 7;
+    });
+    const shoulderGuard = !!settings.shoulderInjury || shoulderTold.length > 0;
+    const shoulderFrozen = shoulderFresh.length > 0;
+    const shoulderSore = shoulderTold.length > 0;
+    /* days since the record last mentioned the shoulder at all — open or
+       closed. null = she has never told the coach about it. */
+    const shoulderQuietDays = (() => {
+      const all = (data.issues || []).filter((i) =>
+        (i.tags?.regions || []).includes("shoulders")
+        && (i.tags?.kinds || []).some((k) => ["pain", "tight", "weak"].includes(k)));
+      if (!all.length) return null;
+      let latest = null;
+      all.forEach((i) => [i.date, ...(i.tried || []).map((x) => x.date)]
+        .forEach((d) => { if (d && (!latest || d > latest)) latest = d; }));
+      return latest ? Math.round((parse(t) - parse(latest)) / 86400000) : null;
+    })();
+
     /* which block of training we're in — it gates what the library offers */
     /* Both read straight from the log map here rather than from the derived
        values further down — those are declared after this line, and a phase
@@ -4395,13 +4433,13 @@ function useCoach(data, day, clock) {
       const trained = Object.keys(logs).filter((k) => trainedOn(logs[k])).sort();
       const weeks = trained.length
         ? Math.max(1, Math.round((parse(t) - parse(trained[0])) / 604800000)) : 0;
-      const am = [];
-      for (let i = 0; i < 28; i++) {
-        const v = Number((data.morning || {})[addDays(t, -i)]?.shoulderAM);
-        if (v > 0) am.push(v);
-      }
-      const amMean = am.length >= 3 ? am.reduce((x, y) => x + y, 0) / am.length : null;
-      return { weeks, shoulderSettled: !settings.shoulderInjury || (amMean !== null && amMean >= 4) };
+      /* This waited on the morning-after score (shoulderAM), which she
+         removed on 12 August — it would have stayed unsettled forever.
+         Settled now means the record is quiet: nothing open, and nothing
+         said about the shoulder for four weeks. Never mentioned = nothing
+         to settle. */
+      return { weeks, shoulderSettled: !shoulderGuard
+        || (!shoulderTold.length && (shoulderQuietDays === null || shoulderQuietDays >= 28)) };
     })();
     const phaseKey = phaseFor(t, settings.gymDate, phaseEvidence);
     const phase = { key: phaseKey, ...PHASES[phaseKey] };
@@ -4420,7 +4458,7 @@ function useCoach(data, day, clock) {
     const allClasses = data.library || [];
     const library = allClasses.filter((w) => {
       if (w.home && !phase.allowHome) return false;
-      if (w.shoulderLoad === "high" && !phase.allowHighShoulder && settings.shoulderInjury) return false;
+      if (w.shoulderLoad === "high" && !phase.allowHighShoulder && shoulderGuard) return false;
       return true;
     });
     const session = allClasses.find((w) => w.name === logs[t]?.type) || null;
@@ -4531,12 +4569,12 @@ function useCoach(data, day, clock) {
     const confRaw = lastWeek ? Number(lastWeek.confidence) : NaN;
     const confidence = confidenceRule(isNaN(confRaw) ? null : confRaw);
 
-    const comfortReadings = weekDays.map((d) => Number(logs[d]?.shoulder)).filter((v) => !isNaN(v) && v > 0);
-    const lowComfort = comfortReadings.filter((v) => v < 4).length;
-    const comfortOk = settings.shoulderInjury
-      ? (comfortReadings.length ? lowComfort === 0 : null)
+    /* The daily 1-5 comfort tap is gone (her decision, 12 August), so the
+       week's comfort is read off the record instead: a fresh complaint is
+       a no, an open-but-quiet one is unknown, a silent record is a yes. */
+    const comfortOk = shoulderGuard
+      ? (shoulderFrozen ? false : shoulderSore ? null : true)
       : null;
-    const shoulderFrozen = settings.shoulderInjury && lowComfort >= 2;
 
     const recReadings = weekDays.map((d) => Number(data.morning?.[d]?.recovery)).filter((v) => !isNaN(v) && v > 0);
     const recAvg = recReadings.length ? recReadings.reduce((a, b) => a + b, 0) / recReadings.length : null;
@@ -4580,7 +4618,7 @@ function useCoach(data, day, clock) {
     const ctx = {
       hitTarget: weekDone >= seasonTarget,
       recoveryOk: recAvg === null ? true : recAvg >= recBaseline - 5,
-      shoulderIssue: settings.shoulderInjury && lowComfort > 0,
+      shoulderIssue: shoulderSore,
     };
     /* Every number she logs, including the ones with no right direction. The
        monthly rows come too, so body composition is analysed and charted the
@@ -4985,7 +5023,12 @@ function useCoach(data, day, clock) {
         out.push({ id: m.id, label: m.label, value: Number(m.max), max: Number(m.max),
           kind: "mobility", rungs: [], rung: 0 });
       });
-      return out;
+      /* HER QUESTION, 12 August: "Will this stay on my landing page
+         forever?" No — the card is a flag, not homework. Putting it down is
+         remembered per test AT ITS CURRENT TOP, so if she raises the scale
+         and outgrows the new top too, it flags freshly. */
+      const ack = data.maxedAck || {};
+      return out.filter((x) => Number(ack[x.id]) !== x.max);
     })();
 
     /* ---- WHAT SHE CAN DO NOW -------------------------------------------
@@ -5515,10 +5558,10 @@ function useCoach(data, day, clock) {
     const wouldHavePicked = prescribe({
       domsCaution, dislikes, measuredCost,
       library, logs, date: t, recovery: recoveryForPick, restDay, phase, themeGoal, block, bodywork,
-      shoulderFrozen, shoulderInjury: settings.shoulderInjury,
-      /* one uncomfortable day is enough to tilt the choice; two is what makes
-         it a freeze. Nothing is ruled out at one - it is a lean, not a bar. */
-      shoulderSore: !!settings.shoulderInjury && lowComfort >= 1,
+      /* An open entry tilts the choice; a fresh one (last 7 days) is what
+         makes it a freeze. Nothing is ruled out at open-but-quiet — it is a
+         lean, not a bar. All of it from what she told the coach. */
+      shoulderFrozen, shoulderInjury: shoulderGuard, shoulderSore,
     });
     /* Nothing is offered in the calibration block. Everything downstream that
        asks "what did the coach say today" gets null, and answers honestly. */
@@ -6004,7 +6047,7 @@ function useCoach(data, day, clock) {
        offers what is left, which is still not nothing. */
     const physicalSignal = !!(
       shoulderFrozen
-      || (settings.shoulderInjury && lowComfort >= 1)
+      || shoulderSore
       || recovery?.key === "rest"
       || illnessFlags.length > 0
     );
@@ -6016,7 +6059,7 @@ function useCoach(data, day, clock) {
       physical: physicalSignal,
     });
     const ladderWhy = physicalSignal
-      ? (shoulderFrozen || (settings.shoulderInjury && lowComfort >= 1)
+      ? (shoulderFrozen || shoulderSore
           ? "Your shoulder is the thing talking today, so nothing here loads it."
           : illnessFlags.length ? "Something is showing in your overnight numbers, so nothing here loads you."
           : "Recovery is well below your normal, so nothing here loads you.")
@@ -7700,8 +7743,13 @@ function useCoach(data, day, clock) {
     else if (livePhase && blockWeeksLeft === 1)
       raise("month", "warm", `Last week of ${livePhase.name}. At the end of it I'll read the whole block — your sessions, load, measurements and WHOOP — and design the next one from what actually happened rather than from a plan written a month ago.`);
 
-    if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= 4.5 && amRecent.length >= 10)
-      raise("month", "warm", `Your shoulder has woken up at ${shoulderAMTrend} out of 5 for ten straight readings. That's a joint that has stopped being a constraint. When you're ready, turn the shoulder tracking off in Settings — you shouldn't have to answer for it forever, and I'll stop restricting overhead work.`);
+    /* Rule 19, rebuilt for the record (12 August): the old version keyed on
+       the morning score she removed and pointed at a Settings toggle that is
+       gone. Quiet record for six weeks -> the coach says the constraint has
+       stopped earning its place. Nothing is switched off FOR her — the
+       restriction already stands down by itself when the record is quiet. */
+    if (settings.shoulderInjury && !shoulderTold.length && shoulderQuietDays !== null && shoulderQuietDays >= 42)
+      raise("month", "warm", `Nothing about your shoulder in the record for ${Math.floor(shoulderQuietDays / 7)} weeks. A joint that quiet has stopped being a constraint — I'm not restricting your day-to-day picks any more, and I'll only step back in if you tell me it's talking again.`);
 
     if (illnessFlags.length >= 2)
       raise("day", "firm", `Two of your early-warning signals are moving together — ${illnessFlags.join(" and ")}. That usually shows up a day or two before you feel it. Take the easy version today; resting at the start of something costs less than pushing through it does.`);
@@ -7981,7 +8029,7 @@ function useCoach(data, day, clock) {
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
-      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, recValue, lowComfort, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
@@ -9803,6 +9851,14 @@ function DrillsCard({ coach, setSheet, data, setData }) {
   const putNote = (id, v) => setData && setData((d) => ({ ...d, logs: { ...(d.logs || {}),
     [coach.t]: { ...((d.logs || {})[coach.t] || {}),
       drillNotes: { ...(((d.logs || {})[coach.t] || {}).drillNotes || {}), [id]: v } } } }));
+  /* HER REPORT, 12 August: "there is nothing to say that I did these
+     exercises and they keep lingering on my first landing page." Done is a
+     mark on the day, per drill — stored with the log, read by the coach. */
+  const done = (data && data.logs && data.logs[coach.t] && data.logs[coach.t].drillsDone) || {};
+  const markDone = (id, v) => setData && setData((d) => ({ ...d, logs: { ...(d.logs || {}),
+    [coach.t]: { ...((d.logs || {})[coach.t] || {}),
+      drillsDone: { ...(((d.logs || {})[coach.t] || {}).drillsDone || {}), [id]: v } } } }));
+  const allDone = coach.dailyDrills.list.length > 0 && coach.dailyDrills.list.every((x) => done[x.id]);
   return (
     <Card style={{ background: C.mint }}>
       {/* HER INSTRUCTION, 10 August: "I don't see why you have the explanation
@@ -9830,8 +9886,8 @@ function DrillsCard({ coach, setSheet, data, setData }) {
           </InfoNote>
         </span>
         <span className="mono" style={{ fontSize: 10, flexShrink: 0,
-          color: coach.dailyDrills.over ? C.clay : C.muted }}>
-          {coach.dailyDrills.mins} min{coach.dailyDrills.over ? ` · over your ${coach.dailyDrills.budget}` : ""}
+          color: allDone ? C.moss : coach.dailyDrills.over ? C.clay : C.muted }}>
+          {allDone ? "done today" : `${coach.dailyDrills.mins} min${coach.dailyDrills.over ? ` · over your ${coach.dailyDrills.budget}` : ""}`}
         </span>
       </div>
       {/* A CLOCK ON THE WORK ITSELF.
@@ -9848,7 +9904,14 @@ function DrillsCard({ coach, setSheet, data, setData }) {
         <Timer compact label="the ten minutes — whole set" />
       </div>
 
-      {coach.dailyDrills.list.map((d, i) => (
+      {coach.dailyDrills.list.map((d, i) => done[d.id] ? (
+        <div key={d.id} onClick={() => markDone(d.id, false)}
+          style={{ padding: "9px 0", borderTop: i ? `1px solid ${C.line}` : "none", cursor: "pointer",
+            display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontSize: 13, color: C.muted }}>{d.label}</span>
+          <span className="mono" style={{ fontSize: 11, color: C.moss, flexShrink: 0 }}>done — tap to reopen</span>
+        </div>
+      ) : (
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink }}>{d.label}</span>
@@ -9901,6 +9964,11 @@ function DrillsCard({ coach, setSheet, data, setData }) {
               which nothing here pointed to. Every drill in the ten minutes
               lives in the stored drills list, so the chip opens that drill's
               own editor directly (rule 11). */}
+          {setData && (
+            <div style={{ marginTop: 10 }}>
+              <Btn kind="quiet" onClick={() => markDone(d.id, true)}>Done — I did this one</Btn>
+            </div>
+          )}
           {setSheet && (
             <div style={{ marginTop: 10 }}>
               <EditChip label={`Edit ${d.label}`}
@@ -15126,8 +15194,26 @@ function AchievedCard({ data, setData, coach, setSheet }) {
               fold measured past the floor line rather than to it.</span>
             )}
           </div>
-          <div style={{ marginTop: 10 }}>
-            <Btn kind="ghost" onClick={() => setSheet({ kind: "edit-weekly" })}>Change what's measured</Btn>
+          {/* HER REPORT, 12 August: "change the measure doesn't change
+              anything." This opened the weekly editor whatever kind of test
+              had maxed — a mobility test lives in the mobility editor, so
+              the door led to a room the test wasn't in. Each maxed test now
+              opens its own editor, on that test's row (rule 11). */}
+          {maxed.map((m) => (
+            <div key={m.id} style={{ marginTop: 10 }}>
+              <Btn kind="ghost" onClick={() => setSheet(
+                m.kind === "mobility"
+                  ? { kind: "edit-mobility", focus: m.id }
+                  : { kind: (data.fields?.weekly || []).some((f) => f.id === m.id)
+                      ? "edit-weekly" : "edit-monthly", focus: m.id })}>
+                Change {maxed.length === 1 ? "the test" : m.label.toLowerCase()}</Btn>
+            </div>
+          ))}
+          <div style={{ marginTop: 8 }}>
+            <Btn kind="quiet" onClick={() => setData((d) => ({ ...d,
+              maxedAck: { ...(d.maxedAck || {}),
+                ...Object.fromEntries(maxed.map((m) => [m.id, m.max])) } }))}>
+              I know — put this away for now</Btn>
           </div>
         </div>
       )}
@@ -17835,6 +17921,8 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
         l.during ? `felt ${l.during}/5 during` : null,
         l.energyAfter ? `${l.energyAfter}/5 after` : null,
         l.shoulder ? `shoulder comfort ${l.shoulder}/5` : null,
+        (() => { const n = Object.values(l.drillsDone || {}).filter(Boolean).length;
+          return n ? `${n} ten-minutes drill${n === 1 ? "" : "s"} done` : null; })(),
         l.loads ? `lifted ${l.loads}` : null,
       ].filter(Boolean).join(", ");
       const head = l.completed
@@ -17873,7 +17961,7 @@ Where she is right now:
 - Class the app prescribed for today: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min — because ${coach.prescribed.reason}` : "none"}
 - Today's finisher: ${coach.bet ? coach.bet.text : "none"} (she has made ${coach.betsWon} of ${coach.betsTaken} answered)
 - Recovery today: ${coach.recValue || "not entered"}${coach.recovery ? " (" + coach.recovery.label + ")" : ""}
-- Shoulder progression frozen: ${coach.shoulderFrozen ? "yes" : "no"}
+- Shoulder protection (built from what she has TOLD you — the record is the source of truth): ${coach.shoulderFrozen ? "an open shoulder entry touched in the last 7 days — nothing high shoulder-load today" : coach.shoulderSore ? "an open shoulder entry — high shoulder-load classes are marked down, not banned" : "nothing open in the record — no day-to-day restriction"}. When she tells you it is resolved, mark the entry resolved and the protection retires itself.
 - THE PROGRAMME (you set the kind of day; you pick the class within it):
   Block "${coach.livePhase?.name || "none"}", week ${coach.weeksIntoBlock} of ${coach.livePhase?.weeks || "?"}${coach.blockWeeksLeft <= 0 ? " — THIS BLOCK IS FINISHED, the next one is drawn up and waiting for her" : `, ${coach.blockWeeksLeft} week(s) left`}.
   Its intent: ${coach.livePhase?.line || "n/a"}
@@ -18459,8 +18547,9 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     if (!m || !m.now) return null;
     const overhead = SHOULDER_SENSITIVE.includes(f.id) && settingsShoulder;
     const frozen = coach.shoulderFrozen && overhead;
-    /* one uncomfortable morning is enough to stop asking for more overhead */
-    const sore = overhead && coach.lowComfort > 0;
+    /* an open shoulder entry in the record is enough to stop asking for
+       more overhead (her rule, 12 August: the record is the source) */
+    const sore = overhead && !!coach.shoulderSore;
     const step = frozen || sore ? 0
       : coach.verdict.key === "advance" ? 0.05 : coach.verdict.key === "reduce" ? -0.05 : 0.02;
     let raw = m.better === "down" ? m.now * (1 - step) : m.now * (1 + step);
