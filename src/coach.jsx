@@ -1675,7 +1675,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = wk[k] || {};
       const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
       return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -1741,7 +1741,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = mo[k] || {};
       const vals = (d.fields?.monthly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
       return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -3183,7 +3183,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 127";
+const BUILD = "12 August 2026 · 128";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9131,6 +9131,15 @@ const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
           order to be able to tell you what was wrong, because on each one I
           face a problem." A number cannot carry that, and the one note at the
           bottom of the sitting cannot say WHICH exercise it was about. */}
+      {/* HER INSTRUCTION, 12 August: "I did one kilometre on the rowing
+          machine but there was no field to say which machine." Every cardio
+          row takes the machine with the number, because a kilometre on a
+          rower and a kilometre on a treadmill are two different tests. */}
+      {f.cap === "cardio" && (
+        <Field label="Which machine" unit="rower, treadmill, bike…" type="text"
+          value={form[f.id + "__machine"] || ""}
+          onChange={(v) => set(f.id + "__machine", v)} />
+      )}
       <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
         history={history} ask={ask} seeAll={seeAll} />
       <HowTo f={f} />
@@ -18103,14 +18112,14 @@ ${(() => {
   const ks = Object.keys(data.weekly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.weekly[k][f.id + "__machine"] ? ` (on the ${data.weekly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
 ${(() => {
   const ks = Object.keys(data.monthly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.monthly[k][f.id + "__machine"] ? ` (on the ${data.monthly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
