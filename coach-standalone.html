@@ -3354,7 +3354,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 125";
+const BUILD = "12 August 2026 · 126";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -10126,7 +10126,7 @@ function BodyWorkCard({ log, write, isToday }) {
             th.label)))))));
 }
 function Today({ data, setData, coach, setSheet, goTab }) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     /* one note a day, taken from the pool and never handed out twice */
     useEffect(() => {
         var _a;
@@ -10377,6 +10377,11 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) }))),
+            ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.trackSymptoms) && (React.createElement(Note, { label: "Anything you're feeling", value: (((_c = data.morning) === null || _c === void 0 ? void 0 : _c[coach.t]) || {}).symptoms || "", onChange: (v) => setData((d) => {
+                    var _a;
+                    return ({ ...d,
+                        morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), symptoms: v } } });
+                }), hint: "A headache, a cold coming, a sore back, nothing at all. It goes to the coach with the rest of your morning. It is never scored and never counted against a session." })),
             React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.muted, marginTop: -4 } }, coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`),
             React.createElement(InfoNote, { why: "These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost." }, "What these two change"))),
         isToday && React.createElement(MoodCard, { log: log, write: write, setSheet: setSheet, coach: coach }),
@@ -10547,7 +10552,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 background: String(log.minutes) === String(m) ? C.ink : "transparent",
                                 color: String(log.minutes) === String(m) ? C.chalk : C.muted,
                             } }, m))),
-                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_b = log.minutes) !== null && _b !== void 0 ? _b : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
+                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_d = log.minutes) !== null && _d !== void 0 ? _d : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
                                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
                                 border: `1.5px solid ${((s === null || s === void 0 ? void 0 : s.durations) || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` } }),
                         React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min")),
@@ -10563,7 +10568,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                             } }, "same today")))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement(AutoText, { value: (_c = log === null || log === void 0 ? void 0 : log.loads) !== null && _c !== void 0 ? _c : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: (_e = log === null || log === void 0 ? void 0 : log.loads) !== null && _e !== void 0 ? _e : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => write({ loads: v }), current: (log === null || log === void 0 ? void 0 : log.loads) || "" })),
                     React.createElement("div", { style: { marginTop: 7 } },
                         React.createElement(InfoNote, { small: true, why: "Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class \u2014 so next month you can see what actually moved rather than what the class usually calls for." }, "what this is for")))),
@@ -10761,7 +10766,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 5 } }, "The easiest way back in"),
                 React.createElement("div", { style: { fontSize: 14.5, fontWeight: 600, color: C.ink } }, coach.easiest ? coach.easiest.name : "Whatever is smallest today"),
                 React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 5 } }, coach.easiest
-                    ? `${((_d = coach.easiest.durations) === null || _d === void 0 ? void 0 : _d[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
+                    ? `${((_f = coach.easiest.durations) === null || _f === void 0 ? void 0 : _f[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
                     : "There is nothing in your library small enough to name, so pick the smallest thing you have. The point today is the restart, not the session.")),
             React.createElement(Btn, { kind: "signal", onClick: () => {
                     var _a;
@@ -10835,7 +10840,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement("div", { className: "disp", style: { fontSize: 18, fontWeight: 700, marginBottom: 6 } }, coach.weeklyDue ? "This week's numbers are open" : "This week's numbers are in"),
                     React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 } }, coach.weeklyDue
                         ? "Squat, push-up, cable row, plank, elliptical, reach, balance — about ten minutes. This is what every chart and every score is built from."
-                        : ((_f = (_e = data.weekly) === null || _e === void 0 ? void 0 : _e[coach.ws]) === null || _f === void 0 ? void 0 : _f.fromMonthly)
+                        : ((_h = (_g = data.weekly) === null || _g === void 0 ? void 0 : _g[coach.ws]) === null || _h === void 0 ? void 0 : _h.fromMonthly)
                             ? "Filled in from the monthly benchmark — the weekly is part of it, so you don't do the same exercises twice. Open it any time to correct a number."
                             : "You've filled in the weekly battery. Open it again any time to correct a number."),
                     React.createElement(Btn, { kind: coach.weeklyDue ? "signal" : "ghost", onClick: () => setSheet({ kind: "weekly", key: coach.ws }) }, coach.weeklyDue ? "Enter this week's measurements" : "Review this week's measurements"),
@@ -11881,7 +11886,12 @@ function Settings({ data, setData, setSheet }) {
                     React.createElement(Btn, { kind: "quiet", onClick: () => setSheet({ kind: "whooplog" }) }, "See everything WHOOP has sent"))),
             [["shoulderInjury", "Track the shoulder as a number",
                     "Off: the app never asks about your shoulder and never reports on it — tell the coach in your own words instead, and it will remember. On: a comfort score each day, a morning-after reading, and a headline number. Anything already recorded is kept either way."],
-                ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."]].map(([k, label, hint]) => (React.createElement("div", { key: k, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderTop: `1px solid ${C.line}` } },
+                ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."],
+                /* HER INSTRUCTION, 12 August: "It has to have a toggle, so it can be
+                   true." This setting existed, reached the coach, and had no control
+                   anywhere — so it could never be anything but off. */
+                ["trackSymptoms", "Ask how you are physically",
+                    "Off: nothing asks. On: one line each morning for anything you are feeling — a headache, a cold coming, a sore back — in your own words, typed or spoken. It goes to the coach with the rest of your morning and it is never scored, never counted and never held against a session."]].map(([k, label, hint]) => (React.createElement("div", { key: k, style: { display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderTop: `1px solid ${C.line}` } },
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement("div", { style: { fontSize: 14, fontWeight: 500 } }, label),
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.4 } }, hint)),
@@ -13353,8 +13363,11 @@ function AchievedCard({ data, setData, coach, setSheet }) {
    keep me going." And: "the medals should be for the goals, not for the
    battery test."
 
-   THIS SITS AGAINST RULE 25, AND THE DISTINCTION MATTERS. Rule 25 forbids
-   gamification, and a medal is a badge. What the evidence is actually against
+   HER DECISION, 12 August: "Update the rule that forbids gamification because
+   it wasn't my rule. Keep the achieved and the counter and the medals."
+
+   So the shelf stays, and it is not a compromise — it is what she asked for.
+   What the evidence is actually against
    is CONTINGENT EXTRINSIC REWARD — points for opening an app, streaks that
    punish one bad day, badges for turning up. Those crowd out the motivation
    that lasts years.
@@ -13367,7 +13380,9 @@ function AchievedCard({ data, setData, coach, setSheet }) {
    A permanent, specific, self-referenced record of a capability she chose and
    reached is the one form of feedback rule 25 explicitly says helps. Rule 12
    is the tiebreak: the app proposes, she disposes, and she asked for these.
-   Flagged in the write-up so she can decide whether rule 25 should say so.
+   She decided on 12 August: the medals stay and rule 25 was rewritten to say
+   what she actually wants, which is that nothing here is ranked against anyone
+   else and nothing punishes a missed day.
    ==========================================================================*/
 const Medal = ({ n = 0, size = 44 }) => {
     /* three faces, cycled, so a shelf of them does not read as ranks */
@@ -13753,7 +13768,9 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
    One block, compact rows, one under another, in fixed priority order. A row
    exists only while it needs her, and the whole block disappears when nothing
    does — absent, not empty. There is no all-done badge to earn, because that
-   is a scoreboard and rule 25 has views about scoreboards.
+   is a scoreboard. Rule 25 as she rewrote it on 12 August allows a count of
+   what she has done; what it still forbids is anything that punishes a day she
+   missed, or ranks her against anybody but herself.
 
    This replaces eight separate cards, each of which printed its instruction in
    full whether or not she had ever read it. The instruction is not deleted —
@@ -15170,7 +15187,8 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
             const NICE = { recovery: "recovery %", hrv: "HRV", rhr: "resting HR", strain: "day strain",
                 asleep: "minutes asleep", sleepEff: "sleep efficiency %", sleepPerf: "sleep performance %",
                 sleepDebt: "sleep debt", respiratory: "respiratory rate", shoulderAM: "shoulder on waking /5",
-                wokeAt: "woke at", sleep: "hours slept" };
+                wokeAt: "woke at", sleep: "hours slept",
+                symptoms: "she said she was feeling" };
             const am = [
                 ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
                     .map((k) => `${NICE[k] || k} ${mg[k]}`),
