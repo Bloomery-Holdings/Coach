@@ -3086,7 +3086,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "11 August 2026 · 112";
+const BUILD = "12 August 2026 · 113";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3756,7 +3756,126 @@ const MS_AUTH = "https://login.microsoftonline.com/common/oauth2/v2.0";
    travels in the sign-in URL of every browser app there is, and on its own it
    grants nothing: only her signing in does that. It lives here so she never
    has to type a UUID on a phone, and Settings still overrides it. */
-const MS_CLIENT_DEFAULT = "f8cdef31-a31e-4b4a-93e4-5f571e91255a";
+/* 12 August: Microsoft has deprecated app registrations for personal accounts
+   not inside a directory — her portal said so in as many words, and the list
+   was empty. The id she sent was her DIRECTORY, not an app: there was never an
+   app to have one. Both ways round it mean signing up with a card. She chose
+   Google Drive instead. None of the OneDrive code is deleted (rule 20): it is
+   dormant, and returns the moment a client id is pasted into Settings. */
+const MS_CLIENT_DEFAULT = "";
+
+/* ============================================================================
+   GOOGLE DRIVE, WITHOUT HER PRESSING ANYTHING
+   ---------------------------------------------------------------------------
+   Google's rules for a browser app differ from Microsoft's: there is no
+   refresh token for a page with no server behind it — Google requires a client
+   secret for that, and a secret in a browser is not a secret. A browser gets
+   an access token good for about an hour.
+
+   Workable, and better than it sounds: Chrome on her phone is permanently
+   signed into the account, so asking Google quietly for a fresh token each
+   time the app opens normally succeeds with nothing on screen. When it cannot,
+   the card says so and it is one tap. It never claims a backup it did not make.
+
+   Scope drive.file: the app sees the files it created and nothing else in her
+   Drive. Not her documents, not her photos.
+   ========================================================================= */
+const G_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const G_KEY = "coach:gdrive";
+const G_FOLDER = "Coach backups";
+const gClientId = (d) => String((d && d.settings && d.settings.gClientId) || "").trim();
+const gRead = () => { try { return JSON.parse(window.localStorage.getItem(G_KEY) || "null"); } catch (e) { return null; } };
+const gWrite = (v) => { try { if (v) window.localStorage.setItem(G_KEY, JSON.stringify(v)); else window.localStorage.removeItem(G_KEY); } catch (e) {} };
+/* "Connected" means she granted it once. The hour-long token is not the
+   connection, and its expiry is not a disconnection. */
+const gConnected = () => !!(gRead() || {}).granted;
+const gLapsed = () => !!(gRead() || {}).lapsed;
+
+const gLoad = () => new Promise((res, rej) => {
+  try {
+    if (window.google && window.google.accounts && window.google.accounts.oauth2) return res(true);
+    const el = document.createElement("script");
+    el.src = "https://accounts.google.com/gsi/client";
+    el.async = true;
+    el.onload = () => res(true);
+    el.onerror = () => rej(new Error("script"));
+    document.head.appendChild(el);
+  } catch (e) { rej(e); }
+});
+
+/* One token request. Quiet asks Google to show nothing: it either has a live
+   session and an existing grant, or it fails and we say so. */
+const gToken = async (clientId, quiet) => {
+  if (!clientId) return null;
+  const live = gRead();
+  if (live && live.access && live.until && Date.now() < live.until - 60000) return live.access;
+  try { await gLoad(); } catch (e) { return null; }
+  return await new Promise((res) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; res(v); } };
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: G_SCOPE,
+        prompt: quiet ? "" : "consent",
+        callback: (r) => {
+          if (r && r.access_token) {
+            gWrite({ granted: true, access: r.access_token,
+              until: Date.now() + (Number(r.expires_in) || 3600) * 1000 });
+            finish(r.access_token);
+          } else { gWrite({ ...(gRead() || {}), access: null, lapsed: true }); finish(null); }
+        },
+        error_callback: () => { gWrite({ ...(gRead() || {}), access: null, lapsed: true }); finish(null); },
+      });
+      client.requestAccessToken();
+      if (quiet) setTimeout(() => finish(null), 8000);
+    } catch (e) { finish(null); }
+  });
+};
+
+/* Everything it has ever put there lives in one folder it made itself. */
+const gFolder = async (token) => {
+  const q = encodeURIComponent("name='" + G_FOLDER + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+  try {
+    const found = await fetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id)",
+      { headers: { Authorization: "Bearer " + token } }).then((r) => (r.ok ? r.json() : null));
+    if (found && found.files && found.files.length) return found.files[0].id;
+    const made = await fetch("https://www.googleapis.com/drive/v3/files",
+      { method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: G_FOLDER, mimeType: "application/vnd.google-apps.folder" }) })
+      .then((r) => (r.ok ? r.json() : null));
+    return made ? made.id : null;
+  } catch (e) { return null; }
+};
+
+const uploadToDrive = async (d, clientId, quiet) => {
+  if (!d || d.sample) return "sample";
+  if (!clientId) return "no-id";
+  if (!gConnected()) return "not-connected";
+  const token = await gToken(clientId, quiet !== false);
+  if (!token) return "lapsed";
+  try {
+    const folder = await gFolder(token);
+    const meta = { name: backupName(), mimeType: "application/json" };
+    if (folder) meta.parents = [folder];
+    const B = "coachpart" + String((d.logs && Object.keys(d.logs).length) || 0);
+    const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+    const body = "--" + B + CRLF + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
+      + JSON.stringify(meta)
+      + CRLF + "--" + B + CRLF + "Content-Type: application/json" + CRLF + CRLF
+      + JSON.stringify(d, null, 2)
+      + CRLF + "--" + B + "--";
+    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "multipart/related; boundary=" + B },
+      body,
+    });
+    if (!res.ok) return "failed";
+    try { window.localStorage.setItem("coach:lastCloudBackup", today()); } catch (e) {}
+    return "ok";
+  } catch (e) { return "failed"; }
+};
 const msClientId = (d) => String((d && d.settings && d.settings.msClientId) || MS_CLIENT_DEFAULT).trim();
 const MS_SCOPE = "Files.ReadWrite.AppFolder offline_access";
 const MS_KEY = "coach:onedrive";
@@ -12106,6 +12225,35 @@ function Settings({ data, setData, setSheet }) {
   /* OneDrive: connected once, then it uploads itself (her instruction,
      11 August: "provided that I can make it automatic, not something I push") */
   const msId = msClientId(data);
+  /* Google Drive: connected once, then it uploads itself (her instruction,
+     11 August: "provided that I can make it automatic, not something I push";
+     Google, 12 August, after Microsoft's free route turned out to be closed) */
+  const gId = gClientId(data);
+  const [gState, setGState] = useState(() => (gConnected() ? (gLapsed() ? "lapsed" : "on") : "off"));
+  const [gBusy, setGBusy] = useState(false);
+  const connectDrive = async () => {
+    if (!gId) { setBackupMsg("Paste the Client ID from Google below first."); return; }
+    setGBusy(true); setBackupMsg("Opening Google…");
+    const tok = await gToken(gId, false);
+    setGBusy(false);
+    if (!tok) { setGState("off"); setBackupMsg("Google didn't grant it. Nothing has changed — try again, or check the Client ID."); return; }
+    setGState("on"); setBackupMsg("Connected. Sending the first copy…");
+    const r = await uploadToDrive(data, gId, false);
+    setBackupMsg(r === "ok"
+      ? "In your Drive, in a folder called Coach backups."
+      : "Connected, but that first copy didn't go. Try Send one now.");
+  };
+  const disconnectDrive = () => { gWrite(null); setGState("off"); setBackupMsg("Disconnected. Nothing already in Drive was touched."); };
+  const driveNow = async () => {
+    setGBusy(true); setBackupMsg("Sending to Drive…");
+    const r = await uploadToDrive(data, gId, false);
+    setGBusy(false);
+    if (r === "ok") { setGState("on"); setBackupMsg("In your Drive, in Coach backups."); return true; }
+    if (r === "lapsed") { setGState("lapsed"); setBackupMsg("Google wants you to sign in again — one tap and it carries on."); return false; }
+    if (r === "not-connected") { setBackupMsg("Connect Drive first."); return false; }
+    setBackupMsg("Drive wouldn't take it just then. Nothing is lost — try again, or use Back up now.");
+    return false;
+  };
   const [msState, setMsState] = useState(() => (msConnected() ? (msLapsed() ? "lapsed" : "on") : "off"));
   const connectOneDrive = async () => {
     if (!msId) { setBackupMsg("Paste the Application (client) ID below first."); return; }
@@ -12148,7 +12296,8 @@ function Settings({ data, setData, setSheet }) {
 
   const backupNow = async () => {
     setBackupMsg("");
-    /* connected to OneDrive is the whole point — try that before anything */
+    /* connected to a cloud is the whole point — try that before anything */
+    if (gState === "on" && gId) { if (await driveNow()) return; }
     if (msState === "on" && msId) { if (await uploadNow()) return; }
     if (folderName) {
       const r = await writeToFolder(data);
@@ -12519,6 +12668,55 @@ function Settings({ data, setData, setSheet }) {
           </div>
         </div>
 
+        {/* ---- GOOGLE DRIVE ----------------------------------------------
+             HER INSTRUCTION, 11–12 August: "I want to connect the Drive to the
+             app so the data saves there... provided that I can make it
+             automatic, not something I push." */}
+        <div style={{ background: gState === "on" ? C.mint : C.pist, borderRadius: 12,
+          padding: "12px 14px", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+            <Eyebrow color={gState === "on" ? C.moss : C.signal}>Google Drive</Eyebrow>
+            {lastCloudBackup() && (
+              <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+                last sent {dayAndMonth(lastCloudBackup())}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, margin: "6px 0 10px" }}>
+            {gState === "on"
+              ? "Connected. A dated copy goes into a folder called Coach backups in your Drive on its own, once a day, without you pressing anything."
+              : gState === "lapsed"
+                ? "Google's hour is up — it does that to anything running in a browser, whoever built it. One tap and it carries on. Nothing already in Drive is affected."
+                : "Connect once and the app sends a dated copy into Coach backups by itself, once a day. It can see only the files it makes there — nothing else in your Drive."}
+          </div>
+          {gState === "on" ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ flex: "1 1 55%" }}>
+                <Btn kind="ghost" onClick={driveNow}>{gBusy ? "Sending…" : "Send one now"}</Btn>
+              </span>
+              <button onClick={disconnectDrive} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", padding: "6px 4px",
+                fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>disconnect</button>
+            </div>
+          ) : (
+            <Btn kind="signal" onClick={connectDrive}>
+              {gBusy ? "Opening Google…" : gState === "lapsed" ? "Sign in again" : "Connect Google Drive"}
+            </Btn>
+          )}
+          <div style={{ marginTop: 10 }}>
+            <Field label="Client ID from Google" unit="" type="text"
+              value={data.settings?.gClientId || ""}
+              onChange={(v) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), gClientId: v.trim() } }))} />
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: -6 }}>
+              One-off, from your own Google Cloud project. It ends in .apps.googleusercontent.com.
+              It identifies this app to Google; it is not a password and grants nothing on its own —
+              only your signing in does.
+            </div>
+          </div>
+        </div>
+
+        {msId ? (
+        <>
         {/* ---- ONEDRIVE ------------------------------------------------
              HER INSTRUCTION, 11 August: "I already have a OneDrive. I prefer
              using OneDrive. Provided that I can make it automatic, not
@@ -12565,6 +12763,9 @@ function Settings({ data, setData, setSheet }) {
             </div>
           )}
         </div>
+
+        </>
+        ) : null}
 
         <Btn kind="signal" onClick={backupNow}>Back up now</Btn>
 
@@ -18095,6 +18296,20 @@ function CoachApp() {
          sign-in, finish it. Then, connected, send today's copy if today's
          has not gone yet. Silent either way: it never blocks opening the
          app, and the Settings card is where the truth about it lives. */
+      /* ---- GOOGLE DRIVE, ON ITS OWN ----------------------------------
+         Her instruction: "provided that I can make it automatic, not
+         something I push." Quietly: if Google can give a token without
+         showing anything, today's copy goes up. If it cannot, nothing is
+         said here — the Settings card is where the truth lives. */
+      (async () => {
+        try {
+          const gid = gClientId(d);
+          if (!gid || !gConnected()) return;
+          if (!d || d.sample || !Object.keys(d.logs || {}).length) return;
+          if (lastCloudBackup() === today()) return;
+          await uploadToDrive(d, gid, true);
+        } catch (e) {}
+      })();
       (async () => {
         try {
           const id = msClientId(d);
