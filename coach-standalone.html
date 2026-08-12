@@ -1793,7 +1793,7 @@ const reviewPayload = (data, coach, cut) => {
             var _a;
             const e = wk[k] || {};
             const vals = (((_a = d.fields) === null || _a === void 0 ? void 0 : _a.weekly) || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-                .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+                .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
             return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
         }).join("\n");
     }));
@@ -1870,7 +1870,7 @@ const reviewPayload = (data, coach, cut) => {
             var _a;
             const e = mo[k] || {};
             const vals = (((_a = d.fields) === null || _a === void 0 ? void 0 : _a.monthly) || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-                .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ");
+                .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
             return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
         }).join("\n");
     }));
@@ -3369,7 +3369,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 127";
+const BUILD = "12 August 2026 · 128";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -9377,6 +9377,7 @@ const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
                 return (React.createElement(Timer, { key: f.id + ":up", compact: true, label: f.label, onStop: (v) => set(f.id, String(v)) }));
             return null;
         })(),
+        f.cap === "cardio" && (React.createElement(Field, { label: "Which machine", unit: "rower, treadmill, bike\u2026", type: "text", value: form[f.id + "__machine"] || "", onChange: (v) => set(f.id + "__machine", v) })),
         React.createElement(ExerciseNote, { value: form[f.id + "__note"], onChange: (v) => set(f.id + "__note", v), history: history, ask: ask, seeAll: seeAll }),
         React.createElement(HowTo, { f: f })));
 };
@@ -15649,7 +15650,7 @@ ${(() => {
             if (!ks.length)
                 return "  none yet";
             return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
-                .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+                .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.weekly[k][f.id + "__machine"] ? ` (on the ${data.weekly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
         })()}
 - EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
 ${(() => {
@@ -15657,7 +15658,7 @@ ${(() => {
             if (!ks.length)
                 return "  none yet";
             return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
-                .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+                .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.monthly[k][f.id + "__machine"] ? ` (on the ${data.monthly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
         })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
