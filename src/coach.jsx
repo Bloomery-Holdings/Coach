@@ -3109,7 +3109,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 118";
+const BUILD = "12 August 2026 · 119";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10361,17 +10361,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
             </div>
           </div>
 
-          {/* HER INSTRUCTION, 12 August: "I need to be able to log additional
-              sleep during the day. Add a nap field that I can fill next to the
-              hours slept." Sleep is the night; this is anything she added to
-              it afterwards, and it can be filled at any point in the day. */}
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <Field label="Nap" unit="hours" value={log?.nap} onChange={(v) => write({ nap: v })} />
-            </div>
-            <div style={{ flex: 1 }} />
-          </div>
-
           {/* "It doesn't know that I woke up or I'm sleeping." — 10 August.
               One field, and the coach stops treating the first half hour of
               her day as a verdict on it. */}
@@ -10381,11 +10370,16 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 onChange={(v) => setData((d) => ({ ...d,
                   morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), wokeAt: v } } }))} />
             </div>
-            <div style={{ flex: 1, paddingBottom: 12 }}>
-              <div className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-                {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
-              </div>
+            {/* HER INSTRUCTION, 12 August: "Put the nap next to woke up at,
+                not under it." Sleep is the night; this is anything she added
+                to it afterwards, and it can be filled at any point in the day. */}
+            <div style={{ flex: 1 }}>
+              <Field label="Nap" unit="hours" value={log?.nap} onChange={(v) => write({ nap: v })} />
             </div>
+          </div>
+
+          <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: -4 }}>
+            {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
           </div>
 
           <InfoNote why="These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost.">
