@@ -2261,13 +2261,13 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock, scope }) => {
         cost: Math.round(((usage.in || 0) / 1e6 * PRICE_IN + (usage.out || 0) / 1e6 * PRICE_OUT) * 100),
     };
     /* the four things she asked every read to end with */
-    const lines = (x) => (Array.isArray(x) ? x.map((s) => String(s || "").trim()).filter(Boolean).slice(0, 12) : []);
+    const lines = (x) => (Array.isArray(x) ? x.map((s) => String(s || "").trim()).filter(Boolean) : []);
     const said = !parsed ? {} : {
         conclusions: lines(parsed.conclusions),
         advice: lines(parsed.advice),
         rules: lines(parsed.rules),
         focus: (Array.isArray(parsed.focus) ? parsed.focus : []).filter((f) => f && f.area)
-            .map((f) => ({ area: String(f.area).trim(), why: String(f.why || "").trim() })).slice(0, 8),
+            .map((f) => ({ area: String(f.area).trim(), why: String(f.why || "").trim() })),
     };
     if (!parsed)
         return { ...base, ...spend, errors: ["What came back was not readable. Nothing has been changed."], raw, chars: payload.length };
@@ -3288,7 +3288,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 122";
+const BUILD = "12 August 2026 · 123";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -14837,6 +14837,7 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
             const am = [
                 ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
                     .map((k) => `${NICE[k] || k} ${mg[k]}`),
+                (l && l.sleep && !mg.sleep) ? `slept ${l.sleep}h — she typed this herself` : null,
                 (l && l.nap) ? `napped ${l.nap}h during the day` : null,
             ].filter(Boolean).join(", ");
             if (!l && !am)
