@@ -3284,7 +3284,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 118";
+const BUILD = "12 August 2026 · 119";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -10052,10 +10052,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Sleep", unit: "hours", value: log === null || log === void 0 ? void 0 : log.sleep, onChange: (v) => write({ sleep: v }) }))),
-            React.createElement("div", { style: { display: "flex", gap: 12 } },
-                React.createElement("div", { style: { flex: 1 } },
-                    React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) })),
-                React.createElement("div", { style: { flex: 1 } })),
             React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "flex-end" } },
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Woke at", unit: "hh:mm", type: "text", value: coach.wokeRaw, onChange: (v) => setData((d) => {
@@ -10063,8 +10059,9 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                             return ({ ...d,
                                 morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), wokeAt: v } } });
                         }) })),
-                React.createElement("div", { style: { flex: 1, paddingBottom: 12 } },
-                    React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.muted } }, coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`))),
+                React.createElement("div", { style: { flex: 1 } },
+                    React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) }))),
+            React.createElement("div", { className: "mono", style: { fontSize: 10.5, color: C.muted, marginTop: -4 } }, coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`),
             React.createElement(InfoNote, { why: "These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost." }, "What these two change"))),
         isToday && React.createElement(MoodCard, { log: log, write: write, setSheet: setSheet, coach: coach }),
         isToday && coach.leading.length > 0 && (React.createElement(Card, { style: {
