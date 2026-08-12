@@ -3288,7 +3288,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 123";
+const BUILD = "12 August 2026 · 124";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3604,6 +3604,32 @@ const fillFromSeed = (list, seed, keys) => {
    with body-work actually logged, is completed. Starting a class is NOT
    counted — choosing a class says nothing about doing it — and a day she
    logged as rest, or already ticked, is never touched (rules 20, 23). */
+/* ONE AUTHORITATIVE DAILY TRAINING STATE (her instruction, 12 August).
+   Everything in the app that asks "did she train on this day" asks this, and
+   only this. Rest, when she has said it, outranks anything else on the day. */
+const trainedOn = (l) => !!l && !!l.completed && !l.rest;
+/* A day that says rest AND carries a completed session is a contradiction she
+   has not resolved yet. The app must not choose for her — it asks — but until
+   she answers, rest is what counts. */
+const restConflict = (l) => !!l && !!l.rest && !!l.completed;
+/* The view every calculation reads. Her stored record is untouched. */
+const restIsFinal = (logs) => {
+    const out = {};
+    Object.keys(logs || {}).forEach((k) => {
+        const l = logs[k];
+        if (l && l.rest) {
+            /* completed goes false and the minutes stop counting; the session she
+               logged is kept beside it so nothing is lost and so the question can
+               still be answered either way. */
+            const { minutes, ...restOfIt } = l;
+            out[k] = { ...restOfIt, completed: false, minutes: "",
+                conflict: !!l.completed, heldSession: l.completed ? { ...l } : (l.heldSession || null) };
+        }
+        else
+            out[k] = l;
+    });
+    return out;
+};
 const repairLogs = (d) => {
     if (d.sample)
         return d.logs || {};
@@ -4456,7 +4482,12 @@ const saveData = async (d) => {
 function useCoach(data, day, clock) {
     return useMemo(() => {
         var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7;
-        const { settings, logs, weekly, monthly, fields } = data;
+        const { settings, weekly, monthly, fields } = data;
+        /* Her instruction, 12 August: a rest day is authoritative. Every question
+           below this line — sessions, totals, frequency, minutes, streaks,
+           adherence, volume, progression, milestones, and everything the coach is
+           sent — reads a log map in which that is already true. */
+        const logs = restIsFinal(data.logs);
         const morning = data.morning || {};
         const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
         const FX = formulas(settings);
@@ -4474,8 +4505,10 @@ function useCoach(data, day, clock) {
         const nowMins = Number.isFinite(clock) ? clock : minsOfDay();
         const part = partOfDay(nowMins);
         const nowLabel = hhmm(nowMins);
-        /* Her report, 12 August: rest days should not count as trained days. */
-        const done = (d) => { var _a, _b; return !!((_a = logs[d]) === null || _a === void 0 ? void 0 : _a.completed) && !((_b = logs[d]) === null || _b === void 0 ? void 0 : _b.rest); };
+        /* Her report, 12 August: rest days should not count as trained days. The
+           view above has already settled it; this stays explicit so it reads the
+           same as everything else. */
+        const done = (d) => trainedOn(logs[d]);
         /* two on, one off beats fixed weekdays when the rhythm matters more than
            which day it lands on — the cycle just keeps turning */
         /* Two on, one off — but anchored to what you actually did, not to a date.
@@ -7440,7 +7473,9 @@ function useCoach(data, day, clock) {
         const deepMode = calibrating ? "read" : "design";
         /* the read is worth doing when the block is over, or when a calibration
            month has enough in it to say something. Never a nag: it is one row. */
-        const daysLogged = Object.keys(data.logs || {}).filter((k) => (data.logs[k] || {}).completed).length;
+        /* reads the settled state, like everything else — a rest day is not a
+           day she logged training on (her instruction, 12 August) */
+        const daysLogged = Object.keys(logs).filter((k) => trainedOn(logs[k])).length;
         const deepDue = reviewDue || (calibrating && daysLogged >= 8);
         const deepReadToday = !!(lastReview && lastReview.date === t);
         const readableProposal = () => { try {
@@ -7556,6 +7591,17 @@ function useCoach(data, day, clock) {
                     : "This is the big one. It sends the whole block — every battery measurement individually, every mobility test, every body region, every calculation, all of your WHOOP, the record, your goals and everything you wrote — and asks for next month, with its reasoning shown. Nothing it returns becomes your month until you have read it and started it. It costs a few cents and takes about half a minute.", calibrating
                     ? "When you are ready, I can read everything you have logged so far and tell you honestly what it shows and what is still missing."
                     : "Your block is done. Whenever you want, I will read the whole month properly and draw up the next one — and you can argue with any of it.");
+            /* HER INSTRUCTION, 12 August: "Do not silently leave both records
+               active. Ask me." A day carrying both answers is named here, with its
+               date, so a contradiction on a day that is not today cannot sit
+               unnoticed. Nothing is counting it as training in the meantime. */
+            const conflicts = Object.keys(data.logs || {})
+                .filter((k) => restConflict(data.logs[k])).sort();
+            if (conflicts.length)
+                add("restconflict", "day", conflicts.length === 1 ? `${dayAndMonth(conflicts[0])} says rest and trained`
+                    : `${conflicts.length} days say rest and trained`, false, "A day can be a rest day or a day you trained, not both. Until you say which, none of them counts as training anywhere — not in your week, not in consistency, not in anything the coach is told. Open the day on Today and it will ask you, and neither answer deletes what you logged.", conflicts.length === 1
+                    ? `${dayAndMonth(conflicts[0])} is logged as a rest day and also carries a session. Open that day when you get a moment and tell me which it was — I am not counting it as training either way until you do.`
+                    : `There are ${conflicts.length} days logged as both a rest day and a session. Open each one on Today and tell me which it was — none of them is counting as training until you do.`);
             add("backup", "block", "A copy off this device", !backupDueRow, "Everything lives in this browser, on this device. Another device is a separate copy that never syncs. One tap sends a file you can drop into Drive.", "Take a copy of your data off this device. One tap, and it is the difference between a lost phone costing you nothing or everything.");
             /* ---- the two quiet rows that stop being quiet --------------------
                The record and the goals sit folded away on a normal day. The
@@ -9648,11 +9694,37 @@ function DayAhead({ data, coach, day }) {
                 paddingTop: 9, borderTop: `1px solid ${C.line}` } }, "This is past the end of the block you are in. Nothing after it is designed yet \u2014 the coach writes the next month from this one when this one finishes, and not before.")),
         React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 9 } }, "Nothing can be logged on a day that has not happened.")));
 }
+/* HER INSTRUCTION, 12 August: "If a completed session already exists and I
+   subsequently mark that date as Rest Day, the app must resolve the
+   contradiction. Do not silently leave both records active. Ask me whether I
+   want to keep the completed session and cancel Rest Day, or confirm Rest Day
+   and remove/void the completed training record."
+
+   Until she answers, rest is what counts everywhere — so the app is never
+   claiming she trained while it waits. Neither answer deletes anything. */
+function RestConflict({ day, log, keepSession, confirmRest }) {
+    const what = [(log === null || log === void 0 ? void 0 : log.type) || "a session", (log === null || log === void 0 ? void 0 : log.minutes) ? `${log.minutes} min` : null]
+        .filter(Boolean).join(", ");
+    return (React.createElement(Card, { style: { background: "rgba(194,84,47,0.07)" } },
+        React.createElement(Eyebrow, { color: C.clay }, "Two answers on one day"),
+        React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.ink, marginTop: 6 } },
+            "This day is logged as a rest day, and it also carries ",
+            what,
+            ". Both cannot be true, so nothing here is counting it as training until you say which it is."),
+        React.createElement("div", { style: { marginTop: 12 } },
+            React.createElement(Btn, { kind: "ghost", onClick: keepSession }, "I did train \u2014 keep the session")),
+        React.createElement("div", { style: { marginTop: 8 } },
+            React.createElement(Btn, { kind: "signal", onClick: confirmRest }, "It was a rest day \u2014 set the session aside")),
+        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 10 } }, "Nothing is deleted either way. If you set it aside it is kept on the day, and everything else you recorded \u2014 how you slept, what you wrote, your measurements \u2014 is untouched.")));
+}
 function DayState({ log, write }) {
     const state = (log === null || log === void 0 ? void 0 : log.completed) ? "trained" : (log === null || log === void 0 ? void 0 : log.rest) ? "rest" : "none";
     const opts = [
         { k: "trained", label: "Trained", patch: { completed: true, rest: false } },
-        { k: "rest", label: "Rest day", patch: { completed: false, rest: true } },
+        /* Her instruction, 12 August: marking rest must not silently void a
+           session she logged. It sets rest — which stops it counting anywhere at
+           once — and the day then asks her which of the two is true. */
+        { k: "rest", label: "Rest day", patch: { rest: true } },
         { k: "none", label: "Neither", patch: { completed: false, rest: false } },
     ];
     return (React.createElement(Card, null,
@@ -9891,7 +9963,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     }, [coach.t]);
     const t = logDate;
     const isToday = logDate === coach.t;
-    const log = data.logs[logDate] || null;
+    /* HER INSTRUCTION, 12 August: a rest day is authoritative, and not only on
+       this screen. The card below draws from the same settled state every
+       calculation uses, so a day she logged as rest can never show DONE, a
+       duration, or "session logged". What she logged is not gone — it is held,
+       and the question below lets her decide which of the two is true. */
+    const rawLog = data.logs[logDate] || null;
+    const log = rawLog && rawLog.rest ? restIsFinal({ x: rawLog }).x : rawLog;
+    const conflicted = restConflict(rawLog);
     /* WHAT THE COACH ASKED FOR, ALONGSIDE WHAT SHE DID.
   
        `prescribed` was written by exactly one control — the calibration
@@ -9912,7 +9991,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
            true and would quietly poison "coach vs you" with invented history. */
         const stamp = (t === coach.t && existing.prescribed === undefined && ((_a = coach.prescribed) === null || _a === void 0 ? void 0 : _a.name))
             ? { prescribed: coach.prescribed.name } : {};
-        setData({ ...data, logs: { ...data.logs, [t]: { ...existing, ...stamp, ...patch } } });
+        /* HER INSTRUCTION, 12 August: "There must never be a final state in which
+           the same date is simultaneously recorded as Rest Day and Training
+           Completed." Saying she trained is her own explicit answer, so it cancels
+           the rest flag rather than sitting next to it. Saying it was a rest day
+           does NOT clear a session she logged — that is the case she asked to be
+           asked about, and the card does the asking. */
+        const settle = patch.completed === true && existing.rest && patch.rest === undefined
+            ? { rest: false } : {};
+        setData({ ...data, logs: { ...data.logs, [t]: { ...existing, ...stamp, ...patch, ...settle } } });
     };
     const [open, setOpen] = useState(false);
     const [choosing, setChoosing] = useState(false);
@@ -10042,12 +10129,21 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         border: "none", background: "transparent", cursor: "pointer", padding: 0,
                         fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
                     } }, "back to today")))),
+        conflicted && (React.createElement(RestConflict, { day: logDate, log: rawLog, keepSession: () => write({ rest: false }), confirmRest: () => setData((d) => {
+                const cur = d.logs[logDate] || {};
+                /* Voided, never deleted (rule 20): the session she logged moves
+                   aside whole, so nothing is lost and she can put it back. */
+                const { completed, type, minutes, rpe, sets, during, energyAfter, shoulder, loads, extraSessions, ...keep } = cur;
+                return { ...d, logs: { ...d.logs, [logDate]: { ...keep, rest: true, completed: false,
+                            voidedSession: { completed, type, minutes, rpe, sets, during, energyAfter,
+                                shoulder, loads, extraSessions, voidedOn: coach.t } } } };
+            }) })),
         isFuture && React.createElement(DayAhead, { data: data, coach: coach, day: t }),
         !isToday && !isFuture && React.createElement(DayState, { log: log, write: write }),
         !isToday && !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(WhyWhite, { data: data, day: t, log: log, write: write })),
         isToday && React.createElement(MedalShelf, { coach: coach, setSheet: setSheet }),
         isToday && React.createElement(SessionClock, { log: log, write: write, coach: coach }),
-        !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(Btn, { kind: "quiet", onClick: () => write({ rest: true, completed: false }) }, "Log this as a rest day")),
+        !isFuture && !(log === null || log === void 0 ? void 0 : log.completed) && !(log === null || log === void 0 ? void 0 : log.rest) && (React.createElement(Btn, { kind: "quiet", onClick: () => write({ rest: true }) }, "Log this as a rest day")),
         isToday && (React.createElement(Card, { style: { background: coach.recValue ? C.card : C.pist, padding: "14px 16px" } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 } },
                 React.createElement(Eyebrow, { color: coach.recValue ? C.muted : C.signal }, "This morning"),
@@ -10841,8 +10937,11 @@ function Progress({ data, setData, coach, setSheet }) {
         const logs = { ...data.logs };
         if (!cur || (!cur.completed && !cur.rest))
             logs[d] = { ...(cur || {}), completed: true, rest: false };
+        /* Her instruction, 12 August: marking a day as rest must not silently
+           void a session. It sets rest — which stops it counting anywhere
+           immediately — and the day itself then asks which of the two is true. */
         else if (cur.completed)
-            logs[d] = { ...cur, completed: false, rest: true };
+            logs[d] = { ...cur, rest: true };
         else {
             const { [d]: _drop, ...rest } = logs;
             return setData({ ...data, logs: rest });
@@ -13532,7 +13631,16 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
                         morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), shoulderAM: String(n) } } });
                 }), className: "tap mono", style: { width: 24, height: 26, borderRadius: 6, cursor: "pointer",
                     border: `1.5px solid ${C.line}`, background: C.chalk, color: C.muted, fontSize: 11 } }, n)))));
-            case "session": return chip("mark done", () => { var _a, _b; return write({ completed: true, type: ((_a = coach.prescribed) === null || _a === void 0 ? void 0 : _a.name) || "Session", minutes: ((_b = coach.prescribed) === null || _b === void 0 ? void 0 : _b.minutes) || 45 }); }, true, "session");
+            /* THE 45 MINUTES SHE SAW ON A REST DAY CAME FROM HERE. This chip wrote
+               completed:true with the prescribed length — or a bare "Session, 45" if
+               nothing was prescribed — and never looked at whether the day was
+               already logged as rest. It now says she trained, which cancels the
+               rest day explicitly rather than leaving both on the record. */
+            case "session": return chip("mark done", () => {
+                var _a, _b;
+                return write({ completed: true, rest: false,
+                    type: ((_a = coach.prescribed) === null || _a === void 0 ? void 0 : _a.name) || "Session", minutes: ((_b = coach.prescribed) === null || _b === void 0 ? void 0 : _b.minutes) || 45 });
+            }, true, "session");
             /* rpe / sets / during / felt / note are no longer rows here at all —
                they belong to a session, and this list belongs to the day. See the
                filter below. */
