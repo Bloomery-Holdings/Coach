@@ -3086,7 +3086,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 114";
+const BUILD = "12 August 2026 · 115";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7717,10 +7717,14 @@ const WeekSpine = ({ coach, big = false, selected, onPick, days }) => {
         const future = d > coach.t;
         const bg = isDone ? C.moss : missed ? "rgba(194,84,47,0.10)" : isSel ? C.pist : "transparent";
         const fg = isDone ? "#FFFFFF" : missed ? C.clay : isSel ? C.signal : C.muted;
+        /* HER INSTRUCTION, 12 August: "I want to see what I have tomorrow, the
+           day after, and so on. I cannot be surprised every morning what I
+           have." A day ahead opens like any other; it is drawn lighter because
+           it has not happened yet, not because it is out of reach. */
         return (
-          <button key={d} onClick={() => onPick && !future && onPick(d)} className="tap" style={{
+          <button key={d} onClick={() => onPick && onPick(d)} className="tap" style={{
             flex: 1, padding: 0, border: "none", background: "transparent",
-            cursor: onPick && !future ? "pointer" : "default", opacity: future ? 0.4 : 1,
+            cursor: onPick ? "pointer" : "default", opacity: future ? 0.55 : 1,
           }}>
             <div style={{
               height: size, borderRadius: 13, background: bg,
@@ -9670,6 +9674,58 @@ function ReadCard({ data, setData, coach, setSheet }) {
    because a tap that means something different each time is how a day she
    trained ended up saying MISSED. Clearing a day clears the two flags and
    nothing else: whatever she wrote or measured that day stays (rule 20). */
+/* ---- WHAT'S COMING, SO NO MORNING IS A SURPRISE ---------------------
+   HER INSTRUCTION, 12 August: "I want to see what I have tomorrow, the day
+   after, and so on. I cannot be surprised every morning what I have."
+
+   A day ahead shows what is actually decided about it and says plainly what
+   is not. What IS decided: whether it is a training day under her rhythm, or
+   a rest day, or something she has set herself for that date. What is NOT,
+   and must not be invented (rules 6, 10, 23): the class. The programme sets
+   the KIND of day; the coach picks the class that morning from how she slept
+   and how her shoulder is — neither of which exists yet for a day that has
+   not happened. And nothing past the live block is designed at all. */
+function DayAhead({ data, coach, day }) {
+  const away = Math.round((parse(day) - parse(coach.t)) / 86400000);
+  const when = away === 1 ? "Tomorrow" : away === 2 ? "The day after tomorrow" : prettyDate(day);
+  const hers = (data.dayPlan || {})[day] || null;
+  const trains = coach.isScheduled(day);
+  const inBlock = (coach.blockCalendar?.days || []).find((x) => x.date === day) || null;
+  const beyond = !!coach.block && !inBlock;
+  return (
+    <Card style={{ background: C.pist }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+        <Eyebrow color={C.signal}>{when}</Eyebrow>
+        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+          in {away} day{away === 1 ? "" : "s"}
+        </span>
+      </div>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.15, margin: "6px 0 0" }}>
+        {hers ? (hers === "rest" ? "Your rest day" : "Yours: " + hers)
+          : inBlock && inBlock.id !== "rest" ? inBlock.label
+          : trains ? "A training day" : "A rest day"}
+      </h1>
+      <div style={{ fontSize: 12.5, lineHeight: 1.6, color: C.muted, marginTop: 8 }}>
+        {hers
+          ? "You set this yourself, and it stands — the rhythm bends to you, not the other way round."
+          : trains
+            ? "Your rhythm has you training. Which class it is gets picked that morning, from how you slept and how your shoulder is — neither of which exists yet."
+            : "Nothing scheduled. If you want to train anyway, just train: the day counts the moment you log anything."}
+      </div>
+      {beyond && (
+        <div style={{ fontSize: 11.5, lineHeight: 1.55, color: C.muted, marginTop: 9,
+          paddingTop: 9, borderTop: `1px solid ${C.line}` }}>
+          This is past the end of the block you are in. Nothing after it is designed yet — the coach
+          writes the next month from this one when this one finishes, and not before.
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: C.muted, marginTop: 9 }}>
+        Nothing can be logged on a day that has not happened.
+      </div>
+    </Card>
+  );
+}
+
 function DayState({ log, write }) {
   const state = log?.completed ? "trained" : log?.rest ? "rest" : "none";
   const opts = [
@@ -9982,8 +10038,12 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   const [logDate, setLogDate] = useState(coach.t);
   /* how many weeks back the strip is showing. 0 is this week. */
   const [weekBack, setWeekBack] = useState(0);
+  /* Backwards is history; forwards is the next four weeks, which is as far as
+     one block ever runs (rule 6 — nothing beyond it is designed, and the days
+     ahead say so themselves rather than implying a plan that does not exist). */
   const spineDays = weekBack === 0 ? coach.calendarWeek
     : Array.from({ length: 7 }, (_, i) => addDays(weekStart(addDays(coach.t, -weekBack * 7), coach.startOn), i));
+  const isFuture = logDate > coach.t;
   /* If midnight passes while the app is open, the page moves to the new day -
      but only if she was sitting on today. If she had deliberately opened an
      earlier day to log it, she stays there rather than having the page move
@@ -10167,15 +10227,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           <div style={{ flex: 1 }}>
             <WeekSpine coach={coach} selected={logDate} onPick={setLogDate} days={spineDays} />
           </div>
-          <button onClick={() => setWeekBack((w) => Math.max(0, w - 1))} disabled={weekBack === 0} className="tap"
+          <button onClick={() => setWeekBack((w) => Math.max(-4, w - 1))} disabled={weekBack <= -4} className="tap"
             aria-label="the week after" style={{
               width: 30, height: 32, flexShrink: 0, borderRadius: 10,
-              cursor: weekBack === 0 ? "default" : "pointer", opacity: weekBack === 0 ? 0.3 : 1,
+              cursor: weekBack <= -4 ? "default" : "pointer", opacity: weekBack <= -4 ? 0.3 : 1,
               border: `1px solid ${C.line}`, background: "transparent", color: C.muted,
               fontSize: 15, lineHeight: 1, fontFamily: "inherit", padding: 0 }}>›</button>
         </div>
 
-        {weekBack > 0 && (
+        {weekBack !== 0 && (
           <div className="mono" style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase",
             color: C.muted, marginTop: 6, textAlign: "center" }}>
             week of {dayAndMonth(spineDays[0])}
@@ -10214,8 +10274,9 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           the day says what the app can and cannot see in it, and gives her
           the one tap that settles it. Never on today — today is still
           happening — and never on a day she logged as rest. */}
-      {!isToday && <DayState log={log} write={write} />}
-      {!isToday && !log?.completed && !log?.rest && (
+      {isFuture && <DayAhead data={data} coach={coach} day={t} />}
+      {!isToday && !isFuture && <DayState log={log} write={write} />}
+      {!isToday && !isFuture && !log?.completed && !log?.rest && (
         <WhyWhite data={data} day={t} log={log} write={write} />
       )}
 
@@ -10440,7 +10501,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
 
 
       {/* "I need the tab log this as a rest day just before the sessions card." */}
-      {!log?.completed && !log?.rest && (
+      {!isFuture && !log?.completed && !log?.rest && (
         <Btn kind="quiet" onClick={() => write({ rest: true, completed: false })}>Log this as a rest day</Btn>
       )}
 
@@ -10453,6 +10514,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                One card, one decision. Either the coach's pick waiting to be
                accepted, or the class you're doing. Never both, never a menu
                unless you ask for one. */}
+          {!isFuture && (
           <Card style={{ padding: 20 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
               <Eyebrow color={C.signal}>
@@ -10818,6 +10880,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               </div>
             )}
           </Card>
+          )}
 
 
       {/* ---- 2. EVERYTHING ELSE YOU DID -------------------------------
@@ -10834,6 +10897,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               the benchmark all said again what the card above already says.
               Gone. What is left is the part that exists nowhere else: a
               second session, and the way to add one. */}
+          {!isFuture && (
           <Card>
             {!log?.type && extraSessions.length === 0 ? null : (
               <div style={{ marginBottom: 14 }}>
@@ -10962,6 +11026,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               </div>
             )}
           </Card>
+          )}
 
 
       {/* ---- 3. THE FINISHER --------------------------------------------
@@ -12778,24 +12843,12 @@ function Settings({ data, setData, setSheet }) {
 
         <Btn kind="signal" onClick={backupNow}>Back up now</Btn>
 
-        {canPickFolder() && (
-          <div style={{ marginTop: 10 }}>
-            <Btn kind="ghost" onClick={pickFolder}>
-              {folderName ? `Change the folder (now: ${folderName})` : "Choose a folder to back up into"}
-            </Btn>
-            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
-              Pick your OneDrive or Google Drive folder and the app writes a dated copy into it
-              every time it opens — OneDrive syncs it up from there. You grant this once.
-            </div>
-          </div>
-        )}
-        {!canPickFolder() && (
-          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
-            {canShareFiles()
-              ? "On a phone, Back up now opens the share sheet — send it to OneDrive or Drive. Automatic folder backup needs a desktop browser."
-              : "This browser can't write to a folder on its own. Back up now saves a file you can move into OneDrive."}
-          </div>
-        )}
+        {/* "Choose a folder to back up into" stood here, with a paragraph about
+            OneDrive syncing it up. Her instruction, 12 August: "I want you to
+            take it out." It was for a desktop, it could never reach Drive from
+            a phone, and now that Drive is connected it was one more thing on
+            the screen that did nothing for her. The folder code itself is not
+            deleted — it still runs for anyone who has granted one. */}
         {backupMsg && (
           <div style={{ fontSize: 12.5, color: C.moss, marginTop: 10, lineHeight: 1.5 }}>{backupMsg}</div>
         )}
