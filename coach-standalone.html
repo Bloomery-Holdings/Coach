@@ -2421,8 +2421,11 @@ const whyTree = (kind) => WHY_TREES[kind] || WHY_TREES.skip;
 const whyReason = (kind, id) => whyTree(kind).reasons.find((r) => r.id === id) || null;
 const whyLabel = (kind, id) => { var _a; return ((_a = whyReason(kind, id)) === null || _a === void 0 ? void 0 : _a.label) || id; };
 const whyTag = (kind, id) => { var _a; return ((_a = whyReason(kind, id)) === null || _a === void 0 ? void 0 : _a.tag) || "other"; };
-const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork }) => {
+const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork, domsCaution = null, dislikes = [], measuredCost = {} }) => {
     var _a, _b;
+    /* Her measured class cost outranks my written estimate once it exists
+       (review card 28). Everything below reads costOf instead of the raw field. */
+    const costOf = (w) => measuredCost[w.name] !== undefined ? measuredCost[w.name] : w.recoveryCost;
     if (!library.length)
         return null;
     /* nothing is prescribed on a rest day. Rest is the prescription. */
@@ -2463,10 +2466,10 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
         if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
             return false;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-            return w.recoveryCost <= 1;
+            return costOf(w) <= 1;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy")
-            return w.recoveryCost <= 3;
-        if (reactive && w.recoveryCost >= 4)
+            return costOf(w) <= 3;
+        if (reactive && costOf(w) >= 4)
             return false;
         return true;
     });
@@ -2481,25 +2484,30 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
             if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
                 return false;
             if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-                return w.recoveryCost <= 1;
+                return costOf(w) <= 1;
             if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy")
-                return w.recoveryCost <= 3;
+                return costOf(w) <= 3;
             return true;
         });
     }
     if (!pool.length)
-        pool = library.filter((w) => !w.addon && w.recoveryCost <= 2);
+        pool = library.filter((w) => !w.addon && costOf(w) <= 2);
     if (!pool.length)
         return null;
     const score = (w) => {
         let n = 0;
         if (themeGoal && w.goal === themeGoal)
             n += 3; /* serves the block's theme */
+        /* she has consistently said this one feels bad during — offer it less
+           (review card 20). A lean, not a bar: it can still win if it is the
+           only thing that fits the day. */
+        if (dislikes.includes(w.name))
+            n -= 2;
         n += Math.min(daysSince(w), 10) / 2; /* freshness */
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "green")
             n += w.intensity * 0.8; /* spend a good day well */
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy")
-            n -= w.recoveryCost * 0.8;
+            n -= costOf(w) * 0.8;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
             n -= w.intensity;
         if (daysSince(w) === 1)
@@ -2520,10 +2528,15 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
     };
     const chosen = [...pool].sort((a, b) => score(b) - score(a))[0];
     const durations = ((_a = chosen.durations) === null || _a === void 0 ? void 0 : _a.length) ? chosen.durations : [45];
-    const minutes = (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest" || (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy"
+    const baseMinutes = (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest" || (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy"
         ? durations[0]
         : (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "green" ? durations[durations.length - 1]
             : durations[Math.floor(durations.length / 2)];
+    /* her dip day (review card 17): the day her recovery usually drops after a
+       hard session gets the next duration down, never below the shortest */
+    const minutes = domsCaution
+        ? durations[Math.max(0, durations.indexOf(baseMinutes) - 1)]
+        : baseMinutes;
     const why = [];
     if (reactive)
         why.push(`you had ${reactive.label.toLowerCase()} recently and the tissue is still settling`);
@@ -2558,6 +2571,8 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
         why.push("your shoulder has been uncomfortable this week, so this leans away from overhead load");
     if (themeGoal && chosen.goal === themeGoal)
         why.push(`this block is about ${themeGoal}`);
+    if (domsCaution)
+        why.push(`a hard session usually catches up with you ${domsCaution.worst} day${domsCaution.worst === 1 ? "" : "s"} later — that's today, so this is pitched a step gentler`);
     const since = daysSince(chosen);
     if (since >= 4 && since < 99)
         why.push(`you haven't done it in ${since} days`);
@@ -2570,8 +2585,8 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
         if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
             return false;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-            return w.recoveryCost <= 1;
-        return w.recoveryCost <= 2;
+            return costOf(w) <= 1;
+        return costOf(w) <= 2;
     });
     let addon = null;
     if (addons.length && ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "green" || (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "steady" || !recovery)) {
@@ -3354,7 +3369,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 126";
+const BUILD = "12 August 2026 · 127";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5179,8 +5194,11 @@ function useCoach(data, day, clock) {
         const mobWeakest = [...mobScored].sort((a, b) => (b.shortfall || 0) - (a.shortfall || 0)).slice(0, 3);
         const mobAsym = mobScored.filter((r) => r.gapPct !== null && r.gapPct >= FX.asymmetryPct)
             .sort((a, b) => b.gapPct - a.gapPct);
+        /* Review card 15: a left-right gap now pulls the score down, in
+           proportion — a 20% gap costs a tenth, a 40% gap a fifth. It also still
+           chooses the drills, as it always did. */
         const mobScore = mobScored.length
-            ? Math.round((1 - mean(mobScored.map((r) => r.shortfall))) * 100) : null;
+            ? Math.round((1 - mean(mobScored.map((r) => { var _a; return Math.min(1, ((_a = r.shortfall) !== null && _a !== void 0 ? _a : 0) + (r.gapPct || 0) / 200); }))) * 100) : null;
         /* ten minutes of work, chosen by what the tests say is short — plus
            anything her stated goals need */
         /* ---- WHY THE GOAL WORK KEPT NOT HAPPENING --------------------------
@@ -5507,7 +5525,12 @@ function useCoach(data, day, clock) {
                 return null;
             /* how much of her training lands on her most-used days */
             const total = byDow.reduce((a, b) => a + b, 0);
-            const top = [...byDow].sort((a, b) => b - a).slice(0, 4).reduce((a, b) => a + b, 0);
+            /* Review card 14: the top FOUR was hardcoded, so training five or more
+               days a week capped the score at 80% and read as "scattered" however
+               metronomic she was. The window is now the number of days she actually
+               intends to train, from her own settings. */
+            const intended = Math.max(1, Math.min(7, Math.round(Number(settings.weeklyTarget) || 4)));
+            const top = [...byDow].sort((a, b) => b - a).slice(0, intended).reduce((a, b) => a + b, 0);
             return Math.round((top / total) * 100);
         })();
         /* 3. HABIT STRENGTH. Lally found a median 66 days to automaticity, about
@@ -5535,7 +5558,7 @@ function useCoach(data, day, clock) {
               about obstacles predicts still being here in a year. So count the
               sessions she did when something was in the way. */
         const barrierWins = (() => {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             let n = 0;
             for (let i = 0; i < 28; i++) {
                 const d = addDays(t, -i);
@@ -5544,8 +5567,10 @@ function useCoach(data, day, clock) {
                 const m = (morning === null || morning === void 0 ? void 0 : morning[d]) || {};
                 const rec = Number(m.recovery);
                 const sh = Number(m.shoulderAM);
-                const slept = Number(m.asleep);
-                const gapBefore = !((_b = logs[addDays(d, -1)]) === null || _b === void 0 ? void 0 : _b.completed) && !((_c = logs[addDays(d, -2)]) === null || _c === void 0 ? void 0 : _c.completed);
+                /* Her typed hours count too (review decision 22) — the barrier used
+                   to read only WHOOP's minutes. */
+                const slept = Number(m.asleep) || (Number((_b = logs[d]) === null || _b === void 0 ? void 0 : _b.sleep) ? Number(logs[d].sleep) * 60 : 0);
+                const gapBefore = !((_c = logs[addDays(d, -1)]) === null || _c === void 0 ? void 0 : _c.completed) && !((_d = logs[addDays(d, -2)]) === null || _d === void 0 ? void 0 : _d.completed);
                 if ((rec > 0 && recBaseline && rec < recBaseline - 8) ||
                     (sh > 0 && sh <= 2) || (slept > 0 && slept < 360) || gapBefore)
                     n++;
@@ -5845,7 +5870,91 @@ function useCoach(data, day, clock) {
         };
         const supportResponse = recAfter("support");
         const reactiveResponse = recAfter("easy");
+        /* HER REVIEW DECISIONS, 12 August — three signals the picker now reads,
+           computed ahead of the call from the same raw stores their cards use.
+           (The cards themselves are computed further down, where they always were;
+           these are the same formulas over the same data, kept deliberately
+           small.) */
+        const domsCaution = (() => {
+            var _a;
+            /* worst-lag day: is TODAY the day her dip usually lands after a hard
+               session? (review card 17: "let it space my sessions") */
+            const hard = [];
+            for (let i = 3; i < 84; i++) {
+                const d = addDays(t, -i);
+                const l = logs[d];
+                if (!(l === null || l === void 0 ? void 0 : l.completed))
+                    continue;
+                const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
+                if (ld < 300)
+                    continue;
+                const base = Number((_a = morning === null || morning === void 0 ? void 0 : morning[d]) === null || _a === void 0 ? void 0 : _a.recovery) || null;
+                if (!base)
+                    continue;
+                [1, 2].forEach((n) => {
+                    var _a;
+                    const r = Number((_a = morning === null || morning === void 0 ? void 0 : morning[addDays(d, n)]) === null || _a === void 0 ? void 0 : _a.recovery) || null;
+                    if (r)
+                        hard.push({ lag: n, delta: r - base });
+                });
+            }
+            if (hard.length < 8)
+                return null;
+            const at = (n) => {
+                const sub2 = hard.filter((h) => h.lag === n);
+                return sub2.length >= 4 ? mean(sub2.map((h) => h.delta)) : null;
+            };
+            const d1 = at(1), d2 = at(2);
+            if (d1 === null || d2 === null)
+                return null;
+            const worst = d2 < d1 ? 2 : 1;
+            /* was there a hard session exactly worst-lag days ago? */
+            const back = logs[addDays(t, -worst)];
+            const hardThen = (back === null || back === void 0 ? void 0 : back.completed) && ((Number(back.minutes) || 0) * (Number(back.rpe) || 0)) >= 300;
+            return hardThen ? { worst } : null;
+        })();
+        const dislikes = (() => {
+            /* classes she consistently rates low during (review card 20) */
+            const map = {};
+            for (let i = 0; i < 56; i++) {
+                const l = logs[addDays(t, -i)];
+                if (!(l === null || l === void 0 ? void 0 : l.completed) || !l.type)
+                    continue;
+                const v = Number(l.during);
+                if (!(v >= 1 && v <= 5))
+                    continue;
+                (map[l.type] = map[l.type] || []).push(v - 3);
+            }
+            return Object.keys(map).filter((k) => map[k].length >= 2 && mean(map[k]) <= -0.5);
+        })();
+        const measuredCost = (() => {
+            var _a, _b;
+            /* her real morning-after cost per class, overriding my written 1-5
+               estimates once a class has 3+ measurements (review card 28) */
+            const map = {};
+            for (let i = 1; i < 84; i++) {
+                const d = addDays(t, -i);
+                const l = logs[d];
+                if (!(l === null || l === void 0 ? void 0 : l.completed) || !l.type)
+                    continue;
+                const before = Number((_a = morning === null || morning === void 0 ? void 0 : morning[d]) === null || _a === void 0 ? void 0 : _a.recovery);
+                const after = Number((_b = morning === null || morning === void 0 ? void 0 : morning[addDays(d, 1)]) === null || _b === void 0 ? void 0 : _b.recovery);
+                if (!(before > 0 && after > 0))
+                    continue;
+                (map[l.type] = map[l.type] || []).push(before - after);
+            }
+            const out = {};
+            Object.keys(map).forEach((k) => {
+                if (map[k].length < 3)
+                    return;
+                const drop = mean(map[k]);
+                /* onto the same 1-5 scale the library uses: ~3 recovery points per step */
+                out[k] = Math.max(1, Math.min(5, Math.round(drop / 3) + 1));
+            });
+            return out;
+        })();
         const wouldHavePicked = prescribe({
+            domsCaution, dislikes, measuredCost,
             library, logs, date: t, recovery: recoveryForPick, restDay, phase, themeGoal, block, bodywork,
             shoulderFrozen, shoulderInjury: settings.shoulderInjury,
             /* one uncomfortable day is enough to tilt the choice; two is what makes
@@ -6426,15 +6535,48 @@ function useCoach(data, day, clock) {
             ? Math.sqrt(slp.reduce((a, v) => a + (v - slpMean) ** 2, 0) / slp.length) : null;
         /* Regularity proper: how much the CLOCK TIMES move, not the durations.
            Circular spread, so 23:50 and 00:10 read as twenty minutes apart. */
+        /* HER IDEA, 12 August: she types wake time and hours slept every morning,
+           so bedtime is one subtraction — no WHOOP needed. WHOOP's exact figures
+           override wherever the import has them. Clock values are read here rather
+           than migrated, so nothing stored changes shape.
+           Two audit faults fixed in the same breath: midnight (0) is a real clock
+           time and is no longer dropped, and maximal scatter reads as null rather
+           than as "perfectly regular". */
+        const clockOf = (d, key) => {
+            var _a;
+            const mg = (morning === null || morning === void 0 ? void 0 : morning[d]) || {};
+            const direct = Number(mg[key]);
+            if (!isNaN(direct) && mg[key] !== "" && mg[key] !== undefined && mg[key] !== null)
+                return direct;
+            if (key === "wakeAt" && mg.wokeAt) {
+                const m = String(mg.wokeAt).match(/^(\d{1,2})[:.h]?(\d{2})?$/);
+                if (m)
+                    return (Number(m[1]) % 24) * 60 + (Number(m[2] || 0) % 60);
+            }
+            if (key === "bedAt") {
+                const wake = clockOf(d, "wakeAt");
+                const hrs = Number((_a = logs[d]) === null || _a === void 0 ? void 0 : _a.sleep) || (Number(mg.asleep) ? Number(mg.asleep) / 60 : null);
+                if (wake !== null && hrs)
+                    return ((wake - Math.round(hrs * 60)) % 1440 + 1440) % 1440;
+            }
+            return null;
+        };
         const spreadOf = (key) => {
-            const v = readMorning(key, 28);
+            const v = [];
+            for (let i = 0; i < 28; i++) {
+                const x = clockOf(addDays(t, -i), key);
+                if (x !== null && !isNaN(x))
+                    v.push(x);
+            }
             if (v.length < 7)
                 return null;
             const rad = v.map((x) => (x / 1440) * 2 * Math.PI);
             const C1 = mean(rad.map(Math.cos)), S1 = mean(rad.map(Math.sin));
             const R = Math.sqrt(C1 * C1 + S1 * S1);
-            if (R <= 0 || R >= 1)
+            if (R >= 1)
                 return 0;
+            if (R <= 0.01)
+                return null; /* maximal scatter is unmeasurable, not "regular" */
             return Math.round(Math.sqrt(-2 * Math.log(R)) * (1440 / (2 * Math.PI))); /* minutes */
         };
         const bedSpread = spreadOf("bedAt"), wakeSpread = spreadOf("wakeAt");
@@ -6574,14 +6716,18 @@ function useCoach(data, day, clock) {
         /* 3. Do her restarts last longer than they used to? The best single
               measure of whether any of this is working. */
         const restarts = (() => {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             const runs = [];
             let run = 0, started = null;
             for (let i = 200; i >= 0; i--) {
                 const d = addDays(t, -i);
                 if (((_a = blockFor(d, program, isScheduled, dayPlan)) === null || _a === void 0 ? void 0 : _a.id) === "rest")
                     continue;
-                if ((_b = logs[d]) === null || _b === void 0 ? void 0 : _b.completed) {
+                /* a rest day she declared herself is a choice, not a stop — it does
+                   not end a run (review card 25, matching the rest-day ruling) */
+                if ((_b = logs[d]) === null || _b === void 0 ? void 0 : _b.rest)
+                    continue;
+                if ((_c = logs[d]) === null || _c === void 0 ? void 0 : _c.completed) {
                     if (!started)
                         started = d;
                     run++;
@@ -6600,7 +6746,7 @@ function useCoach(data, day, clock) {
             const early = runs.slice(0, half), late = runs.slice(half);
             const avg = (a) => a.reduce((x, y) => x + y.len, 0) / a.length;
             return { runs: runs.length, longest: Math.max(...runs.map((r) => r.len)),
-                current: ((_c = runs[runs.length - 1]) === null || _c === void 0 ? void 0 : _c.current) ? runs[runs.length - 1].len : 0,
+                current: ((_d = runs[runs.length - 1]) === null || _d === void 0 ? void 0 : _d.current) ? runs[runs.length - 1].len : 0,
                 earlyAvg: Math.round(avg(early) * 10) / 10, lateAvg: Math.round(avg(late) * 10) / 10,
                 improving: avg(late) > avg(early) };
         })();
@@ -6862,17 +7008,9 @@ function useCoach(data, day, clock) {
                     ? `There is no median of yours yet — ${recBaseline} is a placeholder until you have five recovery readings in thirty days, and it is a population figure, not you.`
                     : `Your own median sits near ${recBaseline}.`} A 55 is an ordinary day for you even though it looks middling on WHOOP's dial — which is exactly why the app judges you against yourself. This decides how hard today's class goes, not whether it happens.`,
                 need: recValue ? null : "Type this morning's recovery into the card at the top of Today, or import your WHOOP export — either fills this in." }),
-            ...(settings.shoulderInjury ? [
-                M({ group: "day", id: "shoulder", label: "Shoulder", scope: "all sessions logged",
-                    display: shoulderCost === null ? "—" : `${100 - shoulderCost}%`,
-                    sub: shoulderTrend === null ? "needs more history"
-                        : shoulderTrend > 0.2 ? "improving" : shoulderTrend < -0.2 ? "worse" : "steady",
-                    color: shoulderCost === null ? C.muted : shoulderCost < 20 ? C.moss : shoulderCost < 40 ? C.ochre : C.clay,
-                    plain: "The share of sessions where your shoulder was comfortable, and whether that share is rising.",
-                    how: "Sessions with a comfort score of 4 or 5, as a percentage of all sessions where you recorded one. The trend compares the last 28 days with everything before.",
-                    meaning: `This turns the shoulder from a permanent label into a number with a direction. ${shoulderTrend > 0.2 ? "It is getting better, which is what you said would happen." : "What matters is not today's score but whether the line is moving."} The decision rule now runs on the NEXT MORNING reading, which is the standard for irritable tissue: same or better than before the session means the load was right and can go up; worse means step back one. ${shoulderAMTrend !== null ? `Your morning-after scores are averaging ${shoulderAMTrend} out of 5.` : "It asks you the morning after any day you trained."}`,
-                    need: shoulderCost === null ? "Needs shoulder comfort scores. The app asks for one the morning after each day you train." : null })
-            ] : []),
+            /* Cards 7 and 40 (shoulder, shouldercost) removed at her instruction,
+               12 August: "Remove the lot. I will tell the coach." Recorded comfort
+               scores are kept in her data (rule 20); nothing computes from them. */
             M({ group: "week", id: "autonomic", label: "Autonomic", scope: "7 days vs 28",
                 display: rhrDrift === null ? "—" : `${rhrDrift > 0 ? "+" : ""}${Math.round(rhrDrift)}`,
                 sub: rhrDrift === null ? "needs 28 days of WHOOP"
@@ -6974,7 +7112,7 @@ function useCoach(data, day, clock) {
                         : mobWeakest.length ? `shortest: ${mobWeakest[0].label}` : "even",
                 color: mobScore === null ? C.muted : mobScore >= 75 ? C.moss : mobScore >= 50 ? C.ink : C.ochre,
                 plain: "How freely your body moves, across the tests of range rather than strength.",
-                how: "Each test is scored against its own range where it has one, and against your own best on that test where it does not — then averaged. Built from whatever is in your mobility battery — a length test per muscle group rather than a general movement screen: the standing and seated forward folds and the straight-leg raise for the hamstrings, legs-apart for the adductors, heel-to-bottom for the quads and hip flexors, overhead and behind-the-back reach for the shoulders, and seated rotation for the mid-back. Five are measured left and right. A gap between sides does NOT count against this score — it is reported separately and it is what chooses your drills.",
+                how: "Each test is scored against its own range where it has one, and against your own best on that test where it does not — then averaged. Built from whatever is in your mobility battery — a length test per muscle group rather than a general movement screen: the standing and seated forward folds and the straight-leg raise for the hamstrings, legs-apart for the adductors, heel-to-bottom for the quads and hip flexors, overhead and behind-the-back reach for the shoulders, and seated rotation for the mid-back. Five are measured left and right. A gap between sides counts against the score in proportion to its size — and it is also what chooses your drills.",
                 meaning: `Strength keeps muscle; range keeps what you can do with it. These are the movements that quietly disappear without anyone noticing, because nothing tests them until the day you need one. ${mobWeakest.length ? `Your shortest right now is ${mobWeakest[0].label.toLowerCase()}, which is why it drives your daily ten minutes.` : ""}${mobAsym.length ? ` Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart side to side — closing that matters more than improving either side alone.` : ""}`,
                 need: mobScore === null ? "Take the mobility battery — about ten minutes." : null }),
             M({ group: "month", id: "swaps", label: "Coach vs you", scope: "how often you keep the pick",
@@ -7125,13 +7263,13 @@ function useCoach(data, day, clock) {
                 need: bodywork.count28 ? null : "Log a session on Today and this starts building." }),
             M({ group: "week", id: "volume", label: "Weekly sets", scope: "regions at 6+ sets",
                 display: setsTotal ? `${setsMet}/${REGIONS.length}` : "—",
-                sub: !setsTotal ? "log sets after a session"
+                sub: !setsTotal ? "counts only sets you actually counted"
                     : setsMet >= 5 ? "dose met" : setsShort.length ? `${setsShort[0].label.toLowerCase()} lowest` : "building",
                 color: !setsTotal ? C.muted : setsMet >= 5 ? C.moss : setsMet >= 3 ? C.ink : C.ochre,
-                plain: "How many body regions are getting the six-plus weekly sets that hold muscle.",
-                how: "Sets you log per session, distributed across regions by each class's body map, totalled over seven days. A region counts once it reaches six.",
+                plain: "How many body regions are getting the six-plus weekly counted sets that hold muscle. Filmed classes are invisible here, on your instruction — their sets cannot honestly be counted.",
+                how: "Only sets you actually counted — benchmarks, coach-designed work, your Body-tab logs — distributed across regions by body map, totalled over seven days. The app no longer asks for a set count after filmed classes, because the choreography decides and counting is not possible.",
                 meaning: `This is the measure that speaks most directly to your actual goal. For post-menopausal women the research puts the dose for holding or building muscle above six to eight sets per muscle per week, and ten or more to reliably prevent lean-mass loss. The app holds you to ${FX.setTarget} as the floor, which you can change. It is a volume prescription, not an attendance one — four sessions a week is plenty if the sets are there, and useless if they aren't. ${setsTotal ? `Lowest right now: ${setsShort.slice(0, 2).map((r) => `${r.label.toLowerCase()} at ${sets7[r.id]}`).join(", ")}.` : ""}`,
-                need: setsTotal ? null : "Tap a rough set count after your strength sessions. Skip it on Pilates or cardio — it isn't a meaningful idea there." }),
+                need: setsTotal ? null : "Fills in from work where sets are genuinely countable — benchmarks and coach-designed exercises. Filmed classes never feed it." }),
             M({ group: "month", id: "realchange", label: "Real change", scope: "beyond measurement noise",
                 display: realMoves.length ? `${realUp.length}↑ ${realDown.length}↓` : "0",
                 sub: realMoves.length ? "moves that count" : "everything inside the error bars",
@@ -7190,17 +7328,7 @@ function useCoach(data, day, clock) {
                 how: "Percentage strength gain across all weight-and-reps measures, divided by total training load in thousands.",
                 meaning: "Efficiency falling while volume rises is the earliest sign a programme has gone stale — it shows up before any single measure declines. It is a slow number and should only be read a quarter at a time.",
                 need: returnOnLoad === null ? "Needs effort scores plus a few months of strength benchmarks." : null }),
-            ...(settings.shoulderInjury ? [
-                M({ group: "quarter", id: "shouldercost", label: "Shoulder cost", scope: "sessions affected",
-                    display: shoulderCost === null ? "—" : `${shoulderCost}%`,
-                    sub: shoulderCost === null ? "no comfort scores yet"
-                        : shoulderCost < 20 ? "rarely limiting" : "still a factor",
-                    color: shoulderCost === null ? C.muted : shoulderCost < 20 ? C.moss : C.ochre,
-                    plain: "The share of sessions where the shoulder was uncomfortable enough to matter.",
-                    how: "Sessions with comfort of 3 or below, as a percentage of all sessions with a comfort score.",
-                    meaning: "Quarter over quarter, is the shoulder costing you less? That is the only question worth asking about an injury that is healing. A falling number here is the evidence that you were right about it.",
-                    need: shoulderCost === null ? "Needs shoulder comfort scores, asked the morning after a training day. A few weeks of them and this gets a direction." : null })
-            ] : []),
+            /* shouldercost removed with card 7 — same decision, same day. */
             M({ group: "year", id: "survival", label: "Still here", scope: "against the dropout curve",
                 /* Survival is TIME STILL TRAINING, not weeks that hit a target. Using
                    `weeksHit` meant ten months of unbroken training with a target set
@@ -7225,14 +7353,8 @@ function useCoach(data, day, clock) {
                 how: "Every completed session and every logged minute, added up. Kilograms are weight times reps across every battery entry you have ever recorded. Weeks hit counts the weeks you reached your number.",
                 meaning: "Not analysis — evidence. This is the number to look at on the days when it feels like nothing is happening, because it only ever goes one way.",
                 need: null }),
-            M({ group: "year", id: "functional", label: "Functional age", scope: "against population norms",
-                display: balanceM || squatM ? "see detail" : "—",
-                sub: balanceM || squatM ? "from balance and lower body" : "needs benchmarks",
-                color: C.ink,
-                plain: "How your functional measures compare with published norms for women your age.",
-                how: "Balance and lower-body measures set beside published population figures for your age — the comparison is in the words below, not in a calculation. There is no age table inside the app doing arithmetic on your behalf.",
-                meaning: `Women in their fifties typically manage 10 to 18 repetitions on a 30-second sit-to-stand. ${(squatM === null || squatM === void 0 ? void 0 : squatM.reading) ? `Your squat measure currently reads ${squatM.reading.main}${squatM.reading.sub ? ` (${squatM.reading.sub})` : ""}.` : ""} ${(balanceM === null || balanceM === void 0 ? void 0 : balanceM.reading) ? `Single-leg stand: ${balanceM.reading.main}${balanceM.reading.sub ? ` (${balanceM.reading.sub})` : ""}.` : ""} Treat this as a motivational frame built on population averages, not a medical assessment — but it is the single most legible way to see what training is buying you.`,
-                need: "Rough by design. It compares you with averages, not with a clinical assessment." }),
+            /* Card 44 (functional age) removed at her instruction, 12 August: prose,
+               no computation, no consequence. Balance and squat stay measured. */
         ];
         const vitalDefs = [
             {
@@ -7449,6 +7571,12 @@ function useCoach(data, day, clock) {
             /* THE RECORD AND THE JOURNAL. Both were invisible here. */
             (data.issues || []).filter((i) => i.status !== "closed").forEach((i) => out.flags.push({ kind: "record", id: i.id, text: `open in the record since ${i.date}: "${i.text}"` }));
             (data.journal || []).filter((j) => j.date > addDays(t, -blockDays)).forEach((j) => out.notes.push({ kind: "journal", id: j.id, text: `${j.date} she wrote: "${j.text}"` }));
+            /* HER DIP WEEK (review card 27): a week of the block that reliably
+               costs her sessions is named to the designer, so the next block plans
+               that week lighter on purpose instead of discovering it again. */
+            if (blockCurve && blockCurve.spread >= 15)
+                out.flags.push({ kind: "blockcurve", id: "dip",
+                    text: `week ${blockCurve.worst.week} of a block is reliably her weak one (${blockCurve.worst.pct}% vs ${blockCurve.best.pct}% in week ${blockCurve.best.week}) — plan that week lighter on purpose` });
             /* RETURN ON LOAD. Its own meaning calls it "the earliest sign a
                programme has gone stale" and nothing acted on it. */
             if (returnOnLoad !== null && returnOnLoad < 0)
@@ -7633,7 +7761,10 @@ function useCoach(data, day, clock) {
             const unreachable = (data.library || []).filter((w) => w.home && !phase.allowHome).length;
             if (unreachable > 0)
                 fired.push({ id: "place", note: `${unreachable} of your classes need the home gym, and this block cannot use them yet — everything here works without equipment.` });
-            if (setsShort.length && setsShort[0].sets < SET_TARGET && !deload) {
+            /* Only speaks when counted work exists — filmed classes are invisible to
+               sets by her decision, and a week of classes must not read as neglect
+               (card 18). */
+            if (setsTotal > 0 && setsShort.length && setsShort[0].sets < SET_TARGET && !deload) {
                 const target = setsShort[0].id;
                 const wants = target === "legs" || target === "back" || target === "chest" || target === "arms" || target === "shoulders"
                     ? "strength" : target === "core" ? "core" : target === "heart" ? "cardio" : "move";
@@ -7736,8 +7867,8 @@ function useCoach(data, day, clock) {
                number a guess too. */
             add("rhythm", "block", "How often you want to train", scheduleSet(settings), "Everything the app counts is measured against this and nothing else — how consistent you are, what counts as a missed day, and how the month is laid out. Tell me the rhythm you actually want and I will build around it rather than assuming.", "How often do you want to train? Tell me that one number and I will build everything else around it.");
             add("recovery", "day", "This morning's WHOOP recovery", !!mg.recovery, "It sets your bands. Without it every recovery judgement is a guess.", "I don't have your recovery score this morning, so anything I say about how today should feel is a guess.");
-            if (settings.shoulderInjury && trainedYesterday)
-                add("shoulderAM", "day", "How the shoulder woke up", !!mg.shoulderAM, "The morning after load is the only reading that tells us whether the load was right.", "You trained yesterday — how did the shoulder wake up? The morning after is the reading that matters.");
+            /* The shoulder is no longer scored (her decision, 12 August) — she
+               tells the coach in words and it remembers. */
             if (!restDay) {
                 add("session", "day", "Today's session logged", !!l.completed, "Everything downstream counts from this.", "Nothing logged today yet. When you have done something, tell me what it was.");
                 if (l.completed) {
@@ -9782,11 +9913,16 @@ function SessionClock({ log, write, coach }) {
         var _a;
         const m = Math.max(1, Math.round(mins));
         const already = Number(log === null || log === void 0 ? void 0 : log.minutes) || 0;
+        /* Review card 30: the slot comes from when she pressed Start — no tap
+           needed. Anything she sets by hand stays hers (the || keeps it). */
+        const startMins = new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes();
+        const slot = startMins < 690 ? "morning" : startMins < 990 ? "midday" : "evening";
         write({
             sessionClock: { ...clock, stoppedAt: Date.now() },
             completed: true,
             minutes: String((log === null || log === void 0 ? void 0 : log.completed) ? already + m : m),
             type: (log === null || log === void 0 ? void 0 : log.type) || ((_a = coach.prescribed) === null || _a === void 0 ? void 0 : _a.name) || "Session",
+            when: (log === null || log === void 0 ? void 0 : log.when) || slot,
         });
     };
     return (React.createElement(Card, { style: { background: running ? C.mint : undefined } },
@@ -10126,7 +10262,7 @@ function BodyWorkCard({ log, write, isToday }) {
             th.label)))))));
 }
 function Today({ data, setData, coach, setSheet, goTab }) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     /* one note a day, taken from the pool and never handed out twice */
     useEffect(() => {
         var _a;
@@ -10368,16 +10504,31 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Sleep", unit: "hours", value: log === null || log === void 0 ? void 0 : log.sleep, onChange: (v) => write({ sleep: v }) }))),
+            React.createElement("div", { style: { display: "flex", gap: 12 } },
+                React.createElement("div", { style: { flex: 1 } },
+                    React.createElement(Field, { label: "Day strain", unit: "0\u201321, from WHOOP", value: (((_b = data.morning) === null || _b === void 0 ? void 0 : _b[coach.t]) || {}).strain, onChange: (v) => setData((d) => {
+                            var _a;
+                            return ({ ...d,
+                                morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), strain: v } } });
+                        }) })),
+                React.createElement("div", { style: { flex: 1 } })),
             React.createElement("div", { style: { display: "flex", gap: 12, alignItems: "flex-end" } },
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Woke at", unit: "hh:mm", type: "text", value: coach.wokeRaw, onChange: (v) => setData((d) => {
                             var _a;
-                            return ({ ...d,
-                                morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), wokeAt: v } } });
+                            /* HER FIND, 12 August: this wrote wokeAt while sleep
+                               regularity read wakeAt — one letter apart, never connected.
+                               Both are written now: the raw text she typed, and the
+                               parsed minutes the calculation reads. */
+                            const m = String(v).match(/^(\d{1,2})[:.h]?(\d{2})?$/);
+                            const mins = m ? (Number(m[1]) % 24) * 60 + (Number(m[2] || 0) % 60) : undefined;
+                            return { ...d,
+                                morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}),
+                                        wokeAt: v, ...(mins !== undefined ? { wakeAt: String(mins) } : {}) } } };
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) }))),
-            ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.trackSymptoms) && (React.createElement(Note, { label: "Anything you're feeling", value: (((_c = data.morning) === null || _c === void 0 ? void 0 : _c[coach.t]) || {}).symptoms || "", onChange: (v) => setData((d) => {
+            ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.trackSymptoms) && (React.createElement(Note, { label: "Anything you're feeling", value: (((_d = data.morning) === null || _d === void 0 ? void 0 : _d[coach.t]) || {}).symptoms || "", onChange: (v) => setData((d) => {
                     var _a;
                     return ({ ...d,
                         morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), symptoms: v } } });
@@ -10552,7 +10703,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 background: String(log.minutes) === String(m) ? C.ink : "transparent",
                                 color: String(log.minutes) === String(m) ? C.chalk : C.muted,
                             } }, m))),
-                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_d = log.minutes) !== null && _d !== void 0 ? _d : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
+                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_e = log.minutes) !== null && _e !== void 0 ? _e : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
                                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
                                 border: `1.5px solid ${((s === null || s === void 0 ? void 0 : s.durations) || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` } }),
                         React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min")),
@@ -10568,7 +10719,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                             } }, "same today")))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement(AutoText, { value: (_e = log === null || log === void 0 ? void 0 : log.loads) !== null && _e !== void 0 ? _e : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: (_f = log === null || log === void 0 ? void 0 : log.loads) !== null && _f !== void 0 ? _f : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => write({ loads: v }), current: (log === null || log === void 0 ? void 0 : log.loads) || "" })),
                     React.createElement("div", { style: { marginTop: 7 } },
                         React.createElement(InfoNote, { small: true, why: "Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class \u2014 so next month you can see what actually moved rather than what the class usually calls for." }, "what this is for")))),
@@ -10603,8 +10754,16 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 " still to enter"));
                         })())) : (React.createElement(Btn, { kind: "signal", onClick: () => { write({ completed: true }); } }, "Mark it done")),
                     (log === null || log === void 0 ? void 0 : log.completed) && (React.createElement(RpeTap, { value: log === null || log === void 0 ? void 0 : log.rpe, onChange: (v) => write({ rpe: v }) })),
-                    (log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.rpe) && (React.createElement(SetsTap, { value: log === null || log === void 0 ? void 0 : log.sets, onChange: (v) => write({ sets: v }) })),
                     (log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.rpe) && (React.createElement(DuringTap, { value: log === null || log === void 0 ? void 0 : log.during, onChange: (v) => write({ during: v }) })),
+                    (log === null || log === void 0 ? void 0 : log.completed) && s && (s.body || BODY_BY_GOAL[s.goal]) && (React.createElement("div", { style: { fontSize: 10.5, color: C.muted, marginTop: 8, lineHeight: 1.5 } },
+                        "Counted as: ",
+                        REGIONS.filter((r) => ((s.body || BODY_BY_GOAL[s.goal] || {})[r.id] || 0) > 0)
+                            .map((r) => `${r.label.toLowerCase()} ${(s.body || BODY_BY_GOAL[s.goal])[r.id]}/3`).join(" · "),
+                        " — ",
+                        React.createElement("button", { onClick: () => goTab && goTab("workouts"), className: "tap", style: {
+                                border: "none", background: "transparent", padding: 0, cursor: "pointer",
+                                fontSize: 10.5, color: C.signal, fontFamily: "inherit"
+                            } }, "not what the class did? Correct it in Workouts"))),
                     (log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.during) && (React.createElement(WhenTap, { value: log === null || log === void 0 ? void 0 : log.when, onChange: (v) => write({ when: v }) })),
                     (log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.during) && (React.createElement(Scale, { label: "How you felt afterwards", value: log === null || log === void 0 ? void 0 : log.energyAfter, onChange: (v) => write({ energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
                     (log === null || log === void 0 ? void 0 : log.completed) && (log === null || log === void 0 ? void 0 : log.during) && (React.createElement(Note, { label: "A line about how it went", value: log === null || log === void 0 ? void 0 : log.sessionNote, onChange: (v) => write({ sessionNote: v }) }))),
@@ -10671,7 +10830,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     return (React.createElement("div", { key: x.id, style: { padding: "12px 0", borderBottom: `1px solid ${C.line}` } },
                         React.createElement(SessionBlock, { custom: x.custom || !cls, name: x.type, onName: (v) => patchSession(x.id, { type: v }), cls: cls, note: x.note, minutes: x.minutes, onNote: (v) => patchSession(x.id, { note: v }), onMinutes: (v) => patchSession(x.id, { minutes: v }), onClass: (props) => cls && patchClass(cls.id, props), onRemove: () => dropSession(x.id) }),
                         React.createElement(RpeTap, { value: x.rpe, onChange: (v) => patchSession(x.id, { rpe: v }) }),
-                        x.rpe && (React.createElement(SetsTap, { value: x.sets, onChange: (v) => patchSession(x.id, { sets: v }) })),
                         x.rpe && (React.createElement(DuringTap, { value: x.during, onChange: (v) => patchSession(x.id, { during: v }) })),
                         x.during && (React.createElement(Scale, { label: "How you felt afterwards", value: x.energyAfter, onChange: (v) => patchSession(x.id, { energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
                         ((cls === null || cls === void 0 ? void 0 : cls.resistance) || (cls === null || cls === void 0 ? void 0 : cls.equipment) || x.loads) && (React.createElement("div", { style: { marginTop: 10 } },
@@ -10766,7 +10924,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 5 } }, "The easiest way back in"),
                 React.createElement("div", { style: { fontSize: 14.5, fontWeight: 600, color: C.ink } }, coach.easiest ? coach.easiest.name : "Whatever is smallest today"),
                 React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 5 } }, coach.easiest
-                    ? `${((_f = coach.easiest.durations) === null || _f === void 0 ? void 0 : _f[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
+                    ? `${((_g = coach.easiest.durations) === null || _g === void 0 ? void 0 : _g[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
                     : "There is nothing in your library small enough to name, so pick the smallest thing you have. The point today is the restart, not the session.")),
             React.createElement(Btn, { kind: "signal", onClick: () => {
                     var _a;
@@ -10840,7 +10998,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement("div", { className: "disp", style: { fontSize: 18, fontWeight: 700, marginBottom: 6 } }, coach.weeklyDue ? "This week's numbers are open" : "This week's numbers are in"),
                     React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 } }, coach.weeklyDue
                         ? "Squat, push-up, cable row, plank, elliptical, reach, balance — about ten minutes. This is what every chart and every score is built from."
-                        : ((_h = (_g = data.weekly) === null || _g === void 0 ? void 0 : _g[coach.ws]) === null || _h === void 0 ? void 0 : _h.fromMonthly)
+                        : ((_j = (_h = data.weekly) === null || _h === void 0 ? void 0 : _h[coach.ws]) === null || _j === void 0 ? void 0 : _j.fromMonthly)
                             ? "Filled in from the monthly benchmark — the weekly is part of it, so you don't do the same exercises twice. Open it any time to correct a number."
                             : "You've filled in the weekly battery. Open it again any time to correct a number."),
                     React.createElement(Btn, { kind: coach.weeklyDue ? "signal" : "ghost", onClick: () => setSheet({ kind: "weekly", key: coach.ws }) }, coach.weeklyDue ? "Enter this week's measurements" : "Review this week's measurements"),
@@ -11027,6 +11185,21 @@ function Workouts({ data, setData, coach }) {
                             border: `1.5px solid ${w.shoulderLoad === l ? C.ink : C.line}`,
                             background: w.shoulderLoad === l ? C.ink : "transparent", color: w.shoulderLoad === l ? C.chalk : C.muted,
                         } }, l)))),
+                    React.createElement("div", { style: { fontSize: 13, fontWeight: 500, marginBottom: 3 } }, "What this class reaches"),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 8, lineHeight: 1.45 } }, "Coverage and Weekly sets split this class's work by these numbers. I wrote the starting values from the class format \u2014 correct any that don't match what your instructor actually runs."),
+                    REGIONS.map((r) => {
+                        const bm = w.body || BODY_BY_GOAL[w.goal] || {};
+                        const cur = bm[r.id] || 0;
+                        return (React.createElement("div", { key: r.id, style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 5 } },
+                            React.createElement("span", { style: { flex: 1, fontSize: 12.5 } }, r.label),
+                            [0, 1, 2, 3].map((n) => (React.createElement("button", { key: n, onClick: () => patch(w.id, { body: { ...bm, [r.id]: n }, bodyEdited: true }), className: "tap mono", style: {
+                                    width: 34, height: 28, borderRadius: 7, cursor: "pointer", fontSize: 11.5,
+                                    border: `1.5px solid ${cur === n ? C.ink : C.line}`,
+                                    background: cur === n ? C.ink : "transparent",
+                                    color: cur === n ? C.chalk : C.muted
+                                } }, n)))));
+                    }),
+                    React.createElement("div", { style: { marginBottom: 14 } }),
                     React.createElement(Field, { label: "Duration options", unit: "comma separated", type: "text", value: w.durations.join(", "), onChange: (v) => setDurations(w.id, v) }),
                     React.createElement(Field, { label: "Equipment", unit: "", type: "text", value: w.equipment, onChange: (v) => patch(w.id, { equipment: v }) }),
                     React.createElement(Field, { label: "Mission cue", unit: "shown on Today", type: "text", value: w.cue, onChange: (v) => patch(w.id, { cue: v }) }),
@@ -11785,38 +11958,12 @@ function Settings({ data, setData, setSheet }) {
                 React.createElement(Field, { label: "Age", unit: "yrs", value: s.age, onChange: (v) => set("age", v) }),
                 React.createElement(Field, { label: "Height", unit: "cm", value: s.height, onChange: (v) => set("height", v) })),
             React.createElement(Field, { label: "Primary goal", unit: "", type: "text", value: s.primaryGoal, onChange: (v) => set("primaryGoal", v) })),
-        React.createElement(Card, { style: { background: data.sample ? C.pist : C.card } },
+        data.sample && (React.createElement(Card, { style: { background: C.pist } },
             React.createElement(Eyebrow, null, "Sample data"),
-            React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 12 } }, data.sample
-                ? "The app is currently filled with ten weeks of made-up history so you can see every calculation working. Clear it before you start logging for real."
-                : "Fills the app with ten weeks of plausible history — sessions, recovery, batteries, notes — so you can see every chart, verdict and calculation with data behind it."),
-            !data.sample && realHistory > 0 && !fillArmed ? (React.createElement(React.Fragment, null,
-                React.createElement(Btn, { kind: "ghost", onClick: () => setFillArmed(true) }, "Fill with sample data"),
-                React.createElement("div", { style: { fontSize: 11.5, color: C.clay, lineHeight: 1.5, marginTop: 8 } },
-                    "You have ",
-                    realHistory,
-                    " day",
-                    realHistory === 1 ? "" : "s",
-                    " of your own logged. Sample data would replace them."))) : !data.sample && fillArmed ? (React.createElement(React.Fragment, null,
-                React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.clay, marginBottom: 10 } },
-                    "This replaces your ",
-                    realHistory,
-                    " logged day",
-                    realHistory === 1 ? "" : "s",
-                    ", your WHOOP history, your batteries and your journal with invented ones. Take a backup first if you want them."),
-                React.createElement(Btn, { kind: "signal", onClick: () => {
-                        setData((d) => ({ ...d, ...buildSample(d.fields, d.library) }));
-                        setFillArmed(false);
-                    } }, "Yes, replace my data with samples"),
-                React.createElement("div", { style: { marginTop: 8 } },
-                    React.createElement(Btn, { kind: "quiet", onClick: () => setFillArmed(false) }, "Never mind")))) : (React.createElement(Btn, { kind: data.sample ? "quiet" : "ghost", onClick: () => {
-                    if (data.sample) {
-                        setData((d) => ({ ...d, logs: {}, morning: {}, weekly: {}, monthly: {}, journal: [], sample: false }));
-                    }
-                    else {
-                        setData((d) => ({ ...d, ...buildSample(d.fields, d.library) }));
-                    }
-                } }, data.sample ? "Clear the sample data" : "Fill with sample data"))),
+            React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 12 } }, "The app is currently filled with made-up history. Clear it before logging for real."),
+            React.createElement(Btn, { kind: "signal", onClick: () => {
+                    setData((d) => ({ ...d, logs: {}, morning: {}, weekly: {}, monthly: {}, journal: [], sample: false }));
+                } }, "Clear the sample data"))),
         React.createElement(Fold, { title: "Training", note: "rhythm, weekly number, gym date" },
             !scheduleSet(s) && (React.createElement(Field, { label: "Weekly target", unit: "sessions", value: s.weeklyTarget, onChange: (v) => set("weeklyTarget", v) })),
             React.createElement(Field, { label: "Recovery baseline (until your own median exists)", unit: "% \u2014 where your normal sits", value: s.recoveryBaseline, onChange: (v) => set("recoveryBaseline", v) }),
@@ -11884,9 +12031,7 @@ function Settings({ data, setData, setSheet }) {
                 React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "whoop" }) }, "Import WHOOP data"),
                 React.createElement("div", { style: { marginTop: 8 } },
                     React.createElement(Btn, { kind: "quiet", onClick: () => setSheet({ kind: "whooplog" }) }, "See everything WHOOP has sent"))),
-            [["shoulderInjury", "Track the shoulder as a number",
-                    "Off: the app never asks about your shoulder and never reports on it — tell the coach in your own words instead, and it will remember. On: a comfort score each day, a morning-after reading, and a headline number. Anything already recorded is kept either way."],
-                ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."],
+            [["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."],
                 /* HER INSTRUCTION, 12 August: "It has to have a toggle, so it can be
                    true." This setting existed, reached the coach, and had no control
                    anywhere — so it could never be anything but off. */
