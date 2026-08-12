@@ -2032,15 +2032,18 @@ const parseReview = (text) => {
    and nothing is paid for twice. Anything still open — an issue she has not
    closed — is always sent too, however old it is. */
 const SCOPE_ALL = { kind: "all" };
+const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
   if (!s || s.kind === "all") return "everything";
   const n = Math.max(1, Number(s.n) || 1);
-  return s.kind === "weeks" ? `the last ${n} week${n === 1 ? "" : "s"}`
+  return s.kind === "days" ? `the last ${n} day${n === 1 ? "" : "s"}`
+    : s.kind === "weeks" ? `the last ${n} week${n === 1 ? "" : "s"}`
     : `the last ${n} month${n === 1 ? "" : "s"}`;
 };
 const scopeCutoff = (s, t) => {
   if (!s || s.kind === "all") return null;
   const n = Math.max(1, Number(s.n) || 1);
+  if (s.kind === "days") return addDays(t, -n);
   if (s.kind === "weeks") return addDays(t, -7 * n);
   const d = parse(t); d.setMonth(d.getMonth() - n);
   return iso(d);
@@ -3109,7 +3112,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 119";
+const BUILD = "12 August 2026 · 120";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7144,7 +7147,11 @@ function useCoach(data, day, clock) {
          read, shows her exactly what is about to be sent, and does nothing
          until she taps. It is never a nag: it is done the moment she has run
          one today, and it says plainly which of the two things it will do. */
-      if (deepDue)
+      /* HER INSTRUCTION, 12 August: "Don't put ask the coach to read
+         everything in the Needs You tab. I will do it when I choose to." The
+         read lives on the landing page, where she starts it herself. It is
+         never asked for here. */
+      if (false)
         add("deepread", "month",
           calibrating
             ? "Ask the coach to read where you are"
@@ -9645,13 +9652,16 @@ function ReadCard({ data, setData, coach, setSheet }) {
   return (
     <Card style={{ background: C.pist }}>
       <Eyebrow color={C.signal}>Read my data</Eyebrow>
-      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "5px 0 11px" }}>
-        Everything you have logged, read and interpreted — with what it concludes, what to do
-        about it, where to put the work, and the rules worth holding to. Ask for it whenever
-        you like; it shows you exactly what would be sent first.
+      {/* Her instruction, 12 August: "Why do I have all these explanations
+          under Read my data. Fold under info tab." */}
+      <div style={{ margin: "5px 0 11px" }}>
+        <InfoNote small inherit
+          why="Everything you have logged, read and interpreted — with what it concludes, what to do about it, where to put the work, and the rules worth holding to. Ask for it whenever you like; it shows you exactly what would be sent first.">
+          <span style={{ fontSize: 12.5, color: C.muted }}>What this does</span>
+        </InfoNote>
       </div>
       <ScopePicker scope={scope} onPick={setScope} />
-      <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
+      <Btn kind="signal" disabled={!scopeReady(scope)} onClick={() => setSheet({ kind: "review" })}>
         Ask the coach to read everything
       </Btn>
 
@@ -16662,10 +16672,14 @@ function ScopePicker({ scope, onPick }) {
   const s = scope || SCOPE_ALL;
   const opts = [
     { k: "all", label: "Everything" },
+    { k: "days", label: "Days" },
     { k: "weeks", label: "Weeks" },
     { k: "months", label: "Months" },
   ];
-  const n = Math.max(1, Number(s.n) || (s.kind === "months" ? 3 : 2));
+  const n = s.n;
+  /* Rule 23: a window with no number in it is not a window. Nothing runs on a
+     guess — the line says what it needs and the button waits. */
+  const needsNumber = !scopeReady(s);
   return (
     <Card style={{ marginBottom: 14 }}>
       <Eyebrow>How far back</Eyebrow>
@@ -16684,25 +16698,32 @@ function ScopePicker({ scope, onPick }) {
           );
         })}
       </div>
+      {/* HER INSTRUCTION, 12 August: "I want to log in the number of weeks,
+          days or months myself. Just a field that tells the coach the number.
+          No need for preset numbers." Six buttons decided for her what a
+          sensible window was. She types it. */}
       {s.kind && s.kind !== "all" && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-          {(s.kind === "weeks" ? [1, 2, 3, 4, 6, 8] : [1, 2, 3, 6, 9, 12]).map((v) => {
-            const on = Number(s.n) === v;
-            return (
-              <button key={v} className="tap mono" onClick={() => onPick({ kind: s.kind, n: v })}
-                style={{ flex: "1 1 14%", minWidth: 40, padding: "9px 0", borderRadius: 8, cursor: "pointer",
-                  fontSize: 12, border: `1.5px solid ${on ? C.signal : C.line}`,
-                  background: on ? C.signal : "transparent", color: on ? "#fff" : C.muted,
-                  fontFamily: "'IBM Plex Mono', monospace" }}>{v}</button>
-            );
-          })}
-        </div>
+        <Field label={`How many ${s.kind}`} type="text" value={s.n === undefined ? "" : String(s.n)}
+          onChange={(v) => {
+            const raw = String(v).replace(/[^0-9]/g, "");
+            onPick({ kind: s.kind, n: raw === "" ? undefined : Number(raw) });
+          }} />
       )}
+      {/* Her instruction, 12 August: "Fold under info tab." The window it is
+          reading stays on the screen — that is the answer to "how far back".
+          The paragraph explaining what happens to everything older is behind
+          the i, where it is there when she wants it. */}
       <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
-        Reading {scopeLabel(s)}.
-        {s.kind && s.kind !== "all"
-          ? " Anything older is still carried by what the coach concluded in every earlier read — those always go in full, so nothing is lost and nothing is paid for twice."
-          : " Everything you have ever logged."}
+        {needsNumber ? (
+          <span>Type how many {s.kind} to read.</span>
+        ) : (
+          <InfoNote small inherit
+            why={s.kind && s.kind !== "all"
+              ? "Anything older is still carried by what the coach concluded in every earlier read — those always go in full, so nothing is lost and nothing is paid for twice."
+              : "Everything you have ever logged goes in — every measurement, every morning, the record, your goals and everything you have written."}>
+            Reading {scopeLabel(s)}.
+          </InfoNote>
+        )}
       </div>
     </Card>
   );
@@ -16872,7 +16893,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
         </div>
       )}
 
-      <Btn kind="signal" onClick={run} style={{ opacity: busy ? 0.6 : 1 }}>
+      <Btn kind="signal" disabled={busy || !scopeReady(scope)} onClick={run} style={{ opacity: busy ? 0.6 : 1 }}>
         {busy ? "Reading everything…" : mode === "read" ? "Read where I am" : "Read the month and design the next one"}
       </Btn>
       {busy && (
