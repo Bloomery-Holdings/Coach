@@ -1517,6 +1517,24 @@ const rvSafe = (fn, fallback = "") => { try { const v = fn(); return v === undef
    one, the day-by-day and the conversations span exactly her window instead of
    the fixed five weeks — longer if she asked for longer, shorter if she asked
    for shorter. Given none, nothing changes. */
+/* NO SILENT CAPS. These sections carry headings that say EVERYTHING, and they
+   used to send the last forty entries and say nothing about the rest. When she
+   chose "all" she was told she was sending all of it and she was not.
+
+   The window she picks does the narrowing now. This is only a ceiling against
+   a payload so large the read fails outright — and when it bites, it says so
+   in the payload itself, so the coach knows what it has not seen and answers
+   accordingly rather than assuming silence means nothing happened. Rule 23. */
+const RV_CEILING = 400;
+const rvAll = (list, what) => {
+  const a = Array.isArray(list) ? list : [];
+  if (a.length <= RV_CEILING) return { rows: a, note: "" };
+  return { rows: a.slice(-RV_CEILING), note:
+    `\n(${a.length - RV_CEILING} older ${what} are not in this read — this is the most recent ${RV_CEILING}. `
+    + `If she refers to something further back, say you do not have it in front of you rather than guessing, `
+    + `and tell her a narrower window would bring it into range.)` };
+};
+
 const reviewPayload = (data, coach, cut) => {
   const L = [];
   const S = (title, body) => { const b = String(body || "").trim(); L.push(`\n### ${title}\n${b || "(nothing recorded)"}`); };
@@ -1832,15 +1850,17 @@ const reviewPayload = (data, coach, cut) => {
     ].filter(Boolean).join("\n")).join("\n");
   }));
 
-  S("THE RECORD — EVERYTHING SHE HAS TOLD THE COACH", rvSafe(() =>
-    (d.issues || []).slice(-40).map((i) => {
+  S("THE RECORD — EVERYTHING SHE HAS TOLD THE COACH", rvSafe(() => {
+    const { rows, note } = rvAll(d.issues, "entries in the record");
+    return rows.map((i) => {
       const HELPED = ["no help", "barely", "some help", "helped", "resolved it"];
       const tried = (i.tried || []).map((x) => {
         const h = x.worked || HELPED[Number(x.helped) - 1] || "";
         return `${x.date}: ${x.what}${h ? ` (${h})` : ""}`;
       }).join("; ");
       return `${i.date} — ${i.text} [${i.status || "open"}]${tried ? `\n  tried: ${tried}` : ""}`;
-    }).join("\n")));
+    }).join("\n") + note;
+  }));
 
   S("WHAT THE COACH ALREADY BELIEVES ABOUT HER", rvSafe(() =>
     (d.profile || []).filter((p) => p.status !== "retired").map((p) =>
@@ -1850,12 +1870,14 @@ const reviewPayload = (data, coach, cut) => {
 
   S("EVERYTHING SHE HAS WRITTEN", rvSafe(() => {
     const out = [];
-    (d.journal || []).slice(-40).forEach((j) => out.push(`${j.date} journal: "${j.text}"`));
-    Object.keys(d.notes || {}).sort().slice(-40).forEach((k) => {
+    const j = rvAll(d.journal, "journal entries");
+    j.rows.forEach((x) => out.push(`${x.date} journal: "${x.text}"`));
+    const nk = rvAll(Object.keys(d.notes || {}).sort(), "kept notes");
+    nk.rows.forEach((k) => {
       const n = d.notes[k];
       if (n && n.text) out.push(`${k} note: "${n.text}"`);
     });
-    return out.join("\n");
+    return out.join("\n") + j.note + nk.note;
   }));
 
   S("CONVERSATIONS — every one from the last five weeks, in full. What she says\n"
@@ -3086,7 +3108,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 115";
+const BUILD = "12 August 2026 · 116";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9644,14 +9666,13 @@ function ReadCard({ data, setData, coach, setSheet }) {
               whenever you like.
             </div>
           ) : (
-            <>
-              {last.interpretation && (
-                <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, whiteSpace: "pre-wrap" }}>
-                  {last.interpretation}
-                </div>
-              )}
-              <ReadAnswer rec={last} />
-            </>
+            /* Her instruction, 12 August: "I don't want half of it written on
+               the screen and the rest folded under a click. I want it all
+               folded under a click." So nothing of the answer is spilled here
+               — only that there is one, and the way into it. */
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
+              It read everything and answered. The whole of it is one tap away.
+            </div>
           )}
           <button onClick={() => setSheet({ kind: "review", show: last.id })} className="tap" style={{
             border: "none", background: "transparent", cursor: "pointer", padding: "10px 0 0",
@@ -10264,11 +10285,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         )}
       </div>
 
-      {/* THE COACH'S READ, WHERE SHE CAN GET BACK TO IT.
-          Her question, 11 August: "Where do I see the reply?" One line, no
-          duplication — it opens the read itself. The whole of it, and every
-          earlier one, lives in Progress. */}
-      {isToday && <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
       {/* A past day she has opened, that the calendar is painting white:
           the day says what the app can and cannot see in it, and gives her
@@ -10302,7 +10318,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           minutes, and nothing ever asks her the duration again: the clock
           already answered. */}
       {isToday && <SessionClock log={log} write={write} coach={coach} />}
-      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
       {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
                Her instruction of 8 August: the WHOOP export lands weekly, so
@@ -10360,12 +10375,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         </Card>
       )}
 
-      {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
-               Rule 3 says the coach leads and never waits. It used to be the
-               tenth thing on this page, below ten cards of admin. */}
-      {/* ---- THE COACH SPEAKS FIRST -------------------------------------
-               Unprompted, every day, before she asks anything. The loudest
-               item on the standing agenda, plus a way into the rest of it. */}
+      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
+
+      {/* HER INSTRUCTION, 12 August: "I want talk to my coach after how I
+          feel, because that's where it makes sense" — and the read after
+          that, never before it. The order of this page is the order of her
+          morning: how she is, then the coach answering it, then the long
+          look back if she wants one. */}
       {isToday && coach.leading.length > 0 && (
         <Card style={{
           background: coach.leading[0].tone === "firm" ? "rgba(194,84,47,0.07)"
@@ -10398,6 +10414,20 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           )}
         </Card>
       )}
+
+      {/* THE COACH'S READ, WHERE SHE CAN GET BACK TO IT.
+          Her question, 11 August: "Where do I see the reply?" One line, no
+          duplication — it opens the read itself. The whole of it, and every
+          earlier one, lives in Progress. */}
+      {isToday && <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+
+
+      {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
+               Rule 3 says the coach leads and never waits. It used to be the
+               tenth thing on this page, below ten cards of admin. */}
+      {/* ---- THE COACH SPEAKS FIRST -------------------------------------
+               Unprompted, every day, before she asks anything. The loudest
+               item on the standing agenda, plus a way into the rest of it. */}
 
 
       {/* Reached a ten, or a test that cannot go higher. Offered, never done
@@ -17202,7 +17232,18 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
        sets, how it felt during and after, and that morning's recovery and
        sleep. She said "the first session of the week WITH ALL ITS DATA";
        half of that data was never being sent for any day at all. */
-    const recentDays = Array.from({ length: 14 }, (_, i) => addDays(coach.t, -(13 - i)));
+    /* HER INSTRUCTION, 12 August: "I want the coach to see as much as he can
+       about me. If I'm starting a new month it should read the months before,
+       at least. I'm talking about the daily coach. It should have memory of
+       me. I don't know why you limit it to a number of entries or a number of
+       chats. I don't want it limited."
+
+       A fortnight stood here. Every day she has ever logged goes now, oldest
+       first, in the same detail the fortnight used to carry. */
+    const loggedDays = Object.keys(data.logs || {});
+    const morningDays = Object.keys(data.morning || {});
+    const recentDays = Array.from(new Set([...loggedDays, ...morningDays]))
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t).sort();
     const recent = recentDays.map((d) => {
       const l = data.logs[d];
       const mg = (data.morning || {})[d] || {};
@@ -17230,7 +17271,7 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
         ? (l.type || "session") + (l.minutes ? " " + l.minutes + "min" : "") + extras
         : "rest";
       return `${d}: ${head}${detail ? " — " + detail : ""}${am ? ` [morning: ${am}]` : ""}${sn}${did}`;
-    }).filter(Boolean).join("\n  ") || "nothing logged in the last fortnight";
+    }).filter(Boolean).join("\n  ") || "nothing logged yet";
 
     const lastBattery = data.weekly[Object.keys(data.weekly).sort().pop()] || null;
     const battery = lastBattery
@@ -17269,7 +17310,7 @@ Where she is right now:
   She can change any of this and you follow it.
 ${coach.calibrating ? `- THIS IS THE CALIBRATION BLOCK. You are NOT designing training yet — there is no month of her data to design from. Your job is to make sure nothing goes unlogged and to explain why each input matters. Today's logging is ${coach.capture.pct}% complete${coach.capture.due.length ? `; still open: ${coach.capture.due.map((r) => r.label).join(", ")}` : ""}.` : ""}
 - What you are already raising with her unprompted (do not contradict these, build on them):
-${(coach.agenda || []).slice(0, 8).map((a) => `  * [${a.scope}] ${a.text}`).join("\n") || "  nothing today"}
+${(coach.agenda || []).map((a) => `  * [${a.scope}] ${a.text}`).join("\n") || "  nothing today"}
 - WHAT SHE HAS TOLD YOU ABOUT HERSELF (her own words — these outrank anything you worked out yourself):
 ${(coach.profile || []).filter((x) => x.hers && x.status !== "retired").length
   ? (coach.profile || []).filter((x) => x.hers && x.status !== "retired").map((x) => `  * "${x.claim}"`).join("\n")
@@ -17280,7 +17321,7 @@ ${(coach.profileBelieved || []).length
   : "  * nothing believed yet"}
 - DAYS SHE HAS MOVED HERSELF (she said so about this exact date; never argue with it):
 ${Object.keys(coach.dayPlan || {}).length
-  ? Object.entries(coach.dayPlan).sort().slice(-10).map(([d2, k2]) => `  * ${d2}: ${k2 === "rest" ? "she cannot train" : k2}`).join("\n")
+  ? Object.entries(coach.dayPlan).sort().map(([d2, k2]) => `  * ${d2}: ${k2 === "rest" ? "she cannot train" : k2}`).join("\n")
   : "  * none"}
 - WHAT THE APP HAS LEARNED ABOUT HER (computed from 12 weeks of what actually happened — use this to
   tailor how you approach her, not just what you prescribe):
@@ -17296,7 +17337,7 @@ ${coach.restarts ? `  * Runs of sessions: ${coach.restarts.runs} so far, longest
 ${coach.byDuration ? `  * Session length she actually completes: ${coach.byDuration.favourite.k} (${coach.byDuration.favourite.share}%)` : ""}
 ${coach.blockCurve ? `  * Dips in week ${coach.blockCurve.worst.week} of a block (${coach.blockCurve.worst.pct}% vs ${coach.blockCurve.best.pct}% best)` : ""}
 ${coach.domsLag ? `  * Hard sessions cost her most on day ${coach.domsLag.worst} after` : ""}
-${coach.costByClass ? `  * Real recovery cost by class: ${coach.costByClass.slice(0, 3).map((c) => `${c.name} ${c.delta}`).join(", ")}` : ""}
+${coach.costByClass ? `  * Real recovery cost by class: ${coach.costByClass.map((c) => `${c.name} ${c.delta}`).join(", ")}` : ""}
 ${coach.byTimeOfDay ? `  * Trains mostly in the ${coach.byTimeOfDay.best.slot} (${coach.byTimeOfDay.best.share}%)` : ""}
 ${coach.extraDays ? `  * Adds extra work most often on ${coach.extraDays.day}` : ""}
 - PATTERNS IN WHAT SHE HAS WRITTEN, over all her text (chats, record, notes, journal), computed not guessed:
@@ -17313,11 +17354,11 @@ ${(() => {
      message, uncut. Earlier days are trimmed but real. */
   const all = data.chats || [];
   const todayC = all.filter((c) => c.date === coach.t);
-  const older = all.filter((c) => c.date !== coach.t).slice(-8);
+  const older = all.filter((c) => c.date !== coach.t);
   const one = (m) => `${m.role === "user" ? "SHE" : "YOU"}: ${m.text || ""}`;
   const lines = [];
   todayC.forEach((c) => lines.push(`  * TODAY, in full — every word of it:\n${(c.messages || []).map((m) => "      " + one(m)).join("\n")}`));
-  older.forEach((c) => lines.push(`  * ${c.date} — ${c.about}: ${(c.messages || []).slice(-10).map((m) => one(m).slice(0, 300)).join(" | ")}`));
+  older.forEach((c) => lines.push(`  * ${c.date} — ${c.about}: ${(c.messages || []).map((m) => one(m)).join(" | ")}`));
   return lines.join("\n") || "  no previous conversations";
 })()}
 - THE RECORD — everything she has told you that isn't a number. READ THIS BEFORE ANSWERING ANYTHING
@@ -17328,7 +17369,7 @@ ${coach.openIssues.length ? coach.openIssues.map((i) => {
   const h = coach.historyFor(i);
   return `  * OPEN, logged ${i.date}: "${i.text}"${h.occurrences >= 2 ? ` — occurrence ${h.occurrences}${h.gapDays ? `, previous one ${h.gapDays} days earlier` : ""}` : ""}${(i.tried || []).length ? `. Tried: ${(i.tried || []).map((tr) => `${tr.what} (${["no help","barely","some help","helped","resolved it"][Number(tr.helped) - 1] || "?"}) on ${tr.date}`).join("; ")}` : ". Nothing tried yet"}${h.suspects.length ? `. Sessions appearing before more than one occurrence: ${h.suspects.map((sp) => `${sp.type} x${sp.n}`).join(", ")}` : ""}`;
 }).join("\n") : "  nothing open"}
-${coach.issues.filter((i) => i.status === "closed").slice(-6).map((i) => `  * closed, ${i.date}: "${i.text}"${(i.tried || []).filter((tr) => Number(tr.helped) >= 4).length ? ` — resolved by ${(i.tried || []).filter((tr) => Number(tr.helped) >= 4).map((tr) => tr.what).join(", ")}` : ""}`).join("\n")}
+${coach.issues.filter((i) => i.status === "closed").map((i) => `  * closed, ${i.date}: "${i.text}"${(i.tried || []).filter((tr) => Number(tr.helped) >= 4).length ? ` — resolved by ${(i.tried || []).filter((tr) => Number(tr.helped) >= 4).map((tr) => tr.what).join(", ")}` : ""}`).join("\n")}
   If she raises something new, work out what it needs, tell her plainly what to try, and say that you
   have written it down and will ask her about it in a couple of days. If it matches something in the
   record, say so with the date and what worked before.
@@ -17363,8 +17404,8 @@ ${coach.allMetrics.map((v) => `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.
 - BODY WORK she books herself (never prescribed by you, but it changes what the next session can be):
 ${coach.bodywork.count28 ? `  ${coach.bodywork.count28} sessions in 28 days. ${coach.bodywork.reactive ? `RECENT: ${coach.bodywork.reactive.label} — tissue still settling, keep today light.` : ""}${coach.bodywork.support ? `RECENT: ${coach.bodywork.support.label} — she should tolerate more today.` : ""}${coach.bodywork.guided ? `RECENT: physiotherapy — their loading plan outranks yours.` : ""}` : "  none logged"}
 ${about ? `- She tapped "${about}" and came here to ask about it. Answer that first.` : ""}
-- THE LAST FOURTEEN DAYS, oldest first — every session with everything recorded about it. This is the
-  window, not the calendar week: if she mentions something she did recently, it is in here.
+- EVERY DAY SHE HAS EVER LOGGED, oldest first — every session with everything recorded about it.
+  Not a window. If she mentions something she did, at any point since she started, it is in here.
   ${recent}
 - WHY SHE SKIPPED, SWAPPED OR CUT ONE SHORT, in her own words and her own taps. Never quote this back
   as an accounting; use it so she does not have to explain the same thing twice:
@@ -17406,7 +17447,7 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
         if (v) out.push(`${date} ${bwNoteName(data, id) || (data.drills || []).find((x) => x.id === id)?.label || id}: "${v}"`);
       });
     });
-    return out.slice(0, 20).join(" | ") || "nothing yet";
+    return out.join(" | ") || "nothing yet";
   })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
@@ -17425,7 +17466,20 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
 - Overall standing against her own bests: ${coach.overall ?? "not enough data"}/10
-- Recent journal entries: ${(data.journal || []).slice(-6).map((e) => `${e.date}: ${e.text}`).join(" | ") || "none yet"}
+- HER JOURNAL — EVERY ENTRY SHE HAS EVER WRITTEN, oldest first. ${(() => {
+  /* HER INSTRUCTION, 12 August: "I want the entries of the day to be all of
+     them. All of the entries of the day should reach the coach. Don't limit
+     them to six or twenty. I'm not talking to a different coach every day or
+     every half a day. It's the same coach. It should know everything about
+     me." Six reached here. Today's are separated out because a thing she wrote
+     an hour ago is not the same as a thing she wrote in June. */
+  const all = data.journal || [];
+  if (!all.length) return "none yet";
+  const todayJ = all.filter((e) => e.date === coach.t);
+  const older = all.filter((e) => e.date !== coach.t);
+  return (older.length ? `\n${older.map((e) => `  * ${e.date}: ${e.text}`).join("\n")}` : "")
+    + (todayJ.length ? `\n  TODAY, everything she has written so far:\n${todayJ.map((e) => `  * ${e.text}`).join("\n")}` : "");
+})()}
 - Class notes she has written: ${(data.library || []).filter((w) => w.felt).map((w) => `${w.name}: ${w.felt}`).join(" | ") || "none yet"}
 - Loads she has recorded: ${(data.library || []).filter((w) => w.resistance).map((w) => `${w.name}: ${w.resistance}`).join(" | ") || "none yet"}
 - WHAT SHE ACTUALLY LIFTED, most recent first (this is the real record; the line above is only what the class usually calls for): ${(() => {
@@ -17435,7 +17489,7 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
       if (l?.loads) out.push(`${d} ${l.type || "session"}: ${l.loads}`);
       (l?.extraSessions || []).forEach((x) => { if (x.loads) out.push(`${d} ${x.type || "session"}: ${x.loads}`); });
     });
-    return out.slice(0, 12).join(" | ") || "nothing recorded yet";
+    return out.join(" | ") || "nothing recorded yet";
   })()}
 
 HOW TO TALK TO HER — this matters more than any number above.
