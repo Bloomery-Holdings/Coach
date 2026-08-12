@@ -1627,6 +1627,7 @@ const reviewPayload = (data, coach, cut) => {
         const mb = [];
         if (mg.recovery) mb.push(`recovery ${mg.recovery}%`);
         if (mg.sleep || lg.sleep) mb.push(`slept ${mg.sleep || lg.sleep}h`);
+        if (lg.nap) mb.push(`napped ${lg.nap}h during the day`);
         if (mg.hrv) mb.push(`HRV ${mg.hrv}`);
         if (mg.rhr) mb.push(`RHR ${mg.rhr}`);
         if (mg.strain) mb.push(`strain ${mg.strain}`);
@@ -3108,7 +3109,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 116";
+const BUILD = "12 August 2026 · 118";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10319,6 +10320,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           already answered. */}
       {isToday && <SessionClock log={log} write={write} coach={coach} />}
 
+      {/* HER INSTRUCTION, 12 August: "Put it under the card of start session,
+          the timer." It used to sit further down, just above the session card.
+          Same button, same behaviour — it is only in a different place. */}
+      {!isFuture && !log?.completed && !log?.rest && (
+        <Btn kind="quiet" onClick={() => write({ rest: true, completed: false })}>Log this as a rest day</Btn>
+      )}
+
       {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
                Her instruction of 8 August: the WHOOP export lands weekly, so
                recovery and sleep have to be typeable first thing, every day,
@@ -10351,6 +10359,17 @@ function Today({ data, setData, coach, setSheet, goTab }) {
             <div style={{ flex: 1 }}>
               <Field label="Sleep" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
             </div>
+          </div>
+
+          {/* HER INSTRUCTION, 12 August: "I need to be able to log additional
+              sleep during the day. Add a nap field that I can fill next to the
+              hours slept." Sleep is the night; this is anything she added to
+              it afterwards, and it can be filled at any point in the day. */}
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Nap" unit="hours" value={log?.nap} onChange={(v) => write({ nap: v })} />
+            </div>
+            <div style={{ flex: 1 }} />
           </div>
 
           {/* "It doesn't know that I woke up or I'm sleeping." — 10 August.
@@ -10530,10 +10549,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
       )}
 
 
-      {/* "I need the tab log this as a rest day just before the sessions card." */}
-      {!isFuture && !log?.completed && !log?.rest && (
-        <Btn kind="quiet" onClick={() => write({ rest: true, completed: false })}>Log this as a rest day</Btn>
-      )}
 
       {/* ---- ZONE 2: TODAY'S SESSION ------------------------------------
                Everything else on this page is derived from this one card, so
@@ -17250,6 +17265,7 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
       const am = [
         mg.recovery ? `recovery ${mg.recovery}%` : null,
         mg.sleep ? `slept ${mg.sleep}h` : null,
+        (l && l.nap) ? `napped ${l.nap}h during the day` : null,
         mg.shoulderAM ? `shoulder woke ${mg.shoulderAM}/5` : null,
       ].filter(Boolean).join(", ");
       if (!l && !am) return null;
