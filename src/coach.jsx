@@ -3112,7 +3112,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 120";
+const BUILD = "12 August 2026 · 121";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4121,7 +4121,8 @@ function useCoach(data, day, clock) {
     const nowMins = Number.isFinite(clock) ? clock : minsOfDay();
     const part = partOfDay(nowMins);
     const nowLabel = hhmm(nowMins);
-    const done = (d) => !!logs[d]?.completed;
+    /* Her report, 12 August: rest days should not count as trained days. */
+    const done = (d) => !!logs[d]?.completed && !logs[d]?.rest;
     /* two on, one off beats fixed weekdays when the rhythm matters more than
        which day it lands on — the cycle just keeps turning */
     /* Two on, one off — but anchored to what you actually did, not to a date.
@@ -4135,7 +4136,7 @@ function useCoach(data, day, clock) {
        it reads her rhythm — whichever of the modes she chose. */
     const schedule = scheduleOf(settings);
     const schedMode = scheduleMode(schedule);
-    const schedCtx = { schedule, logs, dayName, addDays, weekStart, done: (d) => !!logs[d]?.completed };
+    const schedCtx = { schedule, logs, dayName, addDays, weekStart, done };
     /* A day she has moved is not a missed day. If she has said a date is a
        rest day it stops being scheduled; if she has moved a session onto a
        date it becomes one. Her word outranks the rhythm (rules 9 and 12). */
@@ -17426,6 +17427,29 @@ ${coach.mobScored.length ? coach.mobScored.map((r) => `  * ${r.label}: ${r.now}$
   If she has been away, respond with self-compassion and one easy re-entry — never guilt, never catch-up plans, never an accounting of what was missed. The evidence is unambiguous that shame after a lapse predicts dropout and self-kindness predicts return.
 - Sets by body region this week (target 6+ each): ${coach.bodyRows.map((r) => `${r.label} ${r.sets}`).join(", ")}
 - Last monthly benchmark: ${monthlyLine}
+- WHO SHE IS — everything she has entered about herself in Settings. These are her own words and
+  her own numbers; use them rather than any assumption about her.
+${(() => {
+  const st = data.settings || {};
+  const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const out = [];
+  if (st.name) out.push(`  * Name: ${st.name}`);
+  if (st.age) out.push(`  * Age: ${st.age}`);
+  if (st.height) out.push(`  * Height: ${st.height}`);
+  if (st.primaryGoal) out.push(`  * What she said she is here for: "${st.primaryGoal}"`);
+  if (st.monthTheme) out.push(`  * What she called this month: "${st.monthTheme}"`);
+  out.push(`  * She wants to train about ${st.weeklyTarget ?? "?"} times a week`);
+  out.push(`  * Her rhythm: ${st.scheduleMode === "cycle"
+    ? `${st.cycleOn} days on, ${st.cycleOff} off, from ${st.cycleStart}`
+    : `fixed days — ${(st.preferredDays || []).join(", ") || "none set"}`}`);
+  out.push(`  * Her week starts on ${DAYS[Number(st.weekStartsOn) || 0]}`);
+  out.push(`  * Right shoulder rehabilitating: ${st.shoulderInjury ? "YES — a live constraint on load" : "no"}`);
+  out.push(`  * WHOOP: ${st.whoopConnected ? `connected, export asked for on ${DAYS[Number(st.whoopDay) || 6]}` : "not connected"}`);
+  out.push(`  * Her own recovery baseline: ${st.recoveryBaseline ?? "?"}%`);
+  if (st.gymDate) out.push(`  * Gym membership dated ${st.gymDate}`);
+  out.push(`  * Symptom tracking: ${st.trackSymptoms ? "on" : "off"}`);
+  return out.join("\n");
+})()}
 - EVERY CALCULATION THE APP RUNS. Explain any of these in plain English on request, never in
   jargon, and always tie it back to HER training and what she should do next. Read them together
   rather than one at a time — the interesting answers come from combining three or four of them.
