@@ -3170,7 +3170,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 125";
+const BUILD = "12 August 2026 · 126";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10700,6 +10700,18 @@ function Today({ data, setData, coach, setSheet, goTab }) {
             </div>
           </div>
 
+          {/* HER INSTRUCTION, 12 August: "Wire it." The setting had no control
+              and nothing behind it. This is what it turns on — her own words
+              about how she is physically, never a score (rule 25 as she has
+              now written it: nothing here is counted or ranked). */}
+          {data.settings?.trackSymptoms && (
+            <Note label="Anything you're feeling"
+              value={(data.morning?.[coach.t] || {}).symptoms || ""}
+              onChange={(v) => setData((d) => ({ ...d,
+                morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), symptoms: v } } }))}
+              hint="A headache, a cold coming, a sore back, nothing at all. It goes to the coach with the rest of your morning. It is never scored and never counted against a session." />
+          )}
+
           <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: -4 }}>
             {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
           </div>
@@ -13045,7 +13057,12 @@ function Settings({ data, setData, setSheet }) {
         </div>
         {[["shoulderInjury", "Track the shoulder as a number",
            "Off: the app never asks about your shoulder and never reports on it — tell the coach in your own words instead, and it will remember. On: a comfort score each day, a morning-after reading, and a headline number. Anything already recorded is kept either way."],
-          ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."]].map(([k, label, hint]) => (
+          ["whoopConnected", "Enter WHOOP data", "Adds recovery, strain and sleep. The coach reads recovery."],
+          /* HER INSTRUCTION, 12 August: "It has to have a toggle, so it can be
+             true." This setting existed, reached the coach, and had no control
+             anywhere — so it could never be anything but off. */
+          ["trackSymptoms", "Ask how you are physically",
+           "Off: nothing asks. On: one line each morning for anything you are feeling — a headache, a cold coming, a sore back — in your own words, typed or spoken. It goes to the coach with the rest of your morning and it is never scored, never counted and never held against a session."]].map(([k, label, hint]) => (
           <div key={k} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0", borderTop: `1px solid ${C.line}` }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 500 }}>{label}</div>
@@ -14965,8 +14982,11 @@ function AchievedCard({ data, setData, coach, setSheet }) {
    keep me going." And: "the medals should be for the goals, not for the
    battery test."
 
-   THIS SITS AGAINST RULE 25, AND THE DISTINCTION MATTERS. Rule 25 forbids
-   gamification, and a medal is a badge. What the evidence is actually against
+   HER DECISION, 12 August: "Update the rule that forbids gamification because
+   it wasn't my rule. Keep the achieved and the counter and the medals."
+
+   So the shelf stays, and it is not a compromise — it is what she asked for.
+   What the evidence is actually against
    is CONTINGENT EXTRINSIC REWARD — points for opening an app, streaks that
    punish one bad day, badges for turning up. Those crowd out the motivation
    that lasts years.
@@ -14979,7 +14999,9 @@ function AchievedCard({ data, setData, coach, setSheet }) {
    A permanent, specific, self-referenced record of a capability she chose and
    reached is the one form of feedback rule 25 explicitly says helps. Rule 12
    is the tiebreak: the app proposes, she disposes, and she asked for these.
-   Flagged in the write-up so she can decide whether rule 25 should say so.
+   She decided on 12 August: the medals stay and rule 25 was rewritten to say
+   what she actually wants, which is that nothing here is ranked against anyone
+   else and nothing punishes a missed day.
    ==========================================================================*/
 const Medal = ({ n = 0, size = 44 }) => {
   /* three faces, cycled, so a shelf of them does not read as ranks */
@@ -15520,7 +15542,9 @@ function ProfileSheet({ data, setData, coach, setSheet }) {
    One block, compact rows, one under another, in fixed priority order. A row
    exists only while it needs her, and the whole block disappears when nothing
    does — absent, not empty. There is no all-done badge to earn, because that
-   is a scoreboard and rule 25 has views about scoreboards.
+   is a scoreboard. Rule 25 as she rewrote it on 12 August allows a count of
+   what she has done; what it still forbids is anything that punishes a day she
+   missed, or ranks her against anybody but herself.
 
    This replaces eight separate cards, each of which printed its instruction in
    full whether or not she had ever read it. The instruction is not deleted —
@@ -17627,7 +17651,8 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
       const NICE = { recovery: "recovery %", hrv: "HRV", rhr: "resting HR", strain: "day strain",
         asleep: "minutes asleep", sleepEff: "sleep efficiency %", sleepPerf: "sleep performance %",
         sleepDebt: "sleep debt", respiratory: "respiratory rate", shoulderAM: "shoulder on waking /5",
-        wokeAt: "woke at", sleep: "hours slept" };
+        wokeAt: "woke at", sleep: "hours slept",
+        symptoms: "she said she was feeling" };
       const am = [
         ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
           .map((k) => `${NICE[k] || k} ${mg[k]}`),
