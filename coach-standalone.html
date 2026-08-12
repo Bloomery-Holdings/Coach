@@ -3288,7 +3288,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "12 August 2026 · 121";
+const BUILD = "12 August 2026 · 122";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -14826,11 +14826,18 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
         const recent = recentDays.map((d) => {
             const l = data.logs[d];
             const mg = (data.morning || {})[d] || {};
+            /* Every figure the morning record holds for that day, not the three it
+               used to carry. Whatever WHOOP imported is in here — heart rate,
+               variability, strain, the sleep breakdown — because she asked that
+               nothing in the app be invisible to the coach. */
+            const NICE = { recovery: "recovery %", hrv: "HRV", rhr: "resting HR", strain: "day strain",
+                asleep: "hours asleep", sleepEff: "sleep efficiency %", sleepPerf: "sleep performance %",
+                sleepDebt: "sleep debt", respiratory: "respiratory rate", shoulderAM: "shoulder on waking /5",
+                wokeAt: "woke at", sleep: "hours slept" };
             const am = [
-                mg.recovery ? `recovery ${mg.recovery}%` : null,
-                mg.sleep ? `slept ${mg.sleep}h` : null,
+                ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
+                    .map((k) => `${NICE[k] || k} ${mg[k]}`),
                 (l && l.nap) ? `napped ${l.nap}h during the day` : null,
-                mg.shoulderAM ? `shoulder woke ${mg.shoulderAM}/5` : null,
             ].filter(Boolean).join(", ");
             if (!l && !am)
                 return null;
@@ -14957,7 +14964,28 @@ ${coach.openGoals.length ? coach.openGoals.map((g) => `  * "${g.text}"${(g.score
   If she describes something she cannot do, work out what it actually requires — which joints, which
   ranges, which regions — explain it plainly, and tell her it is worth adding to this list so it
   reaches the monthly design instead of being said once and lost.
-- MOBILITY TESTS: ${coach.mobScore === null ? "not taken yet" : `overall ${coach.mobScore}%`}
+- MOBILITY, EVERY SITTING AND EVERY TEST, oldest first. Four of them are measured left and right, and
+  the gap between sides matters more than either number on its own:
+${(() => {
+            const ks = Object.keys(data.mobility || {}).sort();
+            if (!ks.length)
+                return "  not taken yet";
+            return ks.map((k) => {
+                const e = data.mobility[k] || {};
+                const rows = (coach.mobTests || []).map((m) => {
+                    const v = e[m.id];
+                    if (v === undefined || v === null || v === "")
+                        return null;
+                    if (typeof v === "object") {
+                        const bits = ["l", "r"].filter((sd) => v[sd] !== undefined && v[sd] !== "").map((sd) => `${sd === "l" ? "left" : "right"} ${v[sd]}`);
+                        return bits.length ? `${m.label} ${bits.join(" / ")}${v.note ? ` — she wrote: "${v.note}"` : ""}` : null;
+                    }
+                    return `${m.label} ${v}`;
+                }).filter(Boolean);
+                return `  * ${k}: ${rows.join("; ") || "nothing entered"}`;
+            }).join("\n");
+        })()}
+- MOBILITY OVERALL: ${coach.mobScore === null ? "not taken yet" : `${coach.mobScore}%`}
 ${coach.mobScored.length ? coach.mobScored.map((r) => `  * ${r.label}: ${r.now}${r.unit}${r.gapPct !== null ? ` (L/R ${r.gapPct}% apart)` : ""}${r.moved !== null ? `, ${r.better ? "better" : "worse"} than last week` : ""}`).join("\n") : ""}
 - TODAY'S TEN MINUTES: ${coach.dailyDrills.list.length ? coach.dailyDrills.list.map((d) => d.label).join(", ") : "nothing prescribed"}
 - THE CLOCK. It is ${coach.nowLabel}, which is ${coach.part.label}. ${coach.awakeLabel
@@ -15004,6 +15032,52 @@ ${(() => {
             out.push(`  * Symptom tracking: ${st.trackSymptoms ? "on" : "off"}`);
             return out.join("\n");
         })()}
+- EVERY READ YOU HAVE EVER DONE FOR HER, oldest first — your own earlier conclusions, in your own
+  words. You are the same coach across all of them. Be consistent with these or say plainly what
+  changed your mind, and never make her explain something you already worked out.
+${(() => {
+            const rs = (data.reviews || []).filter((r) => r && r.ok);
+            if (!rs.length)
+                return "  none yet — you have not read everything for her before.";
+            return rs.map((r) => [
+                `  * ${r.date}${r.scopeLabel ? ` (you read ${r.scopeLabel})` : ""}`,
+                r.interpretation ? `      what you said her numbers were doing: ${r.interpretation}` : null,
+                (r.conclusions || []).length ? `      what you concluded: ${r.conclusions.join(" | ")}` : null,
+                (r.advice || []).length ? `      what you told her to do: ${r.advice.join(" | ")}` : null,
+                (r.rules || []).length ? `      rules you set: ${r.rules.join(" | ")}` : null,
+                (r.focus || []).length ? `      where you said to put the work: ${r.focus.map((f) => `${f.area} (${f.why})`).join(" | ")}` : null,
+            ].filter(Boolean).join("\n")).join("\n");
+        })()}
+- THE BODY-WORK PROGRAMMES SHE BUILT HERSELF, and what she actually logged in them. She writes these,
+  never you — but what she is putting into them changes what a session can be:
+${(() => {
+            const pgs = data.bodywork || [];
+            if (!pgs.length)
+                return "  none built yet";
+            return pgs.map((pg) => {
+                const lists = (pg.lists || []).map((li) => `      ${li.label || "list"}: ${(li.items || []).map((it) => it.label || it.name || "").filter(Boolean).join(", ") || "empty"}`).join("\n");
+                const days = Object.keys(pg.log || {}).length;
+                return `  * ${pg.area || pg.name || "area"} — ${(pg.lists || []).length} lists, ${days} logged entries\n${lists}`;
+            }).join("\n");
+        })()}
+${(() => {
+            const ks = Object.keys(data.bwlog || {}).sort();
+            if (!ks.length)
+                return "  Nothing logged against a body-work exercise yet.";
+            return "  What she recorded doing, by day:\n" + ks.map((d) => {
+                const ex = data.bwlog[d] || {};
+                const bits = Object.keys(ex).map((id) => {
+                    const e = ex[id] || {};
+                    const parts = [e.w ? `${e.w}kg` : null, e.reps ? `${e.reps} reps` : null, e.secs ? `${e.secs}s` : null].filter(Boolean);
+                    return parts.length ? `${bwNoteName(data, id) || id} ${parts.join(" x ")}` : null;
+                }).filter(Boolean);
+                return bits.length ? `    ${d}: ${bits.join("; ")}` : null;
+            }).filter(Boolean).join("\n");
+        })()}
+- NOTES SHE CHOSE TO KEEP. The app offers a line each day; these are the ones she kept, which makes
+  them hers rather than the app's:
+${Object.keys(data.notes || {}).sort().filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text)
+            .map((k) => `  * ${k}: "${data.notes[k].text}"`).join("\n") || "  none kept"}
 - EVERY CALCULATION THE APP RUNS. Explain any of these in plain English on request, never in
   jargon, and always tie it back to HER training and what she should do next. Read them together
   rather than one at a time — the interesting answers come from combining three or four of them.
@@ -15065,6 +15139,22 @@ ${recentDays.map((d) => { var _a; const w = (_a = data.logs[d]) === null || _a =
             });
             return out.join(" | ") || "nothing yet";
         })()}
+- EVERY WEEKLY BATTERY SHE HAS EVER DONE, oldest first, measurement by measurement:
+${(() => {
+            const ks = Object.keys(data.weekly || {}).sort();
+            if (!ks.length)
+                return "  none yet";
+            return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
+                .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+        })()}
+- EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
+${(() => {
+            const ks = Object.keys(data.monthly || {}).sort();
+            if (!ks.length)
+                return "  none yet";
+            return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
+                .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}`).join(", ") || "nothing entered"}`).join("\n");
+        })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
             var _a, _b;
@@ -15075,6 +15165,9 @@ ${recentDays.map((d) => { var _a; const w = (_a = data.logs[d]) === null || _a =
             Object.keys(df).forEach((k) => bits.push(`${k} moved to ${df[k]}`));
             Object.keys(sk).forEach((k) => { if ((sk[k] || []).length)
                 bits.push(`${k}: ${sk[k].map(name).join(", ")} taken out`); });
+            const si = data.standIns || {};
+            Object.keys(si).forEach((k) => { if (si[k])
+                bits.push(`${k}: she put ${si[k]} in its place instead`); });
             return bits.length ? bits.join(" | ") : "none";
         })()}
   A battery is not a session. If she says she does not want to do the measurements, do NOT offer her
