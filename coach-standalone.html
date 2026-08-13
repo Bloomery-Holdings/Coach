@@ -3496,7 +3496,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "13 August 2026 · 134";
+const BUILD = "13 August 2026 · 135";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -15752,6 +15752,47 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
     /* HER INSTRUCTION, 13 August: exercises the coach writes here should be a
        list she can log against, "like when I do on the page of my body", not
        words in a chat box that scroll away. */
+    /* HER INSTRUCTION, 13 August: "I need him to edit them too." */
+    const [editingLists, setEditingLists] = useState(null);
+    const [editsMade, setEditsMade] = useState(null); /* { done[] , before } | { error } */
+    const applyEdits = async (i) => {
+        var _a, _b;
+        if (editingLists !== null)
+            return;
+        setEditingLists(i);
+        setEditsMade(null);
+        setListMade(null);
+        try {
+            const raw = await askModel({
+                apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
+                system: EDIT_LISTS_SYSTEM,
+                messages: [{ role: "user", content: `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\nWHAT YOU JUST TOLD HER YOU WOULD CHANGE:\n${String(((_b = msgs[i]) === null || _b === void 0 ? void 0 : _b.content) || "")}` }],
+                maxTokens: 3000,
+            });
+            const out = parseReview(raw);
+            if (!out || !Array.isArray(out.changes) || !out.changes.length) {
+                setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
+                setEditingLists(null);
+                return;
+            }
+            const before = JSON.parse(JSON.stringify(data.bodywork || []));
+            const { bodywork, done } = applyListEdits(data, out.changes, coach.t);
+            if (!done.length) {
+                setEditsMade({ error: "Nothing matched — the exercises I meant are not on your lists any more. Nothing has changed." });
+                setEditingLists(null);
+                return;
+            }
+            setData((d) => ({ ...d, bodywork }));
+            setEditsMade({ done, before });
+        }
+        catch (e) {
+            const why = String((e && e.message) || e || "unknown");
+            setEditsMade({ error: why === "no-key"
+                    ? "This one needs your Anthropic key, which lives in Settings."
+                    : `I could not apply that. Nothing has changed. What came back: "${why}"` });
+        }
+        setEditingLists(null);
+    };
     const [listing, setListing] = useState(null); /* index being turned into a list */
     const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
     const makeList = async (i) => {
@@ -16093,6 +16134,14 @@ ${(() => {
   YOU wrote these: she asked you to design ten lists for a body area and you named every
   exercise, its dose, what it reaches and how it is done. All of it is below. You can see
   inside the lists — never say you cannot, and never ask her to read them out to you.
+  AND YOU CAN CHANGE THEM. Her instruction, 13 August: "I need him to edit them too." Under
+  every message you send there is a button, "change my lists", which applies the change you
+  just described — take an exercise off a list, swap it for one that avoids what hurts, alter
+  a dose, alter how it is done, or add one. Nothing is ever deleted: a removed exercise is set
+  aside, dated, and can come back. So when something on her lists is wrong for her — it hurts,
+  it loads a joint she is protecting, she has told you it is a problem — do not apologise and
+  do not tell her to work around it. Say exactly what you would change and why, in one or two
+  lines, and tell her to tap the button. NEVER say you cannot edit her lists. You can.
   WHERE THEY LIVE ON SCREEN, so you can point at the right place: the Body tab shows one
   chip per area across the top (plus "Your ten minutes" when a goal is running). Tapping an
   area opens its fold, which lists every list by name with a done mark; tapping a list row
@@ -16476,11 +16525,17 @@ Two or three sentences unless she asks for more.`;
                     m.image && React.createElement("img", { src: m.image, alt: "what she sent", style: { maxWidth: "100%", borderRadius: 10, display: "block",
                             marginBottom: m.content ? 8 : 0 } }),
                     m.content),
-                m.role !== "user" && setData && (React.createElement("button", { className: "tap", disabled: listing !== null, onClick: () => makeList(i), style: {
-                        border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
-                        padding: "6px 11px", marginTop: 6, borderRadius: 8,
-                        fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit"
-                    } }, listing === i ? "making the list…" : "put these on my Body page")),
+                m.role !== "user" && setData && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } },
+                    React.createElement("button", { className: "tap", disabled: listing !== null || editingLists !== null, onClick: () => makeList(i), style: {
+                            border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+                            padding: "6px 11px", borderRadius: 8,
+                            fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit"
+                        } }, listing === i ? "making the list…" : "put these on my Body page"),
+                    (data.bodywork || []).some((pg) => pg && pg.status !== "removed" && (pg.lists || []).length) && (React.createElement("button", { className: "tap", disabled: listing !== null || editingLists !== null, onClick: () => applyEdits(i), style: {
+                            border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+                            padding: "6px 11px", borderRadius: 8,
+                            fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit"
+                        } }, editingLists === i ? "changing your lists…" : "change my lists")))),
                 m.role === "user" && (editing === i ? (React.createElement("div", { style: { width: "85%", marginTop: 6 } },
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 } },
                         React.createElement(AutoText, { rows: 3, value: editDraft, onChange: setEditDraft, style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
@@ -16505,6 +16560,23 @@ Two or three sentences unless she asks for more.`;
                         border: "none", background: "transparent", cursor: "pointer", padding: "3px 2px 0",
                         fontSize: 10.5, color: C.muted, fontFamily: "inherit"
                     } }, "edit")))))),
+            editsMade && (React.createElement("div", { style: { background: editsMade.error ? C.pist : C.mint, borderRadius: 12,
+                    padding: "12px 14px", marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink } }, editsMade.error ? editsMade.error : (React.createElement(React.Fragment, null,
+                React.createElement("div", { style: { fontWeight: 600, marginBottom: 6 } }, editsMade.done.length === 1 ? "One change made to your lists:" : `${editsMade.done.length} changes made to your lists:`),
+                editsMade.done.map((x, k) => (React.createElement("div", { key: k, style: { marginBottom: 4 } },
+                    "\u00B7 ",
+                    x.what,
+                    x.why ? ` — ${x.why}` : ""))),
+                React.createElement("div", { style: { fontSize: 11.5, color: C.moss, marginTop: 6 } }, "Nothing was deleted. Anything taken off is set aside and can come back."),
+                React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 10 } },
+                    React.createElement("div", { style: { flex: 1 } },
+                        React.createElement(Btn, { kind: "signal", onClick: () => { close(); if (goTab)
+                                goTab("body"); } }, "See my lists")),
+                    React.createElement("div", { style: { flex: 1 } },
+                        React.createElement(Btn, { kind: "quiet", onClick: () => {
+                                setData((d) => ({ ...d, bodywork: editsMade.before }));
+                                setEditsMade(null);
+                            } }, "Undo all of it"))))))),
             listMade && (React.createElement("div", { style: { background: listMade.error ? C.pist : C.mint, borderRadius: 12,
                     padding: "12px 14px", marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink } },
                 listMade.error
@@ -17649,6 +17721,98 @@ Return ONLY a JSON object, no prose, no code fence:
       "how": "...", "targets": "..." }
   ]
 }`;
+/* HER INSTRUCTION, 13 August: "I need him to edit them too." What the coach
+   just said it would change, turned into exact operations against exact ids.
+   It may only touch lists that already exist, and it may never invent an id. */
+const EDIT_LISTS_SYSTEM = `You are turning a change you have ALREADY described to her, in
+conversation, into exact operations on her Body-page lists.
+
+You will be given every programme, every list and every exercise, each with its id.
+
+RULES.
+- Use ONLY ids that appear in what you are given. Never invent one.
+- Only make the changes you actually described in the message. Nothing extra, nothing tidied.
+- Removing is not deleting: it is set aside and she can put it back. Remove anything you told her
+  to stop doing.
+- When you replace something, the replacement must reach the same tissue by a route that avoids
+  whatever made the original wrong for her.
+- "why" is one short sentence in her language, and it is what she will read.
+- If the message describes no change to an existing list, return {"changes": []}.
+
+Return ONLY a JSON object, no prose, no code fence:
+{
+  "changes": [
+    { "op": "remove", "exercise": "<exercise id>", "why": "..." },
+    { "op": "dose", "exercise": "<exercise id>", "dose": "3 x 8", "why": "..." },
+    { "op": "how", "exercise": "<exercise id>", "how": "...", "why": "..." },
+    { "op": "replace", "exercise": "<exercise id>", "why": "...",
+      "with": { "name": "...", "tool": "...", "dose": "...", "mins": 2, "search": "...",
+                "video": "", "how": "...", "targets": "..." } },
+    { "op": "add", "list": "<list id>", "why": "...",
+      "with": { "name": "...", "tool": "...", "dose": "...", "mins": 2, "search": "...",
+                "video": "", "how": "...", "targets": "..." } }
+  ]
+}`;
+/* Every list and exercise with its id, so the change can be aimed exactly. */
+const listInventory = (data) => (data.bodywork || [])
+    .filter((pg) => pg && pg.status !== "removed")
+    .map((pg) => {
+    const all = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
+    return `AREA "${pg.area}"\n` + all.map((li) => `  LIST id=${li.id} n=${li.n} "${li.title}"\n` + (li.exercises || [])
+        .filter((x) => x.status !== "removed")
+        .map((x) => `    id=${x.id} "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"`)
+        .join("\n")).join("\n");
+}).join("\n\n") || "she has no lists yet";
+/* Applying them. Nothing is destroyed: a removed or replaced exercise keeps
+   its place in the store, marked and dated, so it can come back and so what
+   she logged against it still resolves by name (rule 20). */
+const applyListEdits = (data, changes, today) => {
+    const done = [];
+    const bodywork = (data.bodywork || []).map((pg) => {
+        const editList = (li) => {
+            let exercises = li.exercises || [];
+            (changes || []).forEach((c) => {
+                if (c.op === "add" && String(c.list) === String(li.id) && c.with) {
+                    const shaped = shapeLists([{ title: li.title, exercises: [c.with] }], li.n)[0].exercises[0];
+                    exercises = [...exercises, { ...shaped, addedBy: "coach", addedOn: today }];
+                    done.push({ what: `added ${shaped.name} to list ${li.n}`, why: c.why || "" });
+                    return;
+                }
+                const i = exercises.findIndex((x) => String(x.id) === String(c.exercise) && x.status !== "removed");
+                if (i < 0)
+                    return;
+                const ex = exercises[i];
+                if (c.op === "remove") {
+                    exercises = exercises.map((x, k) => (k !== i ? x
+                        : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" }));
+                    done.push({ what: `removed ${ex.name} from list ${li.n}`, why: c.why || "" });
+                }
+                else if (c.op === "dose" && c.dose) {
+                    exercises = exercises.map((x, k) => (k !== i ? x : { ...x, dose: String(c.dose), wasDose: x.dose }));
+                    done.push({ what: `${ex.name}: ${ex.dose || "no dose"} becomes ${c.dose}`, why: c.why || "" });
+                }
+                else if (c.op === "how" && c.how) {
+                    exercises = exercises.map((x, k) => (k !== i ? x : { ...x, how: String(c.how), wasHow: x.how }));
+                    done.push({ what: `changed how you do ${ex.name}`, why: c.why || "" });
+                }
+                else if (c.op === "replace" && c.with) {
+                    const shaped = shapeLists([{ title: li.title, exercises: [c.with] }], li.n)[0].exercises[0];
+                    exercises = exercises.map((x, k) => (k !== i ? x
+                        : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" }));
+                    exercises = [...exercises.slice(0, i + 1),
+                        { ...shaped, addedBy: "coach", addedOn: today, replaced: ex.name },
+                        ...exercises.slice(i + 1)];
+                    done.push({ what: `${ex.name} becomes ${shaped.name}`, why: c.why || "" });
+                }
+            });
+            return exercises === (li.exercises || []) ? li : { ...li, exercises };
+        };
+        return { ...pg,
+            lists: (pg.lists || []).map(editList),
+            rounds: (pg.rounds || []).map((r) => ({ ...r, lists: (r.lists || []).map(editList) })) };
+    });
+    return { bodywork, done };
+};
 const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid }) => {
     const raw = await askModel({
         system: BODYWORK_SYSTEM,
@@ -17997,7 +18161,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                             } }, isDone ? "✓ done" : "not done")),
                     isOpen && (React.createElement("div", { style: { padding: "4px 2px 8px" } },
                         l.focus && (React.createElement("div", { style: { fontSize: 12, color: C.moss, margin: "6px 0 0" } }, l.focus)),
-                        (l.exercises || []).map((ex) => (React.createElement(BodyWorkExercise, { key: ex.id, prog: prog, list: l, ex: ex, data: data, setData: setData, coach: coach, setSheet: setSheet }))),
+                        (l.exercises || []).filter((ex) => ex.status !== "removed").map((ex) => (React.createElement(BodyWorkExercise, { key: ex.id, prog: prog, list: l, ex: ex, data: data, setData: setData, coach: coach, setSheet: setSheet }))),
                         React.createElement("button", { onClick: () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) => ls.id !== l.id ? ls : { ...ls, exercises: [...(ls.exercises || []), {
                                                 id: newId(), name: "New exercise", tool: "", dose: "3 x 10", mins: 2,
                                                 how: "", targets: "", label: "New exercise", search: "", video: ""
