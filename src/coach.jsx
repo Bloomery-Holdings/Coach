@@ -2004,7 +2004,38 @@ const reviewPayload = (data, coach, cut) => {
   }));
 
   S("WRITTEN EXERCISES SHE ALREADY HAS", rvSafe(() =>
-    (d.drills || []).map((x) => `${x.label}${x.fromReview ? " (you prescribed this)" : ""} — ${x.targets || ""}${x.sets ? ` · ${x.sets} x ${x.reps || "?"}${x.freq ? `, ${x.freq}` : ""}` : ""}`).join("\n")));
+    (d.drills || []).filter((x) => x && x.status !== "removed")
+      .map((x) => `${x.label}${x.fromReview ? " (you prescribed this)" : ""} — ${x.targets || ""}${x.sets ? ` · ${x.sets} x ${x.reps || "?"}${x.freq ? `, ${x.freq}` : ""}` : ""}`).join("\n")));
+
+  /* HER WORDS, 13 August: the monthly plan is the most important thing the
+     coach does — so it must not undo what she has just had taken off. It
+     used to be handed every drill she has ever had with nothing marking the
+     ones she had removed, and is then asked to write the next month's ten
+     minutes. It would have put them straight back. */
+  S("WHAT SHE HAS TAKEN OFF, AND WHY — DO NOT PUT ANY OF IT BACK", rvSafe(() => {
+    const out = [];
+    const say = (kind, label, why, when) =>
+      out.push(`  * ${kind}: "${label}"${when ? ` — taken off ${when}` : ""}${why ? `. Her reason: ${why}` : ""}`);
+    (d.drills || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say("from her ten minutes", x.label, x.removedWhy, x.removedOn));
+    ((d.fields || {}).weekly || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say("weekly measure", x.label, x.removedWhy, x.removedOn));
+    ((d.fields || {}).monthly || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say("monthly measure", x.label, x.removedWhy, x.removedOn));
+    (d.mobTests || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say("mobility test", x.label, x.removedWhy, x.removedOn));
+    (d.library || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say("class", x.name, x.removedWhy, x.removedOn));
+    (d.bodywork || []).forEach((pg) => [...(pg.lists || []),
+      ...((pg.rounds || []).flatMap((r) => r.lists || []))]
+      .forEach((li) => (li.exercises || []).filter((x) => x && x.status === "removed")
+        .forEach((x) => say(`from her ${pg.area} list ${li.n || ""}`.trim(), x.name, x.removedWhy, x.removedOn))));
+    if (!out.length) return "nothing has been taken off.";
+    return "She has had these taken off. NEVER prescribe any of them again, do not write a near-copy\n"
+      + "under another name, and do not argue for them. If one of them is the only route to something\n"
+      + "she says she wants, say so plainly and let her decide. Nothing here is deleted — she can put\n"
+      + "any of it back herself whenever she likes.\n" + out.join("\n");
+  }));
 
   return L.join("\n");
 };
@@ -3300,7 +3331,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "13 August 2026 · 135";
+const BUILD = "13 August 2026 · 138";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5097,8 +5128,13 @@ function useCoach(data, day, clock) {
       const goalIds = [];
       const suggestedFor = {};
       openGoals.forEach((g) => {
-        const own = (g.drills || []).filter(Boolean);
-        const ids = own.length ? own : suggestDrills(g.text, drills);
+        /* HER REPORT, 13 August: a drill she has had taken off must not take
+           the goal down with it. Anything set aside drops out here, and if
+           that empties the goal it is served by a suggestion instead — a
+           goal is never left with nothing to do (rule 10). */
+        const live = (id) => { const d0 = drillById(id, drills); return d0 && d0.status !== "removed"; };
+        const own = (g.drills || []).filter(Boolean).filter(live);
+        const ids = own.length ? own : suggestDrills(g.text, drills).filter(live);
         if (!own.length) ids.forEach((id) => { suggestedFor[id] = true; });
         ids.forEach((id) => {
           if (!goalIds.includes(id)) goalIds.push(id);
@@ -5112,16 +5148,19 @@ function useCoach(data, day, clock) {
       const out = [];
       let mins = 0, goalMins = 0;
       /* reserved: her goals go in whatever they cost */
+      /* HER REPORT, 13 August: a drill that hurts her must stay off once
+         it is taken off. These are chosen fresh every day from her goals
+         and her scores, so without this it would simply be back tomorrow. */
       for (const id of goalIds) {
         const d = drillById(id, drills);
-        if (!d) continue;
+        if (!d || d.status === "removed") continue;
         out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [], suggested: !!suggestedFor[id] });
         mins += d.mins || 0; goalMins += d.mins || 0;
       }
       /* mobility fills what is left of the ten minutes, never displaces it */
       for (const id of mobIds) {
         const d = drillById(id, drills);
-        if (!d || mins + (d.mins || 0) > DAILY_BUDGET) continue;
+        if (!d || d.status === "removed" || mins + (d.mins || 0) > DAILY_BUDGET) continue;
         out.push(d); mins += d.mins || 0;
       }
       /* which goals have nothing to do today. Said out loud, never hidden. */
@@ -10105,7 +10144,22 @@ function MobilityDoor({ coach, setSheet }) {
 
 /* Ten minutes after a session, chosen by what the tests say is short. */
 function DrillsCard({ coach, setSheet, data, setData }) {
-  if (!coach.dailyDrills.list.length) return null;
+  /* HER REPORT, 13 August: with drills taken off, this could empty and the
+     whole card would disappear without a word. If she has goals but nothing
+     to do for them, say that rather than showing nothing (rule 23). */
+  if (!coach.dailyDrills.list.length) {
+    if (!coach.openGoals.length) return null;
+    return (
+      <Card style={{ background: C.mint }}>
+        <Eyebrow color={C.moss}>Your ten minutes</Eyebrow>
+        <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, marginTop: 6 }}>
+          Nothing here today. Everything that was attached to your goals has been taken off, and
+          I have nothing left that fits them. Ask me for replacements and I will write you some —
+          nothing you took off is lost, and you can put any of it back from the mobility editor.
+        </div>
+      </Card>
+    );
+  }
   const notes = (data && data.logs && data.logs[coach.t] && data.logs[coach.t].drillNotes) || {};
   const putNote = (id, v) => setData && setData((d) => ({ ...d, logs: { ...(d.logs || {}),
     [coach.t]: { ...((d.logs || {})[coach.t] || {}),
@@ -17817,7 +17871,14 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
         ...d,
         program: pr,
         goals,
-        drills: [...(d.drills || []), ...rx],
+        /* HER WORDS, 13 August. The instruction above tells the read not to
+           reinstate what she has taken off; this makes it true whether or
+           not the read listens. A prescribed exercise matching the name of
+           something she removed is dropped, and the month is applied without
+           it rather than failing. */
+        drills: [...(d.drills || []), ...rx.filter((x) => !(d.drills || []).some((old) =>
+          old && old.status === "removed"
+          && String(old.label || "").trim().toLowerCase() === String(x.label || "").trim().toLowerCase()))],
         profile: [...(d.profile || []), ...((rec.profile || []).map((p) => ({ ...p, firstSeen: rec.date, lastSeen: rec.date })))],
         reviews: (d.reviews || []).map((r) => (r.id === rec.id ? { ...r, applied: true, appliedDate: coach.t } : r)),
       };
@@ -18281,13 +18342,23 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
         setEditingLists(null); return;
       }
-      const before = JSON.parse(JSON.stringify(data.bodywork || []));
-      const { bodywork, done } = applyListEdits(data, out.changes, coach.t);
+      const before = JSON.parse(JSON.stringify({ bodywork: data.bodywork || [],
+        drills: data.drills || [], goals: data.goals || [], mobTests: data.mobTests || [],
+        fields: data.fields || {}, library: data.library || [] }));
+      const legacy = (out.changes || []).filter((c) => !c.where);
+      const registry = (out.changes || []).filter((c) => c.where);
+      const { bodywork, drills, goals, mobTests, done } = applyListEdits(data, legacy, coach.t);
+      /* HER INSTRUCTION, 13 August: everything, not just the lists. */
+      const after = applyRegistryEdits({ ...data, bodywork, drills, goals, mobTests },
+        registry, coach.t);
+      done.push(...after.done);
       if (!done.length) {
         setEditsMade({ error: "Nothing matched — the exercises I meant are not on your lists any more. Nothing has changed." });
         setEditingLists(null); return;
       }
-      setData((d) => ({ ...d, bodywork }));
+      setData((d) => ({ ...d, bodywork,
+        drills: after.data.drills, goals: after.data.goals, mobTests: after.data.mobTests,
+        fields: after.data.fields, library: after.data.library }));
       setEditsMade({ done, before });
     } catch (e) {
       const why = String((e && e.message) || e || "unknown");
@@ -18622,7 +18693,22 @@ ${(() => {
   YOU wrote these: she asked you to design ten lists for a body area and you named every
   exercise, its dose, what it reaches and how it is done. All of it is below. You can see
   inside the lists — never say you cannot, and never ask her to read them out to you.
-  AND YOU CAN CHANGE THEM. Her instruction, 13 August: "I need him to edit them too." Under
+  AND YOU CAN CHANGE EVERYTHING SHE OWNS. Her instruction, 13 August: "Make sure that the
+  coach can edit everything. I don't have to fall into a mistake and realise at a later stage
+  that I cannot edit it, or the coach cannot edit." The same button changes her Body lists,
+  her ten minutes, her weekly battery, her monthly benchmark, her mobility tests, her class
+  library, and the drills attached to her goals. Everything is listed below with its id.
+  The one line you do not cross: you change what she SHOULD DO, never what she DID. Her logs,
+  measurements, notes, conversations and record are history and are never rewritten. And her
+  goals are hers: attach work to them freely, but never reword or remove one unless she asks.
+  If she tells you something hurts, is wrong, is too easy or too hard — change it and say so.
+  Never tell her to work around something you could simply fix.
+  AND HER TEN MINUTES TOO. Her ten minutes (the drills she does after
+  every session) are listed further down with their own ids, and the same button changes those.
+  If she tells you a drill hurts her, take it OUT of the ten minutes: they are rebuilt every day
+  from her goals and her scores, so taking it off is the only thing that keeps it off. Never tell
+  her to work around a drill that hurts.
+  Her instruction, 13 August: "I need him to edit them too." Under
   every message you send there is a button, "change my lists", which applies the change you
   just described — take an exercise off a list, swap it for one that avoids what hurts, alter
   a dose, alter how it is done, or add one. Nothing is ever deleted: a removed exercise is set
@@ -19056,7 +19142,9 @@ Two or three sentences unless she asks for more.`;
                 </button>
                 {/* HER INSTRUCTION, 13 August: "I need him to edit them too."
                     The coach says what it would change; this applies it. */}
-                {(data.bodywork || []).some((pg) => pg && pg.status !== "removed" && (pg.lists || []).length) && (
+                {/* it changes her ten minutes as well as her Body lists, and
+                    she always has ten minutes — so it is always offered */}
+                {true && (
                   <button className="tap" disabled={listing !== null || editingLists !== null}
                     onClick={() => applyEdits(i)} style={{
                       border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
@@ -19120,7 +19208,7 @@ Two or three sentences unless she asks for more.`;
                     <Btn kind="signal" onClick={() => { close(); if (goTab) goTab("body"); }}>See my lists</Btn>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <Btn kind="quiet" onClick={() => { setData((d) => ({ ...d, bodywork: editsMade.before }));
+                    <Btn kind="quiet" onClick={() => { setData((d) => ({ ...d, ...editsMade.before }));
                       setEditsMade(null); }}>Undo all of it</Btn>
                   </div>
                 </div>
@@ -20548,12 +20636,129 @@ Return ONLY a JSON object, no prose, no code fence:
                 "video": "", "how": "...", "targets": "..." } },
     { "op": "add", "list": "<list id>", "why": "...",
       "with": { "name": "...", "tool": "...", "dose": "...", "mins": 2, "search": "...",
-                "video": "", "how": "...", "targets": "..." } }
+                "video": "", "how": "...", "targets": "..." } },
+
+    { "where": "drill|weekly|monthly|mobility|class|goal", "op": "remove",
+      "target": "<id or its exact name>", "why": "..." },
+    { "where": "...", "op": "set", "target": "<id or name>",
+      "fields": { "any field on it": "new value" }, "why": "..." },
+    { "where": "...", "op": "add", "fields": { "the whole new thing" }, "why": "..." }
   ]
-}`;
+}
+
+THE SECOND SHAPE reaches everything else she owns, listed for you with where= and id=:
+  where="drill"     her ten minutes
+  where="weekly"    a weekly battery measure   (fields: label, unit, how, why, better, type, cap, mins)
+  where="monthly"   a monthly benchmark measure (same fields)
+  where="mobility"  a mobility test            (fields: label, unit, how, why, better, side, max)
+  where="class"     a class in her library     (fields: name, goal, durations, intensity,
+                                                recoveryCost, shoulderLoad, home, equipment, cue)
+  where="goal"      something she wants to be able to do — HERS. Never reword one and never
+                    remove one unless she has asked in this conversation. You MAY attach
+                    drills to it with op "set" and fields {"drills": ["<drill id>"]}.
+
+Removing is never deleting: it is set aside, dated, and she can put it back.`;
 
 /* Every list and exercise with its id, so the change can be aimed exactly. */
-const listInventory = (data) => (data.bodywork || [])
+const listInventory = (data) => [bodyInventory(data), registryInventory(data)]
+  .filter(Boolean).join("\n\n") || "she has no lists yet";
+
+/* Everything on COACH_EDITS, with its ids, so a change can be aimed at any
+   of it. Anything already set aside is left out — it is not on offer. */
+const registryInventory = (data) => COACH_EDITS.map((e) => {
+  const rows = storeGet(data, e.store, e.seed).filter((x) => x && x.status !== "removed" && x.status !== "retired");
+  if (!rows.length) return "";
+  return `${e.where.toUpperCase()} — ${e.label}${e.hers ? " (HERS: never reword or remove one unless she asks)" : ""}:\n`
+    + rows.map((x) => `  where=${e.where} id=${x.id} "${e.name(x) || ""}"`).join("\n");
+}).filter(Boolean).join("\n\n");
+
+/* One apply for every registry entry: set aside, patch, or add. */
+const applyRegistryEdits = (data, changes, today) => {
+  const done = [];
+  const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  let out = data;
+  (changes || []).forEach((c) => {
+    const e = COACH_EDITS.find((x) => same(x.where, c.where));
+    if (!e) return;
+    const rows = storeGet(out, e.store, e.seed);
+    const want = c.target !== undefined ? c.target : c.exercise;
+    const i = rows.findIndex((x) => x && x.status !== "removed"
+      && (same(x.id, want) || same(e.name(x), want)));
+    if (c.op === "add" && c.fields) {
+      const made = { ...c.fields, id: newId(), addedBy: "coach", addedOn: today };
+      out = storeSet(out, e.store, [...rows, made]);
+      done.push({ what: `added ${e.name(made) || "something"} — ${e.label}`, why: c.why || "" });
+      return;
+    }
+    if (i < 0) return;
+    const row = rows[i];
+    if (c.op === "remove") {
+      out = storeSet(out, e.store, rows.map((x, k) => (k !== i ? x
+        : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" })));
+      done.push({ what: `took ${e.name(row)} off — ${e.label}`, why: c.why || "" });
+    } else if (c.op === "set" && c.fields && Object.keys(c.fields).length) {
+      out = storeSet(out, e.store, rows.map((x, k) => (k !== i ? x : { ...x, ...c.fields })));
+      done.push({ what: `changed ${Object.keys(c.fields).join(", ")} on ${e.name(row)}`, why: c.why || "" });
+    }
+  });
+  return { data: out, done };
+};
+
+/* ============================================================================
+   EVERYTHING THE COACH MAY CHANGE
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 13 August: "Make sure that the coach can edit everything.
+   I don't have to fall into a mistake and realise at a later stage that I
+   cannot edit it, or the coach cannot edit."
+
+   One list, so nothing is decided by accident. Every store in BLANK is on
+   exactly one side of this line, and test-b137 fails if a new one appears
+   that is on neither.
+
+   THE LINE: the coach may change any DEFINITION — anything that says what
+   she should do. It never rewrites HISTORY — what she actually did, said or
+   measured. Rules 20 and 23. Removing is always setting aside, and she
+   approves every change with a tap before it happens.
+   ==========================================================================*/
+const COACH_EDITS = [
+  { where: "drill",     label: "a drill in her ten minutes", store: "drills",
+    seed: () => SEED_DRILLS, name: (x) => x.label },
+  { where: "weekly",    label: "a weekly battery measure", store: "fields.weekly",
+    name: (x) => x.label },
+  { where: "monthly",   label: "a monthly benchmark measure", store: "fields.monthly",
+    name: (x) => x.label },
+  { where: "mobility",  label: "a mobility test", store: "mobTests",
+    seed: () => SEED_MOBILITY, name: (x) => x.label },
+  { where: "class",     label: "a class in her library", store: "library",
+    seed: () => SEED_LIBRARY, name: (x) => x.name },
+  { where: "goal",      label: "something she wants to be able to do", store: "goals",
+    name: (x) => x.text, hers: true },
+];
+/* Read and write a dotted store path, so fields.weekly is one entry above
+   rather than a special case (rule 13: adding must not require rewriting). */
+const storeGet = (data, path, seed) => {
+  const cur = path.split(".").reduce((o, k) => (o || {})[k], data);
+  return (Array.isArray(cur) && cur.length) ? cur : (seed ? seed() : (cur || []));
+};
+const storeSet = (data, path, value) => {
+  const ks = path.split(".");
+  if (ks.length === 1) return { ...data, [ks[0]]: value };
+  return { ...data, [ks[0]]: { ...(data[ks[0]] || {}), [ks[1]]: value } };
+};
+
+/* HER REPORT, 13 August: the two exercises she wanted gone were never in
+   bodywork at all — they are drills in her ten minutes. The coach could not
+   see them here, so it could not change them. */
+const drillInventory = (data) => {
+  const ds = (data.drills && data.drills.length ? data.drills : SEED_DRILLS)
+    .filter((d) => d && d.status !== "removed");
+  if (!ds.length) return "";
+  return "HER TEN MINUTES — the drills after every session. Chosen each day from her goals and her\n"
+    + "mobility scores, so taking one off here is what keeps it off:\n"
+    + ds.map((d) => `  DRILL id=${d.id} "${d.label}" targets="${d.targets || ""}"`).join("\n");
+};
+
+const bodyInventory = (data) => (data.bodywork || [])
   .filter((pg) => pg && pg.status !== "removed")
   .map((pg) => {
     const all = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
@@ -20562,24 +20767,61 @@ const listInventory = (data) => (data.bodywork || [])
         .filter((x) => x.status !== "removed")
         .map((x) => `    id=${x.id} "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"`)
         .join("\n")).join("\n");
-  }).join("\n\n") || "she has no lists yet";
+  }).join("\n\n");
 
 /* Applying them. Nothing is destroyed: a removed or replaced exercise keeps
    its place in the store, marked and dated, so it can come back and so what
    she logged against it still resolves by name (rule 20). */
 const applyListEdits = (data, changes, today) => {
   const done = [];
+  /* HER REPORT, 13 August: the model was asked for opaque ids, and when it
+     named the exercise instead nothing matched. Either works now. */
+  const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  const hits = (x, want) => same(x.id, want) || same(x.name, want) || same(x.label, want);
+
+  /* THE TEN MINUTES, on the same terms as everything else: taken off is set
+     aside, dated, with the reason kept — never deleted (rule 20). */
+  let drills = (data.drills && data.drills.length ? data.drills : SEED_DRILLS);
+  let goals = data.goals || [];
+  let mobTests = data.mobTests || [];
+  (changes || []).forEach((c) => {
+    const i = drills.findIndex((d) => d && d.status !== "removed" && hits(d, c.exercise));
+    if (i < 0) return;
+    const d0 = drills[i];
+    if (c.op === "remove") {
+      drills = drills.map((x, k) => (k !== i ? x
+        : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" }));
+      done.push({ what: `took ${d0.label} out of your ten minutes`, why: c.why || "" });
+    } else if (c.op === "how" && c.how) {
+      drills = drills.map((x, k) => (k !== i ? x : { ...x, how: String(c.how), wasHow: x.how }));
+      done.push({ what: `changed how you do ${d0.label}`, why: c.why || "" });
+    } else if (c.op === "replace" && c.with) {
+      const made = { id: newId(), label: String(c.with.name || "Exercise"),
+        mins: Number(c.with.mins) || 2, how: String(c.with.how || ""),
+        targets: String(c.with.targets || ""), search: String(c.with.search || c.with.name || ""),
+        video: String(c.with.video || ""), addedBy: "coach", addedOn: today, replaced: d0.label };
+      drills = drills.map((x, k) => (k !== i ? x
+        : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" }));
+      drills = [...drills.slice(0, i + 1), made, ...drills.slice(i + 1)];
+      /* whatever pointed at the old drill points at the new one, or her ten
+         minutes would quietly lose the slot altogether */
+      goals = goals.map((g) => ({ ...g, drills: (g.drills || []).map((x) => (same(x, d0.id) ? made.id : x)) }));
+      mobTests = mobTests.map((m) => ({ ...m, drills: (m.drills || []).map((x) => (same(x, d0.id) ? made.id : x)) }));
+      done.push({ what: `${d0.label} becomes ${made.label} in your ten minutes`, why: c.why || "" });
+    }
+  });
   const bodywork = (data.bodywork || []).map((pg) => {
     const editList = (li) => {
       let exercises = li.exercises || [];
       (changes || []).forEach((c) => {
-        if (c.op === "add" && String(c.list) === String(li.id) && c.with) {
+        if (c.op === "add" && c.with
+          && (same(c.list, li.id) || same(c.list, li.n) || same(c.list, li.title))) {
           const shaped = shapeLists([{ title: li.title, exercises: [c.with] }], li.n)[0].exercises[0];
           exercises = [...exercises, { ...shaped, addedBy: "coach", addedOn: today }];
           done.push({ what: `added ${shaped.name} to list ${li.n}`, why: c.why || "" });
           return;
         }
-        const i = exercises.findIndex((x) => String(x.id) === String(c.exercise) && x.status !== "removed");
+        const i = exercises.findIndex((x) => hits(x, c.exercise) && x.status !== "removed");
         if (i < 0) return;
         const ex = exercises[i];
         if (c.op === "remove") {
@@ -20608,7 +20850,7 @@ const applyListEdits = (data, changes, today) => {
       lists: (pg.lists || []).map(editList),
       rounds: (pg.rounds || []).map((r) => ({ ...r, lists: (r.lists || []).map(editList) })) };
   });
-  return { bodywork, done };
+  return { bodywork, drills, goals, mobTests, done };
 };
 
 const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid }) => {
