@@ -3300,7 +3300,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "13 August 2026 · 133";
+const BUILD = "13 August 2026 · 134";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3495,6 +3495,10 @@ const BLANK = {
      currently carrying, offered once and kept until she does it. It lives
      outside the day logs on purpose: a challenge is not a day. */
   liveBet: null,
+  /* HER REPORT, 13 August: "it doesn't take me to it when I press take me
+     to it." Which list she is being sent to, so the Body page can open at
+     it rather than leaving her to hunt. Cleared the moment it is used. */
+  bodyFocus: null,
   journal: [],    /* free entries: { id, date, text } */
   notes: {},      /* date -> { text, kept } */
   notesUsed: [],  /* pool indices already spent, so nothing repeats */
@@ -18189,7 +18193,7 @@ function Briefing({ coach, setSheet, close }) {
   );
 }
 
-function CoachChat({ data, setData, coach, close, seed, about }) {
+function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
   /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
      HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
      have been processed or acted upon."
@@ -18287,15 +18291,19 @@ function CoachChat({ data, setData, coach, close, seed, about }) {
           const n = (pgs[at].lists || []).length + 1;
           const shaped = shapeLists([{ title: out.title, focus: out.focus, exercises: out.exercises }], n);
           setListMade({ area, n, count: out.exercises.length });
-          return { ...d, bodywork: pgs.map((pg, k) => (k !== at ? pg
+          return { ...d, bodyFocus: { pg: pgs[at].id, list: shaped[0].id },
+            bodywork: pgs.map((pg, k) => (k !== at ? pg
             : { ...pg, lists: [...(pg.lists || []), ...shaped] })) };
         }
         setListMade({ area, n: 1, count: out.exercises.length });
-        return { ...d, bodywork: [...pgs, {
-          id: newId(), area, line: "Written for you in conversation.",
+        const pgId = newId();
+        const shapedNew = shapeLists([{ title: out.title, focus: out.focus, exercises: out.exercises }], 1);
+        return { ...d, bodyFocus: { pg: pgId, list: shapedNew[0].id },
+          bodywork: [...pgs, {
+          id: pgId, area, line: "Written for you in conversation.",
           mins: Math.max(1, Math.round(out.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
           created: coach.t, fromChat: true,
-          lists: shapeLists([{ title: out.title, focus: out.focus, exercises: out.exercises }], 1),
+          lists: shapedNew,
           log: {}, rounds: [], status: "active" }] };
       });
     } catch (e) {
@@ -19043,7 +19051,10 @@ Two or three sentences unless she asks for more.`;
               : `Done — ${listMade.count} exercise${listMade.count === 1 ? "" : "s"} are now list ${listMade.n} under "${listMade.area}" on your Body page, each with its weight, reps and hold boxes, a timer, a note and a video. Everything about them is editable.`}
             {!listMade.error && (
               <div style={{ marginTop: 10 }}>
-                <Btn kind="signal" onClick={close}>Take me to it</Btn>
+                {/* HER REPORT, 13 August: this only closed the chat and left
+                    her where she was. It goes to the Body tab now, and the
+                    page opens at the list itself. */}
+                <Btn kind="signal" onClick={() => { close(); if (goTab) goTab("body"); }}>Take me to it</Btn>
               </div>
             )}
           </div>
@@ -19990,7 +20001,7 @@ function CoachApp() {
           ) : sheet.kind === "briefing" ? (
             <Briefing coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "chat" ? (
-            <CoachChat data={data} setData={setData} coach={coach} seed={sheet.seed} about={sheet.about} close={() => setSheet(null)} />
+            <CoachChat data={data} setData={setData} coach={coach} seed={sheet.seed} about={sheet.about} close={() => setSheet(null)} goTab={go} />
           ) : sheet.kind === "settings-rhythm" ? (
             <RhythmSheet data={data} setData={setData} close={() => setSheet(null)} />
           ) : sheet.kind === "edit-weekly" || sheet.kind === "edit-monthly" ? (
@@ -20684,8 +20695,14 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
      down the menu of lists; each row can be flipped done or not done right
      there and opened from there; lists open independently, never in an
      imposed sequence; everything stays editable. */
-  const [unfolded, setUnfolded] = useState(false);
-  const [openIds, setOpenIds] = useState([]);
+  /* HER REPORT, 13 August: "it doesn't take me to it." A list she was sent
+     to opens with its area — she lands on the exercises with their boxes,
+     not on a closed row she still has to find. */
+  const sentHere = !!(data.bodyFocus && data.bodyFocus.pg === prog.id);
+  const [unfolded, setUnfolded] = useState(sentHere);
+  const [openIds, setOpenIds] = useState(sentHere && data.bodyFocus.list ? [data.bodyFocus.list] : []);
+  /* used once, then forgotten, so it never drags her back here again */
+  useEffect(() => { if (sentHere) setData((d) => ({ ...d, bodyFocus: null })); }, [sentHere]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const st = bodyworkState(prog);
@@ -20898,7 +20915,10 @@ function BodyWork({ data, setData, coach, setSheet }) {
      So: a row of chips across the top, one per body area plus her goal ten
      minutes, and only ever ONE DAY'S list on the page for each. The other
      nine of every ten stay folded away until their day comes round. */
-  const [pick, setPick] = useState("all");
+  /* HER REPORT, 13 August: sent to a list, she arrived at the whole Body
+     page with every area folded shut. The area she was sent to is the one
+     that opens. */
+  const [pick, setPick] = useState(() => (data.bodyFocus && data.bodyFocus.pg) || "all");
   const progs = (data.bodywork || []).filter((pg) => pg && pg.status !== "removed");
   const hasTen = (coach.dailyDrills?.list || []).length > 0;
   /* everything that has a list for today: her goal ten minutes, and one list
