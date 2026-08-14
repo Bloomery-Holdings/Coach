@@ -247,7 +247,23 @@ const FORMULA_DEFAULTS = {
     priceIn: 3, /* what she pays for a million words read           */
     priceOut: 15, /* ...and a million written back                    */
     priceCacheWrite: 3.75, /* putting a block on the desk: 1.25x               */
+    priceCacheWrite1h: 6, /* ...and leaving it there an hour: 2x              */
     priceCacheRead: 0.3, /* glancing at one already there: 0.1x              */
+    /* ---- HOW MUCH ROOM THE COACH'S ANSWER GETS ----------------------------
+       Her decision, 14 August: "make it depend on what you asked." A flat cap
+       paid essay prices for one-line questions. A hard morning always gets the
+       long one — the ladder in rule 4 needs room to walk down. */
+    replyShort: 350, /* a short question deserves a short answer         */
+    replyNormal: 550, /* the ordinary case                                */
+    replyThinking: 800, /* why, explain, should I, compare, plan            */
+    replyLong: 1000, /* a hard morning, or anything that sounds like one */
+    replyShortChars: 60, /* what counts as a short question, in characters   */
+    /* ---- WHEN CACHING IS WORTH IT, MEASURED RATHER THAN ASSUMED -----------
+       Her correction, 14 August. A cache that is never read back costs MORE
+       than not caching. These decide which mode her own gaps justify. */
+    cacheShortGapMins: 5, /* gaps this small: the five-minute cache survives  */
+    cacheLongGapMins: 60, /* ...this small: the hour one does                 */
+    cacheMinGaps: 10, /* how many gaps before it trusts the measurement   */
     /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
        Her decision, 14 August. Every class in her library carries a cost from
        1 to 5. These say which of them today is allowed to reach for. This is
@@ -3590,13 +3606,16 @@ const PRICE_CACHE_READ = PRICE_IN * 0.1;
    change under her. The four live in FORMULA_DEFAULTS too, and the cost the
    app reports reads them from her settings. */
 const centsFor = (u, F) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     const f = F || FORMULA_DEFAULTS;
     const pin = (_a = f.priceIn) !== null && _a !== void 0 ? _a : PRICE_IN, pout = (_b = f.priceOut) !== null && _b !== void 0 ? _b : PRICE_OUT;
+    const write = u.cacheTtl === "1h"
+        ? ((_c = f.priceCacheWrite1h) !== null && _c !== void 0 ? _c : ((_d = f.priceIn) !== null && _d !== void 0 ? _d : PRICE_IN) * 2)
+        : ((_e = f.priceCacheWrite) !== null && _e !== void 0 ? _e : PRICE_CACHE_WRITE);
     return (((u.in || 0) / 1e6 * pin
         + (u.out || 0) / 1e6 * pout
-        + (u.cacheWrite || 0) / 1e6 * ((_c = f.priceCacheWrite) !== null && _c !== void 0 ? _c : PRICE_CACHE_WRITE)
-        + (u.cacheRead || 0) / 1e6 * ((_d = f.priceCacheRead) !== null && _d !== void 0 ? _d : PRICE_CACHE_READ)) * 100);
+        + (u.cacheWrite || 0) / 1e6 * write
+        + (u.cacheRead || 0) / 1e6 * ((_f = f.priceCacheRead) !== null && _f !== void 0 ? _f : PRICE_CACHE_READ)) * 100);
 };
 /* What the cache SAVED, so the number is visible rather than asserted: what
    those cached words would have cost at full price, less what they did cost. */
@@ -3639,7 +3658,95 @@ const spendSince = (data, from) => {
     };
 };
 const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
-const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false }) => {
+/* SHOULD THIS MESSAGE BE CACHED AT ALL?
+   ---------------------------------------------------------------------------
+   HER CORRECTION, 14 August: "The cache assumes that I make all my messages
+   within one hour, which is not... never the case."
+
+   She was right, and it was costing her. A cache that is never read back is a
+   STRAIGHT PENALTY — 1.25x to write the five-minute one, 2x to write the
+   hour-long one, against 1.0x for not caching at all. Build 144 cached every
+   message unconditionally, which is a saving for a burst of messages and a
+   20% surcharge for messages spread through a day.
+
+   So the app measures her instead of guessing at her. A cache read refreshes
+   the clock for free, so what matters is not how long a conversation lasts but
+   THE LONGEST GAP INSIDE IT. It times her actual gaps, picks the mode that
+   suits them, and shows her the number it decided on.
+
+   Until there is enough of her to measure, the answer is OFF — because off is
+   never a penalty, and a wrong guess here costs her money. */
+const msgTimes = (data) => {
+    const out = [];
+    ((data && data.chats) || []).forEach((c) => ((c && c.messages) || []).forEach((m) => {
+        if (m && m.role === "user" && Number(m.at) > 0)
+            out.push(Number(m.at));
+    }));
+    return out.sort((a, b) => a - b);
+};
+const cachePolicy = (data, F) => {
+    const f = F || FORMULA_DEFAULTS;
+    const forced = (data && data.settings && data.settings.cacheMode) || "auto";
+    const times = msgTimes(data);
+    /* gaps between consecutive messages, in minutes, ignoring overnight breaks
+       that no cache could ever span */
+    const gaps = [];
+    for (let i = 1; i < times.length; i++) {
+        const mins = (times[i] - times[i - 1]) / 60000;
+        if (mins > 0 && mins < 24 * 60)
+            gaps.push(mins);
+    }
+    const sorted = [...gaps].sort((a, b) => a - b);
+    const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+    const enough = gaps.length >= f.cacheMinGaps;
+    const measured = !enough ? "off"
+        : median <= f.cacheShortGapMins ? "5m"
+            : median <= f.cacheLongGapMins ? "1h"
+                : "off";
+    const mode = forced === "auto" ? measured : forced;
+    return {
+        mode, measured, forced, median: median === null ? null : Math.round(median), gaps: gaps.length, enough,
+        why: forced !== "auto"
+            ? `you set this yourself`
+            : !enough
+                ? `not enough measured yet — ${gaps.length} of ${f.cacheMinGaps} gaps. Off costs nothing extra, so it stays off until there is something to go on.`
+                : measured === "5m" ? `your messages are typically ${Math.round(median)} minutes apart, which a five-minute cache survives`
+                    : measured === "1h" ? `your messages are typically ${Math.round(median)} minutes apart — too far for the short cache, close enough for the hour one`
+                        : `your messages are typically ${Math.round(median)} minutes apart, which no cache lives long enough to help with`,
+    };
+};
+/* HOW LONG THE COACH'S ANSWER MAY BE.
+   ---------------------------------------------------------------------------
+   Her decision, 14 August, once the arithmetic was in front of her: after
+   caching, THE REPLIES ARE THE BIGGEST COST IN A CONVERSATION — about 60% of
+   it. A flat 1,000-token cap paid for an essay whether she asked what time her
+   class is or asked it to talk her out of quitting.
+
+   Her instruction: "make it depend on what you asked." So it does. Nothing the
+   coach KNOWS changes — only how much room it has to answer in. And the one
+   rule that matters: a hard morning is never the conversation that gets cut
+   short. Rule 4 says the coach walks down a ladder rung by rung; a ladder needs
+   room. */
+const REPLY_LONG_WORDS = ["why", "explain", "how come", "what do you think", "should i", "compare",
+    "difference", "walk me", "talk me", "plan", "design", "reason", "understand", "worried", "confused"];
+const HARD_MORNING_WORDS = ["can't", "cant", "cannot", "can not", "couldn't", "couldnt",
+    "don't want", "dont want", "exhausted", "tired", "flat",
+    "low", "sad", "hate", "quit", "give up", "pointless", "failing", "hurts", "pain", "scared", "hard"];
+const replyBudget = (text, coach, F) => {
+    const f = F || FORMULA_DEFAULTS;
+    const s = String(text || "").toLowerCase();
+    /* A HARD MORNING GETS THE ROOM, whatever she typed and however short it was.
+       Her mood tap outranks the question, exactly as it does everywhere else. */
+    const mood = coach && coach.moodToday;
+    if ((mood && mood !== "good") || HARD_MORNING_WORDS.some((w) => s.includes(w)))
+        return f.replyLong;
+    if (REPLY_LONG_WORDS.some((w) => s.includes(w)))
+        return f.replyThinking;
+    if (s.length <= f.replyShortChars)
+        return f.replyShort;
+    return f.replyNormal;
+};
+const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false, cacheTtl = "5m" }) => {
     const headers = { "Content-Type": "application/json" };
     if (!insideClaude()) {
         if (!apiKey)
@@ -3655,7 +3762,8 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
        and nothing would ever read it back. */
     const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
         system: cache
-            ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+            ? [{ type: "text", text: system,
+                    cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } }]
             : system };
     if (search)
         body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
@@ -3674,6 +3782,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
         usage.in = Number(data.usage.input_tokens) || 0;
         usage.out = Number(data.usage.output_tokens) || 0;
         usage.cacheWrite = Number(data.usage.cache_creation_input_tokens) || 0;
+        usage.cacheTtl = cacheTtl;
         usage.cacheRead = Number(data.usage.cache_read_input_tokens) || 0;
     }
     const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
@@ -3745,7 +3854,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 145";
+const BUILD = "14 August 2026 · 147";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -12714,8 +12823,33 @@ function Settings({ data, setData, coach, setSheet }) {
                             " from before this was recorded carr",
                             all.unknown === 1 ? "ies" : "y",
                             " no cost. They are not counted above, and I will not invent a figure for them.")),
+                        (() => {
+                            /* WHAT THE APP DECIDED ABOUT CACHING, AND WHY (build 147).
+                               Her correction: a cache that is never read back costs more
+                               than none at all. This says which mode her own gaps chose,
+                               what it measured, and lets her overrule it. */
+                            const F2 = formulas(data.settings);
+                            const cp = cachePolicy(data, F2);
+                            const label = { "5m": "on, five minutes", "1h": "on, one hour", off: "off" }[cp.mode];
+                            return (React.createElement("div", { style: { marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` } },
+                                React.createElement("div", { className: "mono", style: { fontSize: 9.5, letterSpacing: "0.1em",
+                                        textTransform: "uppercase", color: C.muted, marginBottom: 6 } }, "not paying twice for the same words"),
+                                React.createElement("div", { style: { fontSize: 12.5, color: C.ink, lineHeight: 1.5 } },
+                                    "Currently ",
+                                    React.createElement("strong", { style: { fontWeight: 600 } }, label),
+                                    "."),
+                                React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 5 } }, cp.why),
+                                React.createElement("div", { style: { display: "flex", gap: 6, marginTop: 10 } }, [["auto", "Let it decide"], ["off", "Off"], ["5m", "5 min"], ["1h", "1 hour"]].map(([k, l]) => {
+                                    var _a;
+                                    const on = (((_a = data.settings) === null || _a === void 0 ? void 0 : _a.cacheMode) || "auto") === k;
+                                    return (React.createElement("button", { key: k, className: "tap", onClick: () => setData((d) => ({ ...d, settings: { ...(d.settings || {}), cacheMode: k } })), style: { flex: 1, padding: "9px 4px", borderRadius: 9, cursor: "pointer", fontSize: 11.5,
+                                            border: `1.5px solid ${on ? C.ochre : C.line}`,
+                                            background: on ? C.pist : "transparent",
+                                            color: on ? C.ink : C.muted, fontWeight: on ? 600 : 400, fontFamily: "inherit" } }, l));
+                                }))));
+                        })(),
                         React.createElement("div", { style: { marginTop: 10 } },
-                            React.createElement(InfoNote, { small: true, inherit: true, why: `This is what the app itself recorded, at $${PRICE_IN} per million words in and $${PRICE_OUT} per million out. It is not your Anthropic bill — anything else on the same account is not in here. The bill itself is at console.anthropic.com under Usage.` },
+                            React.createElement(InfoNote, { small: true, inherit: true, why: `This is what the app itself recorded, at ${PRICE_IN} per million words in and ${PRICE_OUT} per million out. It is not your Anthropic bill — anything else on the same account is not in here. The bill itself is at console.anthropic.com under Usage.` },
                                 React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Where this number comes from")))));
                 })()),
             React.createElement("div", { style: { marginBottom: 12 } }),
@@ -13291,10 +13425,21 @@ function Formulas({ data, setData, close }) {
                 ["minBaselineReadings", "Readings before a median is trusted"]] },
         { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
             rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
+        { title: "How long your coach's answers may be", note: "After caching, the replies are the biggest single cost in a conversation. A short question gets a short answer; a question you want thought about gets room; and a hard morning always gets the longest, because talking you down a ladder needs room. Measured in tokens — roughly three quarters of a word each.",
+            rows: [["replyShort", "A short question"],
+                ["replyNormal", "The ordinary case"],
+                ["replyThinking", "Why, explain, should I, compare, plan"],
+                ["replyLong", "A hard morning — never cut short"],
+                ["replyShortChars", "What counts as a short question, in characters"]] },
+        { title: "When caching is worth it", note: "A cache your coach never looks back at costs MORE than not caching — a quarter more for the five-minute one, double for the hour. So the app times the gaps between your messages and only caches when your own gaps say it would be read back. These are the lines it decides on.",
+            rows: [["cacheShortGapMins", "Gaps under this many minutes: five-minute cache"],
+                ["cacheLongGapMins", "…under this many: the hour one"],
+                ["cacheMinGaps", "How many gaps before it trusts what it measured"]] },
         { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
             rows: [["priceIn", "A million words read"],
                 ["priceOut", "A million written back"],
                 ["priceCacheWrite", "A million put in front of it"],
+                ["priceCacheWrite1h", "…and left there an hour"],
                 ["priceCacheRead", "A million looked at again"]] },
         { title: "How hard a class today may be", note: "Every class in your library carries a cost from 1 to 5. These decide which of them each recovery band is allowed to reach for. This is the only group that changes what you are actually asked to do rather than what you are told about it — so a wrong number here hands you the wrong class rather than the wrong word.",
             rows: [["classCostRest", "Most a rest-band day may pick"],
@@ -16785,7 +16930,19 @@ ${Object.keys(data.notes || {}).sort().filter((k) => (data.notes[k] || {}).kept 
 - EVERY CALCULATION THE APP RUNS. Explain any of these in plain English on request, never in
   jargon, and always tie it back to HER training and what she should do next. Read them together
   rather than one at a time — the interesting answers come from combining three or four of them.
-${coach.allMetrics.map((v) => `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.label} (${v.scope}): ${v.display} — ${v.sub}. ${v.plain} HOW: ${v.how || "n/a"}${v.need ? ` NOT YET AVAILABLE: ${v.need}` : ""}`).join("\n")}
+${coach.allMetrics.map((v) => {
+            /* HOW EACH ONE IS WORKED OUT used to go in every message — 1,667 tokens of
+               arithmetic lesson, identical every time, which the coach never acts on.
+               That text was written for HER, for the card under the "i". It goes now
+               only for the number she actually tapped to ask about, which is where it
+               was ever needed. Nothing else about the calculation changed: the value,
+               the verdict, what it means for her and what it still needs all stay. */
+            const asked = about && (String(about).toLowerCase().includes(String(v.label || "").toLowerCase())
+                || String(v.label || "").toLowerCase().includes(String(about).toLowerCase()));
+            return `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.label} (${v.scope}): ${v.display} — ${v.sub}. ${v.plain}${asked ? ` HOW: ${v.how || "n/a"}` : ""}${v.need ? ` NOT YET AVAILABLE: ${v.need}` : ""}`;
+        }).join("\n")}
+  If she asks how any of these is worked out, say you can show her — the app has the full explanation
+  under the i on that number's card, and tapping the number brings it to you here.
 - Read across all five: ${coach.reading}
 - Load by body region this week (share of total work): ${coach.bodyRows.map((r) => `${r.label} ${r.share}%`).join(", ")}
 - BODY WORK she books herself (never prescribed by you, but it changes what the next session can be):
@@ -17040,7 +17197,7 @@ Two or three sentences unless she asks for more.`;
             cacheRead: (prev.cacheRead || 0) + ((spent && spent.cacheRead) || 0),
             saved: (prev.saved || 0) + (spent ? centsSaved(spent, formulas(d.settings)) : 0),
             messages: all.map((m) => ({ role: m.role, text: m.content,
-                ...(m.image ? { image: m.image } : {}) })) };
+                ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) })) };
         /* Everything said today lives in ONE entry. The other same-day entries
            are already gathered into `all` above, so dropping them here loses no
            word she has ever said — it stops the same exchange being stored twice
@@ -17099,7 +17256,9 @@ Two or three sentences unless she asks for more.`;
         const text = draft.trim();
         if ((!text && !photo) || busy)
             return;
-        const next = [...msgs, { role: "user", content: text, ...(photo ? { image: photo } : {}) }];
+        /* TIMED, so the app can measure her instead of assuming her (build 147).
+           Only the moment is kept — no content, nothing new about her. */
+        const next = [...msgs, { role: "user", content: text, at: Date.now(), ...(photo ? { image: photo } : {}) }];
         setMsgs(next);
         setDraft("");
         setPhoto(null);
@@ -17122,11 +17281,18 @@ Two or three sentences unless she asks for more.`;
                used by the app so far?" The app could not answer, because this call
                never asked. It does now, and what it costs is written on the
                conversation and totalled in Settings. */
+            const cachePlan = cachePolicy(data, formulas(data.settings));
             const spend = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
             const reply = await askModel({
                 /* the only call worth caching: the same system prompt goes out again
                    with every message of the conversation */
-                cache: true,
+                /* HER CORRECTION, 14 August: cache only when her own measured gaps say
+                   it would actually be read back. Unconditional caching was a
+                   surcharge on the way she really uses it. */
+                cache: cachePlan.mode !== "off",
+                cacheTtl: cachePlan.mode === "1h" ? "1h" : "5m",
+                /* her decision, 14 August: the answer's room depends on what she asked */
+                maxTokens: replyBudget(text, coach, formulas(data.settings)),
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
                 system: context(),
                 messages: next.map(blockify),
