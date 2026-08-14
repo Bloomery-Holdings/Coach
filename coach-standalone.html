@@ -2412,6 +2412,15 @@ const parseReview = (text) => {
    and nothing is paid for twice. Anything still open — an issue she has not
    closed — is always sent too, however old it is. */
 const SCOPE_ALL = { kind: "all" };
+/* HER INSTRUCTION, 14 August: "make it see up to the last 6 months and make the
+   number of months editable and it show me how many months it will review
+   before doing it but the default is 6 months." Everything stays available —
+   she asked for it to remain a choice — but it is no longer where this opens. */
+const SCOPE_DEFAULT = { kind: "months", n: 6 };
+/* The daily coach's own window. Separate from the read's, because they are
+   different questions: a read designs a month and wants the arc; a chat
+   answers what she just asked. */
+const CHAT_SCOPE_DEFAULT = { kind: "months", n: 6 };
 const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
     if (!s || s.kind === "all")
@@ -3561,6 +3570,28 @@ const PRICE_IN = 3, PRICE_OUT = 15; /* dollars per million tokens */
    `search: true` attaches the web-search tool. Anthropic runs the search on
    its side and hands back the answer with its sources, so nothing new is
    installed here and her key is still the only thing that pays. */
+/* WHAT SHE HAS ACTUALLY SPENT, from what the app recorded and nothing else.
+   Her question, 14 August: "is this the amount I actually used by the app so
+   far?" The app could not answer, because until build 143 the daily chat
+   recorded nothing at all. It records now — and this only ever adds up what
+   is on the record. A conversation from before build 143 carries no cost, and
+   says so rather than being guessed at (rule 23). */
+const spendSince = (data, from) => {
+    const chats = (data.chats || []).filter((c) => c && (!from || c.date >= from));
+    const reads = (data.reviews || []).filter((r) => r && (!from || r.date >= from));
+    const sumC = chats.reduce((a, c) => a + (Number(c.cost) || 0), 0);
+    const sumR = reads.reduce((a, r) => a + (Number(r.cost) || 0), 0);
+    const unknown = chats.filter((c) => c.cost === undefined).length;
+    return {
+        chatCents: sumC, readCents: sumR, cents: sumC + sumR,
+        chats: chats.length, reads: reads.length, unknown,
+        tokensIn: chats.reduce((a, c) => a + (Number(c.tokensIn) || 0), 0)
+            + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0),
+        tokensOut: chats.reduce((a, c) => a + (Number(c.tokensOut) || 0), 0)
+            + reads.reduce((a, r) => a + (Number(r.tokensOut) || 0), 0),
+    };
+};
+const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
 const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false }) => {
     const headers = { "Content-Type": "application/json" };
     if (!insideClaude()) {
@@ -3653,7 +3684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 142";
+const BUILD = "14 August 2026 · 143";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -10494,15 +10525,15 @@ function SessionClock({ log, write, coach }) {
 function ReadCard({ data, setData, coach, setSheet }) {
     var _a;
     const last = coach.lastReview;
-    const scope = ((_a = data.settings) === null || _a === void 0 ? void 0 : _a.readScope) || SCOPE_ALL;
+    const scope = ((_a = data.settings) === null || _a === void 0 ? void 0 : _a.readScope) || SCOPE_DEFAULT;
     const setScope = (s) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: s } }));
     return (React.createElement(Card, { style: { background: C.pist } },
-        React.createElement(Eyebrow, { color: C.signal }, "Read my data"),
+        React.createElement(Eyebrow, { color: C.signal }, "Next month's programme"),
         React.createElement("div", { style: { margin: "5px 0 11px" } },
             React.createElement(InfoNote, { small: true, inherit: true, why: "Everything you have logged, read and interpreted \u2014 with what it concludes, what to do about it, where to put the work, and the rules worth holding to. Ask for it whenever you like; it shows you exactly what would be sent first." },
                 React.createElement("span", { style: { fontSize: 12.5, color: C.muted } }, "What this does"))),
         React.createElement(ScopePicker, { scope: scope, onPick: setScope }),
-        React.createElement(Btn, { kind: "signal", disabled: !scopeReady(scope), onClick: () => setSheet({ kind: "review" }) }, "Ask the coach to read everything"),
+        React.createElement(Btn, { kind: "signal", disabled: !scopeReady(scope), onClick: () => setSheet({ kind: "review" }) }, scopeReady(scope) ? `Design next month from ${scopeLabel(scope)}` : "Type how far back first"),
         last && (React.createElement("div", { style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` } },
             React.createElement("div", { className: "mono", style: { fontSize: 9.5, letterSpacing: "0.1em", textTransform: "uppercase",
                     color: C.muted, marginBottom: 6 } },
@@ -11142,7 +11173,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     "Everything your coach is watching (",
                     coach.agenda.length,
                     ")"))))),
-        isToday && React.createElement(ReadCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
         isToday && (() => {
             var _a;
@@ -12058,11 +12088,10 @@ function Progress({ data, setData, coach, setSheet }) {
         })(),
         React.createElement(Card, { style: { marginBottom: 11 } },
             React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 } },
-                React.createElement(Eyebrow, { color: C.signal }, "The coach's read"),
+                React.createElement(Eyebrow, { color: C.signal }, "Next month's programme"),
                 React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.muted } }, (coach.reviews || []).length ? `${coach.reviews.length} kept` : "whenever you want")),
             React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "6px 0 11px" } }, "Everything you have logged, read and interpreted \u2014 conclusions, advice, where to put the work, and the rules worth holding to. As often as you like; never on a schedule."),
-            React.createElement("div", { style: { marginBottom: 12 } },
-                React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "review" }) }, "Ask the coach to read everything")),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 } }, "Run it from Settings."),
             !(coach.reviews || []).length ? (React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.55 } }, "No read yet. The button above shows you exactly what would be sent before anything happens.")) : (React.createElement(React.Fragment, null, coach.reviews.slice().reverse().map((r) => (React.createElement("button", { key: r.id, onClick: () => setSheet({ kind: "review", show: r.id }), className: "tap", "aria-label": `open the read from ${r.date}`, style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
                     width: "100%", padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
                     background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" } },
@@ -12223,7 +12252,7 @@ function Progress({ data, setData, coach, setSheet }) {
                         mKeys.slice(-4).map((k) => React.createElement("td", { key: k, style: { padding: 7, textAlign: "center" } }, data.monthly[k][f.id] || "–"))))))))))));
 }
 /* ------------------------------------------------------------ SETTINGS ---- */
-function Settings({ data, setData, setSheet }) {
+function Settings({ data, setData, coach, setSheet }) {
     var _a, _b, _c, _d, _e;
     const s = data.settings;
     const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
@@ -12574,6 +12603,38 @@ function Settings({ data, setData, setSheet }) {
             React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "edit-mobility" }) }, "Edit the mobility battery"),
             React.createElement("div", { style: { marginTop: 8 } },
                 React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "profile" }) }, "What the coach believes about you")),
+            React.createElement("div", { style: { marginTop: 14 } },
+                React.createElement(ReadCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })),
+            React.createElement(Card, { style: { marginTop: 14 } },
+                React.createElement(Eyebrow, null, "What your coach has cost"),
+                (() => {
+                    const t = today();
+                    const rows = [
+                        ["Today", spendSince(data, t)],
+                        ["Last 7 days", spendSince(data, addDays(t, -6))],
+                        ["Last 30 days", spendSince(data, addDays(t, -29))],
+                        ["Everything on the record", spendSince(data, null)],
+                    ];
+                    const all = rows[3][1];
+                    return (React.createElement(React.Fragment, null,
+                        rows.map(([label, v]) => (React.createElement("div", { key: label, style: { display: "flex", justifyContent: "space-between",
+                                alignItems: "baseline", padding: "7px 0", borderBottom: `1px solid ${C.line}` } },
+                            React.createElement("span", { style: { fontSize: 12.5, color: C.muted } }, label),
+                            React.createElement("span", { className: "mono", style: { fontSize: 13, color: C.ink } }, money(v.cents))))),
+                        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 10 } }, all.cents === 0 && all.chats === 0 && all.reads === 0
+                            ? "Nothing recorded yet."
+                            : `${money(all.chatCents)} talking across ${all.chats} conversation${all.chats === 1 ? "" : "s"}, ${money(all.readCents)} on ${all.reads} read${all.reads === 1 ? "" : "s"}. ${all.tokensIn.toLocaleString()} in, ${all.tokensOut.toLocaleString()} out.`),
+                        all.unknown > 0 && (React.createElement("div", { style: { fontSize: 11.5, color: C.ochre, lineHeight: 1.5, marginTop: 8 } },
+                            all.unknown,
+                            " conversation",
+                            all.unknown === 1 ? "" : "s",
+                            " from before this was recorded carr",
+                            all.unknown === 1 ? "ies" : "y",
+                            " no cost. They are not counted above, and I will not invent a figure for them.")),
+                        React.createElement("div", { style: { marginTop: 10 } },
+                            React.createElement(InfoNote, { small: true, inherit: true, why: `This is what the app itself recorded, at $${PRICE_IN} per million words in and $${PRICE_OUT} per million out. It is not your Anthropic bill — anything else on the same account is not in here. The bill itself is at console.anthropic.com under Usage.` },
+                                React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Where this number comes from")))));
+                })()),
             React.createElement("div", { style: { marginBottom: 12 } }),
             React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 } }, "Rename exercises, change units, reorder, or add your own. Renaming keeps the history \u2014 the chart just picks up the new name."),
             React.createElement("div", { style: { display: "flex", gap: 8 } },
@@ -15660,7 +15721,7 @@ function ReadAnswer({ rec }) {
    One of the three, never a form to fill in. What the window leaves out is
    carried by the earlier reads, which always go in full. */
 function ScopePicker({ scope, onPick }) {
-    const s = scope || SCOPE_ALL;
+    const s = scope || SCOPE_DEFAULT;
     const opts = [
         { k: "all", label: "Everything" },
         { k: "days", label: "Days" },
@@ -15713,7 +15774,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     /* Her choice of how far back this read looks — one of them, never all
        three. Kept in her settings so the app opens on whatever she chose last,
        and changeable every single time (rules 12, 13). */
-    const scope = ((_a = data.settings) === null || _a === void 0 ? void 0 : _a.readScope) || SCOPE_ALL;
+    const scope = ((_a = data.settings) === null || _a === void 0 ? void 0 : _a.readScope) || SCOPE_DEFAULT;
     const setScope = (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: sc } }));
     /* built here rather than in the engine: it is only wanted on this screen,
        and it is the largest string the app ever makes */
@@ -15817,7 +15878,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     };
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.signal }, mode === "read" ? "Where you are" : "The month, read properly"),
-        React.createElement("h1", { className: "disp", style: { fontSize: 27, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 10px" } }, mode === "read" ? "Read everything I have so far" : "Read the month, design the next one"),
+        React.createElement("h1", { className: "disp", style: { fontSize: 27, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 10px" } }, mode === "read" ? "Read my history and tell me what it shows" : "Read it and design next month's programme"),
         React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 } }, mode === "read"
             ? "This sends everything you have logged — every measurement, every morning, every calculation, the record, your goals and everything you have written — and asks for an honest reading of what it does and does not yet show. It will not design you a month. There is not enough here yet, and a month built from a fortnight is a guess wearing a plan's clothes."
             : "This sends the whole block. Every battery measurement one by one, every mobility test, every body region, every calculation, all of your WHOOP, the record, your goals and everything you wrote — and asks for the next four weeks, with the reasoning shown. Nothing it returns becomes your month until you start it."),
@@ -15988,7 +16049,7 @@ function Briefing({ coach, setSheet, close }) {
         React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "chat" }) }, "Talk to your coach about any of it")));
 }
 function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
-    var _a;
+    var _a, _b;
     /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
        HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
        have been processed or acted upon."
@@ -16168,7 +16229,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
     const endRef = useRef(null);
     useEffect(() => { var _a; (_a = endRef.current) === null || _a === void 0 ? void 0 : _a.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
     const context = () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
         /* ---- WHY THE COACH KEPT FORGETTING WHAT SHE HAD JUST DONE ----------
            Her report, 9 August: "it saw only me last day... it started talking
            about the previous two days but missed the first day, which was the
@@ -16201,8 +16262,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
            first, in the same detail the fortnight used to carry. */
         const loggedDays = Object.keys(data.logs || {});
         const morningDays = Object.keys(data.morning || {});
+        /* HER WINDOW, set by her under "talk to your coach" (build 143). It bounds
+           the DAY-BY-DAY detail and nothing else — every open item in the record,
+           every goal, every paused item, every previous read's conclusions and
+           everything she has written still travel in full whatever she sets. */
+        const chatCut = scopeCutoff(((_a = data.settings) === null || _a === void 0 ? void 0 : _a.chatScope) || CHAT_SCOPE_DEFAULT, coach.t);
         const recentDays = Array.from(new Set([...loggedDays, ...morningDays]))
-            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t).sort();
+            .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t
+            && (chatCut === "all" || d >= chatCut)).sort();
         /* THE SAME SETTLED STATE THE REST OF THE APP READS. This read the raw
            record, so a day carrying both a rest flag and a session was described to
            the coach as a completed session — the one surface where the model forms
@@ -16297,10 +16364,10 @@ Where she is right now:
 - Recovery today: ${coach.recValue || "not entered"}${coach.recovery ? " (" + coach.recovery.label + ")" : ""}
 - Shoulder protection (built from what she has TOLD you — the record is the source of truth): ${coach.shoulderFrozen ? "an open shoulder entry touched in the last 7 days — nothing high shoulder-load today" : coach.shoulderSore ? "an open shoulder entry — high shoulder-load classes are marked down, not banned" : "nothing open in the record — no day-to-day restriction"}. When she tells you it is resolved, mark the entry resolved and the protection retires itself.
 - THE PROGRAMME (you set the kind of day; you pick the class within it):
-  Block "${((_a = coach.livePhase) === null || _a === void 0 ? void 0 : _a.name) || "none"}", week ${coach.weeksIntoBlock} of ${((_b = coach.livePhase) === null || _b === void 0 ? void 0 : _b.weeks) || "?"}${coach.blockWeeksLeft <= 0 ? " — THIS BLOCK IS FINISHED, the next one is drawn up and waiting for her" : `, ${coach.blockWeeksLeft} week(s) left`}.
-  Its intent: ${((_c = coach.livePhase) === null || _c === void 0 ? void 0 : _c.line) || "n/a"}
-  Today is a ${((_d = coach.block) === null || _d === void 0 ? void 0 : _d.label) || "unscheduled"} day. ${((_e = coach.block) === null || _e === void 0 ? void 0 : _e.why) || ""}
-  The week's shape: ${(((_f = coach.livePhase) === null || _f === void 0 ? void 0 : _f.week) || []).map((b, i) => `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i]} ${b}`).join(", ")}
+  Block "${((_b = coach.livePhase) === null || _b === void 0 ? void 0 : _b.name) || "none"}", week ${coach.weeksIntoBlock} of ${((_c = coach.livePhase) === null || _c === void 0 ? void 0 : _c.weeks) || "?"}${coach.blockWeeksLeft <= 0 ? " — THIS BLOCK IS FINISHED, the next one is drawn up and waiting for her" : `, ${coach.blockWeeksLeft} week(s) left`}.
+  Its intent: ${((_d = coach.livePhase) === null || _d === void 0 ? void 0 : _d.line) || "n/a"}
+  Today is a ${((_e = coach.block) === null || _e === void 0 ? void 0 : _e.label) || "unscheduled"} day. ${((_f = coach.block) === null || _f === void 0 ? void 0 : _f.why) || ""}
+  The week's shape: ${(((_g = coach.livePhase) === null || _g === void 0 ? void 0 : _g.week) || []).map((b, i) => `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][i]} ${b}`).join(", ")}
   She can change any of this and you follow it.
 ${coach.calibrating ? `- THIS IS THE CALIBRATION BLOCK. You are NOT designing training yet — there is no month of her data to design from. The block and week shape above are a STARTER TEMPLATE seeded from her situation, NOT something designed from her data. Offer the day\'s kind as a loose, warm suggestion she can take or leave — never as a plan, an expectation, or something "the programme" decided (her instruction, 13 August: keep the suggestions, be honest about where they come from). Your job is to make sure nothing goes unlogged and to explain why each input matters. Today's logging is ${coach.capture.pct}% complete${coach.capture.due.length ? `; still open: ${coach.capture.due.map((r) => r.label).join(", ")}` : ""}.` : ""}
 - What you are already raising with her unprompted (do not contradict these, build on them):
@@ -16319,11 +16386,11 @@ ${Object.keys(coach.dayPlan || {}).length
             : "  * none"}
 - WHAT THE APP HAS LEARNED ABOUT HER (computed from 12 weeks of what actually happened — use this to
   tailor how you approach her, not just what you prescribe):
-  Baseline completion of scheduled days: ${(_g = coach.learned.base) !== null && _g !== void 0 ? _g : "—"}%
-${((_h = coach.learned.motivators) === null || _h === void 0 ? void 0 : _h.length) ? coach.learned.motivators.map((x) => `  * MOVES HER: ${x}`).join("\n") : "  * nothing identified yet"}
-${((_j = coach.learned.brakes) === null || _j === void 0 ? void 0 : _j.length) ? coach.learned.brakes.map((x) => `  * SLOWS HER: ${x}`).join("\n") : ""}
-${((_k = coach.learned.goodWords) === null || _k === void 0 ? void 0 : _k.length) ? `  * words she uses when a session went well: ${coach.learned.goodWords.join(", ")}` : ""}
-${((_l = coach.learned.hardWords) === null || _l === void 0 ? void 0 : _l.length) ? `  * words she uses when it was hard: ${coach.learned.hardWords.join(", ")}` : ""}
+  Baseline completion of scheduled days: ${(_h = coach.learned.base) !== null && _h !== void 0 ? _h : "—"}%
+${((_j = coach.learned.motivators) === null || _j === void 0 ? void 0 : _j.length) ? coach.learned.motivators.map((x) => `  * MOVES HER: ${x}`).join("\n") : "  * nothing identified yet"}
+${((_k = coach.learned.brakes) === null || _k === void 0 ? void 0 : _k.length) ? coach.learned.brakes.map((x) => `  * SLOWS HER: ${x}`).join("\n") : ""}
+${((_l = coach.learned.goodWords) === null || _l === void 0 ? void 0 : _l.length) ? `  * words she uses when a session went well: ${coach.learned.goodWords.join(", ")}` : ""}
+${((_m = coach.learned.hardWords) === null || _m === void 0 ? void 0 : _m.length) ? `  * words she uses when it was hard: ${coach.learned.hardWords.join(", ")}` : ""}
 - MEASURED PATTERNS IN HOW SHE TRAINS:
 ${coach.swaps ? `  * Keeps your prescribed class ${coach.swaps.pct}% of the time${coach.swaps.avoided ? `; swaps out of ${coach.swaps.avoided[0]} most${coach.swaps.chosen ? `, usually for ${coach.swaps.chosen[0]}` : ""}` : ""}` : "  * prescription adherence: not enough data"}
 ${coach.writing ? `  * Writing volume: ${coach.writing.now} entries this fortnight vs ${coach.writing.before} before (${coach.writing.drop > 0 ? "+" : ""}${coach.writing.drop}%)${coach.writing.drop <= -40 ? " — EARLY WARNING, ask how she is" : ""}` : ""}
@@ -16405,8 +16472,8 @@ ${coach.mobScored.length ? coach.mobScored.map((r) => `  * ${r.label}: ${r.now}$
 - HOW SHE SAYS SHE IS TODAY: ${coach.moodToday ? `she tapped "${coach.moodToday}"${coach.moodToday !== "good" ? " — this outranks everything below. Start with how she is, not with training. Do not open with a number or a plan." : ""}` : "not said"}
 - ADHERENCE STATE (this outranks any training consideration — the goal is that she is still training in a year):
   Lapse state: ${coach.lapseState}${coach.daysSinceSession !== null ? `, ${coach.daysSinceSession} days since her last session` : ""}. Weeks training: ${coach.weeksTraining}.
-  Habit strength ${(_m = coach.habitStrength) !== null && _m !== void 0 ? _m : "—"}%, same-days consistency ${(_o = coach.cueConsistency) !== null && _o !== void 0 ? _o : "—"}%, ${coach.barrierWins} sessions completed despite a barrier in 28 days.
-  How training FEELS during sessions: ${(_p = coach.affectMean) !== null && _p !== void 0 ? _p : "not yet rated"}; how she feels afterwards: ${(_q = coach.afterMean) !== null && _q !== void 0 ? _q : "not rated"}${((_r = coach.affectByClass) === null || _r === void 0 ? void 0 : _r.length) ? ` (best: ${coach.affectByClass[0].name})` : ""}.
+  Habit strength ${(_o = coach.habitStrength) !== null && _o !== void 0 ? _o : "—"}%, same-days consistency ${(_p = coach.cueConsistency) !== null && _p !== void 0 ? _p : "—"}%, ${coach.barrierWins} sessions completed despite a barrier in 28 days.
+  How training FEELS during sessions: ${(_q = coach.affectMean) !== null && _q !== void 0 ? _q : "not yet rated"}; how she feels afterwards: ${(_r = coach.afterMean) !== null && _r !== void 0 ? _r : "not rated"}${((_s = coach.affectByClass) === null || _s === void 0 ? void 0 : _s.length) ? ` (best: ${coach.affectByClass[0].name})` : ""}.
   If she has been away, respond with self-compassion and one easy re-entry — never guilt, never catch-up plans, never an accounting of what was missed. The evidence is unambiguous that shame after a lapse predicts dropout and self-kindness predicts return.
 - Sets by body region this week (target 6+ each): ${coach.bodyRows.map((r) => `${r.label} ${r.sets}`).join(", ")}
 - Last monthly benchmark: ${monthlyLine}
@@ -16554,7 +16621,7 @@ ${(() => {
   timer, a place to write what happened, how it is done, and a video. Say the exercises plainly,
   one per line with its dose, and tell her the button is there. Her instruction, 13 August:
   "I want to input time and reps and kilograms like when I do on the page of my body."
-${((_s = data.settings) === null || _s === void 0 ? void 0 : _s.webSearch) !== false ? `- YOU CAN SEARCH THE INTERNET. Her instruction, 13 August: "I want to give the coach access to
+${((_t = data.settings) === null || _t === void 0 ? void 0 : _t.webSearch) !== false ? `- YOU CAN SEARCH THE INTERNET. Her instruction, 13 August: "I want to give the coach access to
   the Internet so it can get me video links and anything I want." Use it when a real answer needs
   something you do not hold — a demonstration video for an exercise, what the current evidence says,
   a protocol, a product she asks about. Give her the actual link, not a description of one. Do not
@@ -16662,7 +16729,7 @@ ${(() => {
   unaffected either way. Never make her feel accounted for over a test.
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
-- Overall standing against her own bests: ${(_t = coach.overall) !== null && _t !== void 0 ? _t : "not enough data"}/10
+- Overall standing against her own bests: ${(_u = coach.overall) !== null && _u !== void 0 ? _u : "not enough data"}/10
 - HER JOURNAL — EVERY ENTRY SHE HAS EVER WRITTEN, oldest first. ${(() => {
             /* HER INSTRUCTION, 12 August: "I want the entries of the day to be all of
                them. All of the entries of the day should reach the coach. Don't limit
@@ -16809,8 +16876,17 @@ Two or three sentences unless she asks for more.`;
        before the model is asked as well as after. Rule 15: nothing she says is
        lost. It used to be saved only on success, inside the try — so a failed
        call, a missing key or a thrown prompt took her words with it. */
-    const persist = (all) => setData((d) => {
+    const persist = (all, spent) => setData((d) => {
+        /* Build 143: what this conversation has cost, accumulated across its
+           messages rather than overwritten, so the number on a conversation is
+           the whole conversation and not its last exchange. */
+        const prev = (d.chats || []).find((c) => c.id === sessionId.current) || {};
         const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
+            tokensIn: (prev.tokensIn || 0) + ((spent && spent.in) || 0),
+            tokensOut: (prev.tokensOut || 0) + ((spent && spent.out) || 0),
+            cost: (prev.cost || 0) + (spent
+                ? Math.round((((spent.in || 0) / 1e6 * PRICE_IN) + ((spent.out || 0) / 1e6 * PRICE_OUT)) * 100)
+                : 0),
             messages: all.map((m) => ({ role: m.role, text: m.content,
                 ...(m.image ? { image: m.image } : {}) })) };
         /* Everything said today lives in ONE entry. The other same-day entries
@@ -16854,15 +16930,21 @@ Two or three sentences unless she asks for more.`;
                         ...(m.content ? [{ type: "text", text: m.content }] : [])
                     ] }
                 : { role: m.role, content: m.content });
+            /* Build 143, her question of 14 August: "is this the amount I actually
+               used by the app so far?" The app could not answer, because this call
+               never asked. It does now, and what it costs is written on the
+               conversation and totalled in Settings. */
+            const spend = { in: 0, out: 0 };
             const reply = await askModel({
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
                 system: context(),
                 messages: next.map(blockify),
                 search: ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.webSearch) !== false,
+                usage: spend,
             }) || "I couldn't get a response just then. Try again in a moment.";
             const done = [...next, { role: "assistant", content: reply }];
             setMsgs(done);
-            persist(done);
+            persist(done, spend);
         }
         catch (e) {
             setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
@@ -16882,7 +16964,8 @@ Two or three sentences unless she asks for more.`;
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.ochre }, "Talk to your coach"),
         React.createElement("h1", { className: "disp", style: { fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" } }, "Ask me anything"),
-        React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 } }, "I can see your week, your battery and the call I made. Argue with it if you think I'm wrong."),
+        React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 } }, "I can see your battery, the call I made, and every day you logged in the window you set below. Argue with any of it if you think I'm wrong."),
+        React.createElement(ScopePicker, { scope: ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.chatScope) || CHAT_SCOPE_DEFAULT, onPick: (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } })) }),
         earlier.length > 0 && (React.createElement("div", { style: { marginBottom: 14 } },
             React.createElement("button", { onClick: () => setShowOld((v) => !v), className: "tap", style: {
                     border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
@@ -17725,7 +17808,7 @@ function CoachApp() {
                 tab === "plan" && React.createElement(Workouts, { data: data, setData: setData, coach: coach }),
                 tab === "body" && React.createElement(BodyWork, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
                 tab === "progress" && React.createElement(Progress, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
-                tab === "settings" && React.createElement(Settings, { data: data, setData: setData, setSheet: setSheet }))),
+                tab === "settings" && React.createElement(Settings, { data: data, setData: setData, coach: coach, setSheet: setSheet }))),
             ready && canGoBack && (React.createElement("div", { style: { marginTop: 14 } },
                 React.createElement(Btn, { kind: "ghost", onClick: goBack },
                     "\u2190 Back to ", (_b = TABS.find(([id]) => id === stack[stack.length - 2])) === null || _b === void 0 ? void 0 :
