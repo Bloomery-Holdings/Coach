@@ -152,6 +152,14 @@ const FORMULA_DEFAULTS = {
   /* Body composition */
   muscleGainRate: 0.0075,  /* realistic muscle gain, fraction of lean mass per year   */
 
+  /* ---- WHAT IT COSTS TO TALK TO HER COACH -------------------------------
+     Dollars per million tokens on her own API key. Facts, not judgements —
+     but facts that change, so they are hers to correct rather than welded in. */
+  priceIn: 3,              /* what she pays for a million words read           */
+  priceOut: 15,            /* ...and a million written back                    */
+  priceCacheWrite: 3.75,   /* putting a block on the desk: 1.25x               */
+  priceCacheRead: 0.3,     /* glancing at one already there: 0.1x              */
+
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
      Her decision, 14 August. Every class in her library carries a cost from
      1 to 5. These say which of them today is allowed to reach for. This is
@@ -2391,7 +2399,7 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock, scope }) => {
   /* what it actually cost, kept on the record so she can watch it over time */
   const spend = {
     tokensIn: usage.in || 0, tokensOut: usage.out || 0,
-    cost: Math.round(((usage.in || 0) / 1e6 * PRICE_IN + (usage.out || 0) / 1e6 * PRICE_OUT) * 100),
+    cost: centsFor(usage, formulas(data && data.settings)),
   };
   /* the four things she asked every read to end with */
   const lines = (x) => (Array.isArray(x) ? x.map((s) => String(s || "").trim()).filter(Boolean) : []);
@@ -3403,6 +3411,43 @@ const insideClaude = () => typeof window !== "undefined" && !!window.storage?.ge
    So the call reports what it actually spent. `usage` is an optional object
    the caller passes in and reads afterwards — nothing else changes. */
 const PRICE_IN = 3, PRICE_OUT = 15;   /* dollars per million tokens */
+/* HER QUESTION, 14 August, holding a bank text: "the data is not that much,
+   why does it cost that much!!!!"
+
+   Because every message re-sent her whole file at full price. Nothing was
+   cached — there was not one cache_control in this file — so the same twelve
+   thousand words were read from scratch, from the beginning, every single time
+   she said anything.
+
+   Her own rule 15 already had the answer: "If cost becomes the reason to trim,
+   the answer is caching, not trimming." Anthropic charges 1.25x to put a block
+   on the desk and 0.1x to glance at it again, and a read refreshes the five
+   minutes — so a back-and-forth stays cached for as long as it lasts. Nothing
+   is removed from what the coach can see. It stops paying full price to have
+   the same thing read to it over and over. */
+const PRICE_CACHE_WRITE = PRICE_IN * 1.25;
+const PRICE_CACHE_READ = PRICE_IN * 0.1;
+/* Every number in this app is hers (rule 12), and a price is a fact that can
+   change under her. The four live in FORMULA_DEFAULTS too, and the cost the
+   app reports reads them from her settings. */
+const centsFor = (u, F) => {
+  const f = F || FORMULA_DEFAULTS;
+  const pin = f.priceIn ?? PRICE_IN, pout = f.priceOut ?? PRICE_OUT;
+  return Math.round(((
+      (u.in || 0) / 1e6 * pin
+    + (u.out || 0) / 1e6 * pout
+    + (u.cacheWrite || 0) / 1e6 * (f.priceCacheWrite ?? PRICE_CACHE_WRITE)
+    + (u.cacheRead || 0) / 1e6 * (f.priceCacheRead ?? PRICE_CACHE_READ)
+  ) * 100));
+};
+/* What the cache SAVED, so the number is visible rather than asserted: what
+   those cached words would have cost at full price, less what they did cost. */
+const centsSaved = (u, F) => {
+  const f = F || FORMULA_DEFAULTS;
+  const pin = f.priceIn ?? PRICE_IN;
+  const read = (u.cacheRead || 0) / 1e6;
+  return Math.round((read * pin - read * (f.priceCacheRead ?? PRICE_CACHE_READ)) * 100);
+};
 /* HER QUESTION, 13 August: "Why does the coach have no access to the
    Internet?" Nothing was stopping it — the app simply never asked. Every
    call went out as plain text with no tools, so the model had no way to
@@ -3421,9 +3466,12 @@ const spendSince = (data, from) => {
   const reads = (data.reviews || []).filter((r) => r && (!from || r.date >= from));
   const sumC = chats.reduce((a, c) => a + (Number(c.cost) || 0), 0);
   const sumR = reads.reduce((a, r) => a + (Number(r.cost) || 0), 0);
+  /* what caching took off the bill, added up from what each conversation
+     recorded — never asserted, and zero until there is something to show */
+  const saved = chats.reduce((a, c) => a + (Number(c.saved) || 0), 0);
   const unknown = chats.filter((c) => c.cost === undefined).length;
   return {
-    chatCents: sumC, readCents: sumR, cents: sumC + sumR,
+    chatCents: sumC, readCents: sumR, cents: sumC + sumR, saved,
     chats: chats.length, reads: reads.length, unknown,
     tokensIn: chats.reduce((a, c) => a + (Number(c.tokensIn) || 0), 0)
             + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0),
@@ -3433,7 +3481,7 @@ const spendSince = (data, from) => {
 };
 const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
 
-const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false }) => {
+const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false }) => {
   const headers = { "Content-Type": "application/json" };
   if (!insideClaude()) {
     if (!apiKey) throw new Error("no-key");
@@ -3441,7 +3489,15 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
     headers["anthropic-version"] = "2023-06-01";
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   }
-  const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages };
+  /* CACHED, when the caller says this system prompt will be sent again.
+     Everything she has told the app is in here and none of it changes between
+     one message and the next, which is exactly what a cache is for. A one-shot
+     call (a read, a set of lists) is NOT cached: writing the cache costs 1.25x
+     and nothing would ever read it back. */
+  const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
+    system: cache
+      ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+      : system };
   if (search) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers,
@@ -3450,8 +3506,14 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
   if (!res.ok) throw new Error("request-failed");
   const data = await res.json();
   if (usage && data && data.usage) {
+    /* input_tokens EXCLUDES anything served from or written to the cache, so
+       all three are kept separately — otherwise the app would report a cached
+       conversation as nearly free when the first message still paid to build
+       it, or as full price when it did not. */
     usage.in = Number(data.usage.input_tokens) || 0;
     usage.out = Number(data.usage.output_tokens) || 0;
+    usage.cacheWrite = Number(data.usage.cache_creation_input_tokens) || 0;
+    usage.cacheRead = Number(data.usage.cache_read_input_tokens) || 0;
   }
   const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
   /* Where it looked, so a claim can always be followed back to its source
@@ -3510,7 +3572,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 143";
+const BUILD = "14 August 2026 · 144";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -13856,6 +13918,13 @@ function Settings({ data, setData, coach, setSheet }) {
                     ? "Nothing recorded yet."
                     : `${money(all.chatCents)} talking across ${all.chats} conversation${all.chats === 1 ? "" : "s"}, ${money(all.readCents)} on ${all.reads} read${all.reads === 1 ? "" : "s"}. ${all.tokensIn.toLocaleString()} in, ${all.tokensOut.toLocaleString()} out.`}
                 </div>
+                {all.saved > 0 && (
+                  <div style={{ fontSize: 11.5, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
+                    {money(all.saved)} of that was saved by not re-reading the same thing to your
+                    coach twice. It sees exactly what it saw before — it just stops paying full
+                    price for the parts that had not changed.
+                  </div>
+                )}
                 {all.unknown > 0 && (
                   <div style={{ fontSize: 11.5, color: C.ochre, lineHeight: 1.5, marginTop: 8 }}>
                     {all.unknown} conversation{all.unknown === 1 ? "" : "s"} from before this was
@@ -14631,6 +14700,12 @@ function Formulas({ data, setData, close }) {
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
+
+    { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
+      rows: [["priceIn", "A million words read"],
+             ["priceOut", "A million written back"],
+             ["priceCacheWrite", "A million put in front of it"],
+             ["priceCacheRead", "A million looked at again"]] },
 
     { title: "How hard a class today may be", note: "Every class in your library carries a cost from 1 to 5. These decide which of them each recovery band is allowed to reach for. This is the only group that changes what you are actually asked to do rather than what you are told about it — so a wrong number here hands you the wrong class rather than the wrong word.",
       rows: [["classCostRest", "Most a rest-band day may pick"],
@@ -19424,9 +19499,10 @@ Two or three sentences unless she asks for more.`;
     const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
       tokensIn: (prev.tokensIn || 0) + ((spent && spent.in) || 0),
       tokensOut: (prev.tokensOut || 0) + ((spent && spent.out) || 0),
-      cost: (prev.cost || 0) + (spent
-        ? Math.round((((spent.in || 0) / 1e6 * PRICE_IN) + ((spent.out || 0) / 1e6 * PRICE_OUT)) * 100)
-        : 0),
+      cost: (prev.cost || 0) + (spent ? centsFor(spent, formulas(d.settings)) : 0),
+      cacheWrite: (prev.cacheWrite || 0) + ((spent && spent.cacheWrite) || 0),
+      cacheRead: (prev.cacheRead || 0) + ((spent && spent.cacheRead) || 0),
+      saved: (prev.saved || 0) + (spent ? centsSaved(spent, formulas(d.settings)) : 0),
       messages: all.map((m) => ({ role: m.role, text: m.content,
         ...(m.image ? { image: m.image } : {}) })) };
     /* Everything said today lives in ONE entry. The other same-day entries
@@ -19466,8 +19542,11 @@ Two or three sentences unless she asks for more.`;
          used by the app so far?" The app could not answer, because this call
          never asked. It does now, and what it costs is written on the
          conversation and totalled in Settings. */
-      const spend = { in: 0, out: 0 };
+      const spend = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
       const reply = await askModel({
+        /* the only call worth caching: the same system prompt goes out again
+           with every message of the conversation */
+        cache: true,
         apiKey: data.settings?.apiKey,
         system: context(),
         messages: next.map(blockify),
