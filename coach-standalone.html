@@ -241,6 +241,18 @@ const FORMULA_DEFAULTS = {
     illSpo2Floor: 95, /* blood oxygen under this is flagged                      */
     /* Body composition */
     muscleGainRate: 0.0075, /* realistic muscle gain, fraction of lean mass per year   */
+    /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
+       Her decision, 14 August. Every class in her library carries a cost from
+       1 to 5. These say which of them today is allowed to reach for. This is
+       the one set that changes what she is ACTUALLY ASKED TO DO rather than
+       what she is told about it, so a wrong number here misfires differently
+       from the rest - it does not mislabel a day, it hands her the wrong class. */
+    classCostRest: 1, /* most a rest-band day may pick                           */
+    classCostEasy: 3, /* most an easy day may pick                               */
+    classCostReactive: 4, /* body work still reactive: nothing at or above this      */
+    classCostFallback: 2, /* the last-resort pool, when everything else ruled out    */
+    addonCostRest: 1, /* most an add-on may cost on a rest-band day              */
+    addonCostMax: 2, /* most an add-on may ever cost                            */
     /* WHOOP drifts */
     rhrDriftUp: 3, /* bpm above the month: flagged                            */
     rhrDriftDown: -2, /* bpm below the month: a good sign                        */
@@ -2631,7 +2643,7 @@ const whyTree = (kind) => WHY_TREES[kind] || WHY_TREES.skip;
 const whyReason = (kind, id) => whyTree(kind).reasons.find((r) => r.id === id) || null;
 const whyLabel = (kind, id) => { var _a; return ((_a = whyReason(kind, id)) === null || _a === void 0 ? void 0 : _a.label) || id; };
 const whyTag = (kind, id) => { var _a; return ((_a = whyReason(kind, id)) === null || _a === void 0 ? void 0 : _a.tag) || "other"; };
-const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork, domsCaution = null, dislikes = [], measuredCost = {} }) => {
+const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork, domsCaution = null, dislikes = [], measuredCost = {}, F = FORMULA_DEFAULTS }) => {
     var _a, _b;
     /* Her measured class cost outranks my written estimate once it exists
        (review card 28). Everything below reads costOf instead of the raw field. */
@@ -2676,10 +2688,10 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
         if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
             return false;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-            return costOf(w) <= 1;
+            return costOf(w) <= F.classCostRest;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy")
-            return costOf(w) <= 3;
-        if (reactive && costOf(w) >= 4)
+            return costOf(w) <= F.classCostEasy;
+        if (reactive && costOf(w) >= F.classCostReactive)
             return false;
         return true;
     });
@@ -2694,14 +2706,14 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
             if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
                 return false;
             if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-                return costOf(w) <= 1;
+                return costOf(w) <= F.classCostRest;
             if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "easy")
-                return costOf(w) <= 3;
+                return costOf(w) <= F.classCostEasy;
             return true;
         });
     }
     if (!pool.length)
-        pool = library.filter((w) => !w.addon && costOf(w) <= 2);
+        pool = library.filter((w) => !w.addon && costOf(w) <= F.classCostFallback);
     if (!pool.length)
         return null;
     const score = (w) => {
@@ -2798,8 +2810,8 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
         if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high")
             return false;
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest")
-            return costOf(w) <= 1;
-        return costOf(w) <= 2;
+            return costOf(w) <= F.addonCostRest;
+        return costOf(w) <= F.addonCostMax;
     });
     let addon = null;
     if (addons.length && ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "green" || (recovery === null || recovery === void 0 ? void 0 : recovery.key) === "steady" || !recovery)) {
@@ -3641,7 +3653,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 140";
+const BUILD = "14 August 2026 · 141";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -6358,7 +6370,7 @@ function useCoach(data, day, clock) {
             /* An open entry tilts the choice; a fresh one (last 7 days) is what
                makes it a freeze. Nothing is ruled out at open-but-quiet — it is a
                lean, not a bar. All of it from what she told the coach. */
-            shoulderFrozen, shoulderInjury: shoulderGuard, shoulderSore,
+            shoulderFrozen, shoulderInjury: shoulderGuard, shoulderSore, F: FX,
         });
         /* Nothing is offered in the calibration block. Everything downstream that
            asks "what did the coach say today" gets null, and answers honestly. */
@@ -13097,6 +13109,13 @@ function Formulas({ data, setData, close }) {
                 ["minBaselineReadings", "Readings before a median is trusted"]] },
         { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
             rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
+        { title: "How hard a class today may be", note: "Every class in your library carries a cost from 1 to 5. These decide which of them each recovery band is allowed to reach for. This is the only group that changes what you are actually asked to do rather than what you are told about it — so a wrong number here hands you the wrong class rather than the wrong word.",
+            rows: [["classCostRest", "Most a rest-band day may pick"],
+                ["classCostEasy", "Most an easy day may pick"],
+                ["classCostReactive", "Body work still reactive: nothing at or above"],
+                ["classCostFallback", "The last-resort pool, when everything else is ruled out"],
+                ["addonCostRest", "Most an add-on may cost on a rest-band day"],
+                ["addonCostMax", "Most an add-on may ever cost"]] },
     ];
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.signal }, "Formulas"),
