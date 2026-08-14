@@ -3502,6 +3502,70 @@ const spendSince = (data, from) => {
 };
 const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
 
+/* WHICH CALCULATIONS THE COACH IS TOLD ABOUT.
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 14 August, after the ranked analysis: "cut it down to twenty
+   and drop the unread whoop fields."
+
+   Forty-one went to the coach in every message. Traced through the code, NINE
+   OF THEM DRIVE NOTHING AT ALL — they appear in none of the four places the app
+   decides anything (picking a class, designing a month, flagging, or raising it
+   with her). Two of them read the SAME variable: fitness base and progression
+   rate are one number printed twice. One of them — muscle banked — projects a
+   gain the evidence says may not be available to a post-menopausal woman at all.
+
+   NOTHING IS DELETED (rule 20). Every calculation still runs, still shows on her
+   screen, still keeps its history. This is only what the coach is TOLD. A
+   calculation switched off here can be switched back on, and the list is hers to
+   change (rules 12 and 13). */
+const COACH_METRICS = [
+  /* the fifteen that earn it outright */
+  "consistency",   /* the only one touching all four decisions; rule 26's proxy */
+  "readiness",     /* picks today's class                                       */
+  "goals",         /* drives nothing, outranks everything (rule 9)              */
+  "realchange",    /* the only one separating progress from noise               */
+  "volume",        /* sets per region — the whole point of the app at 51        */
+  "coverage",      /* which regions were reached at all                         */
+  "mobility",      /* six of her goals are mobility goals; picks her drills     */
+  "asymmetry",     /* her shoulder, and her left side                           */
+  "illness",       /* safety. three cheap fields, one clear answer              */
+  "feels",         /* in-the-room affect: the strongest adherence predictor     */
+  "barriers",      /* evidence a bad day need not cost the session              */
+  "habit",         /* rule 26 on a longer clock                                 */
+  "doms",          /* one of only two things besides recovery that PICK         */
+  "classcost",     /* measured from her own mornings, not from my guesses       */
+  "balance",       /* her only injury-risk signal — see the caveat below        */
+  /* and five more that genuinely change what the coach does */
+  "bodywork",      /* reactive tissue changes what tomorrow can be              */
+  "swaps",         /* the only measure of whether she accepts the pick          */
+  "writing",       /* writing less is the earliest sign of a hard stretch       */
+  "variety",       /* the check that her deliberate rotation is rotating        */
+  "survival",      /* weeks past the median dropout point                       */
+];
+/* CAVEAT ON "balance": the acute:chronic workload ratio has been substantially
+   criticised in the sports-science literature. It is kept because it is the only
+   injury-risk signal the app has, not because it is settled. */
+
+/* WHOOP FIELDS THAT NOTHING READS.
+   Every field is imported and kept — her data is permanent (rule 20) and the
+   import is free. These eight simply stop being SENT to the coach, because
+   nothing in the app reads them and since build 142 they went across every
+   message as raw unlabelled figures. Rule 18: a collected-and-unused field is
+   either wired in or dropped. */
+const WHOOP_UNREAD = ["light", "awake", "cycles", "calories", "maxHr", "inBed", "sleepPerf", "sleepEff", "disturbances"];
+
+/* What the coach is told about, resolved: her list if she has set one, plus any
+   headline on her landing page — a number she can see must never be one her
+   coach has not been told about. */
+const coachMetricIds = (settings) => {
+  const hers = settings && Array.isArray(settings.coachMetrics) ? settings.coachMetrics : null;
+  return hers && hers.length ? hers : COACH_METRICS;
+};
+const metricsForCoach = (all, settings) => {
+  const want = coachMetricIds(settings);
+  return (all || []).filter((m) => m && (m.key || want.includes(m.id)));
+};
+
 /* SHOULD THIS MESSAGE BE CACHED AT ALL?
    ---------------------------------------------------------------------------
    HER CORRECTION, 14 August: "The cache assumes that I make all my messages
@@ -3680,7 +3744,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 147";
+const BUILD = "14 August 2026 · 148";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -14012,6 +14076,9 @@ function Settings({ data, setData, coach, setSheet }) {
         <div style={{ marginTop: 8 }}>
           <Btn kind="ghost" onClick={() => setSheet({ kind: "memory" })}>What your coach remembers</Btn>
         </div>
+        <div style={{ marginTop: 8 }}>
+          <Btn kind="ghost" onClick={() => setSheet({ kind: "coachmetrics" })}>Which numbers your coach carries</Btn>
+        </div>
         {/* NEXT MONTH'S PROGRAMME. Moved here from Today on 14 August, her
             instruction, because this is the sheet with the fewest fields. */}
         <div style={{ marginTop: 14 }}>
@@ -14717,6 +14784,66 @@ const wakeDay = (row) => {
 /* ---- the read-out: what moved, why, and what to do about it -------------- */
 
 /* ---- every number the engine uses, exposed and editable ------------------ */
+/* WHICH NUMBERS YOUR COACH CARRIES.
+   Rule 12 and rule 13: the list is hers, and it can grow or shrink whenever she
+   likes. Nothing here deletes a calculation — every one still runs, still shows
+   on her screen, still keeps its history. This is only what the coach is told. */
+function CoachMetricsSheet({ data, setData, coach, close }) {
+  const all = coach.allMetrics || [];
+  const chosen = coachMetricIds(data.settings);
+  const on = (id) => chosen.includes(id);
+  const toggle = (id) => setData((d) => {
+    const cur = coachMetricIds(d.settings);
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
+    return { ...d, settings: { ...(d.settings || {}), coachMetrics: next } };
+  });
+  const reset = () => setData((d) => ({ ...d, settings: { ...(d.settings || {}), coachMetrics: null } }));
+  const groups = ["day", "week", "month", "quarter", "year"];
+  return (
+    <div>
+      <Eyebrow color={C.signal}>What your coach carries</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 25, fontWeight: 400, lineHeight: 1.12, margin: "0 0 8px" }}>
+        {chosen.length} of {all.length} numbers
+      </h1>
+      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 18 }}>
+        Every calculation still runs and still shows on your screen. This is only which of them
+        travel with every message to your coach. Anything on your landing page always travels,
+        whether or not it is ticked — a number you can see should never be one your coach has not
+        been told about.
+      </div>
+      {groups.map((g) => {
+        const rows = all.filter((m) => m.group === g);
+        if (!rows.length) return null;
+        return (
+          <Card key={g} style={{ marginBottom: 12 }}>
+            <Eyebrow>{g}</Eyebrow>
+            {rows.map((m) => (
+              <button key={m.id} onClick={() => toggle(m.id)} className="tap"
+                aria-label={`${on(m.id) || m.key ? "stop carrying" : "carry"} ${m.label}`}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%",
+                  padding: "10px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
+                  background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                  border: `1.5px solid ${on(m.id) || m.key ? C.ochre : C.line}`,
+                  background: on(m.id) || m.key ? C.ochre : "transparent" }} />
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ fontSize: 13.5, color: C.ink }}>{m.label}</span>
+                  {m.key && <span style={{ fontSize: 11, color: C.muted }}> · on your landing page, always carried</span>}
+                  <span style={{ display: "block", fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                    {m.display === "—" ? `no value yet — ${String(m.need || "").slice(0, 70)}` : `${m.display} · ${m.sub}`}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </Card>
+        );
+      })}
+      <Btn kind="quiet" onClick={reset}>Back to the twenty I suggested</Btn>
+      <div style={{ marginTop: 12 }}><Btn kind="quiet" onClick={close}>Back</Btn></div>
+    </div>
+  );
+}
+
 /* ============================================================================
    WHAT YOUR COACH REMEMBERS
    ---------------------------------------------------------------------------
@@ -19195,7 +19322,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         wokeAt: "woke at", sleep: "hours slept",
         symptoms: "she said she was feeling" };
       const am = [
-        ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
+        /* Build 148, her instruction: "drop the unread whoop fields." Nine of
+           them are imported, kept, shown in the WHOOP log — and read by nothing
+           in the app. Three are read by nothing at all. They are still on her
+           device; they simply stop being posted to the coach every message. */
+        ...Object.keys(mg).filter((k) => !WHOOP_UNREAD.includes(k))
+          .filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
           .map((k) => `${NICE[k] || k} ${mg[k]}`),
         (l && l.sleep && !mg.sleep) ? `slept ${l.sleep}h — she typed this herself` : null,
         (l && l.voidedSession) ? `she set a session aside on this day when she confirmed it was rest: ${l.voidedSession.type || "session"}${l.voidedSession.minutes ? ` ${l.voidedSession.minutes}min` : ""} — it is kept, not deleted` : null,
@@ -19550,10 +19682,20 @@ ${data.settings?.webSearch !== false ? `- YOU CAN SEARCH THE INTERNET. Her instr
   them hers rather than the app's:
 ${Object.keys(data.notes || {}).sort().filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text)
   .map((k) => `  * ${k}: "${data.notes[k].text}"`).join("\n") || "  none kept"}
-- EVERY CALCULATION THE APP RUNS. Explain any of these in plain English on request, never in
-  jargon, and always tie it back to HER training and what she should do next. Read them together
-  rather than one at a time — the interesting answers come from combining three or four of them.
-${coach.allMetrics.map((v) => {
+- THE CALCULATIONS SHE HAS ASKED YOU TO WATCH. Explain any of these in plain English on request,
+  never in jargon, and always tie it back to HER training and what she should do next. Read them
+  together rather than one at a time — the interesting answers come from combining three or four.
+${(() => {
+  const shown = metricsForCoach(coach.allMetrics, data.settings);
+  const hidden = (coach.allMetrics || []).length - shown.length;
+  return hidden > 0
+    ? `  (The app runs ${(coach.allMetrics || []).length} calculations. She has chosen ${shown.length} for you to
+  watch — the rest still run and are still on her screen, she has simply not asked you to carry them.
+  If she asks about one that is not here, say plainly that you do not have it in front of you and
+  that she can switch it on in Settings, rather than guessing at it.)`
+    : "";
+})()}
+${metricsForCoach(coach.allMetrics, data.settings).map((v) => {
   /* HOW EACH ONE IS WORKED OUT used to go in every message — 1,667 tokens of
      arithmetic lesson, identical every time, which the coach never acts on.
      That text was written for HER, for the card under the "i". It goes now
@@ -21068,6 +21210,8 @@ function CoachApp() {
             /* the goals card is on Today behind a folded row; it needed a door
                of its own so anything that names a goal can open it */
             <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} />
+          ) : sheet.kind === "coachmetrics" ? (
+            <CoachMetricsSheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "memory" ? (
             <MemorySheet data={data} setData={setData} close={() => setSheet(null)} />
           ) : sheet.kind === "profile" ? (
