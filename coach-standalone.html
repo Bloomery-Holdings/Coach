@@ -3526,7 +3526,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "13 August 2026 · 138";
+const BUILD = "13 August 2026 · 139";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -6861,7 +6861,6 @@ function useCoach(data, day, clock) {
            time and is no longer dropped, and maximal scatter reads as null rather
            than as "perfectly regular". */
         const clockOf = (d, key) => {
-            var _a;
             const mg = (morning === null || morning === void 0 ? void 0 : morning[d]) || {};
             const direct = Number(mg[key]);
             if (!isNaN(direct) && mg[key] !== "" && mg[key] !== undefined && mg[key] !== null)
@@ -6871,12 +6870,15 @@ function useCoach(data, day, clock) {
                 if (m)
                     return (Number(m[1]) % 24) * 60 + (Number(m[2] || 0) % 60);
             }
-            if (key === "bedAt") {
-                const wake = clockOf(d, "wakeAt");
-                const hrs = Number((_a = logs[d]) === null || _a === void 0 ? void 0 : _a.sleep) || (Number(mg.asleep) ? Number(mg.asleep) / 60 : null);
-                if (wake !== null && hrs)
-                    return ((wake - Math.round(hrs * 60)) % 1440 + 1440) % 1440;
-            }
+            /* HER CORRECTION, 13 August: this used to derive a bedtime as wake
+               time minus hours slept. That is wrong. The hours she logs are hours
+               ASLEEP, the same figure WHOOP reports — not hours in bed. The gap
+               between them is how long she took to fall asleep plus every waking
+               in the night, and it is different every night. The bedtime that came
+               out was never a real time, and sleep regularity was then measuring
+               how consistent a fiction was.
+               A bedtime now exists only if WHOOP actually recorded one (rule 23:
+               never invent a plausible number). */
             return null;
         };
         const spreadOf = (key) => {
@@ -6898,8 +6900,18 @@ function useCoach(data, day, clock) {
             return Math.round(Math.sqrt(-2 * Math.log(R)) * (1440 / (2 * Math.PI))); /* minutes */
         };
         const bedSpread = spreadOf("bedAt"), wakeSpread = spreadOf("wakeAt");
+        /* HER CORRECTION, 13 August: with no honest bedtime, this is her wake
+           time alone unless a WHOOP import brought a real bed time. Both are
+           worth measuring — wake time is the anchor the research leans on — but
+           the card must say which one it is looking at rather than implying it
+           has both. */
         const timingSpread = bedSpread !== null && wakeSpread !== null
-            ? Math.round((bedSpread + wakeSpread) / 2) : null;
+            ? Math.round((bedSpread + wakeSpread) / 2)
+            : wakeSpread !== null ? wakeSpread
+                : bedSpread !== null ? bedSpread : null;
+        const timingBasis = bedSpread !== null && wakeSpread !== null ? "bed and wake times"
+            : wakeSpread !== null ? "your wake time"
+                : bedSpread !== null ? "your bed time" : null;
         /* adherence over quarters */
         /* `weeksSinceStart` and `quarterHit` stood here. The first contained
            a comparison that could never be false, and neither value was ever
@@ -7353,15 +7365,15 @@ function useCoach(data, day, clock) {
                 display: timingSpread === null ? (slpSD === null ? "—" : `${Math.round(slpSD / 60 * 10) / 10}h`)
                     : `${Math.round(timingSpread / 6) / 10}h`,
                 sub: timingSpread === null ? (slpSD === null ? "needs WHOOP history" : "duration only — reimport for timing")
-                    : timingSpread < 45 ? "very regular" : timingSpread < 75 ? "reasonable" : "scattered",
+                    : `${timingSpread < 45 ? "very regular" : timingSpread < 75 ? "reasonable" : "scattered"} · ${timingBasis}`,
                 color: timingSpread === null ? C.muted
                     : timingSpread < 45 ? C.moss : timingSpread < 75 ? C.ink : C.ochre,
-                plain: "How much your bedtime and wake time drift from night to night.",
-                how: "Circular spread of your sleep-onset and wake times across 28 days, averaged. Circular so that 23:50 and 00:10 count as twenty minutes apart, not twenty-three hours.",
-                meaning: `How long you sleep matters less than whether you sleep it at the same time. Across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night. Pulling that under an hour is worth more than an extra session.` : "Once your WHOOP history is in, this says how much your own timing drifts."}`,
+                plain: "How much the times you sleep and wake drift from night to night.",
+                how: "Circular spread across 28 days of whatever real times exist: the wake time you type each morning, and your sleep-onset time when a WHOOP import has one. Circular so that 23:50 and 00:10 count as twenty minutes apart, not twenty-three hours. HER CORRECTION, 13 August: a bedtime is never worked out from your wake time minus your hours slept — those hours are hours ASLEEP, not hours in bed, so that subtraction would invent a time you were never in bed at.",
+                meaning: `How long you sleep matters less than whether you sleep it at the same time. Across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Measured on ${timingBasis}, your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night. Pulling that under an hour is worth more than an extra session.` : "Once your WHOOP history is in, this says how much your own timing drifts."}${bedSpread === null ? " Your bed time is deliberately not part of this. HER CORRECTION, 13 August: the hours you log are hours ASLEEP, not hours in bed — so subtracting them from your wake time would invent a bedtime that was never true. Only a WHOOP import carries the real one." : ""}`,
                 need: timingSpread === null
                     ? (Object.values(morning || {}).some((x) => x && (x.asleep !== undefined || x.sleepPerf !== undefined))
-                        ? "Re-import your WHOOP export — the app now keeps bed and wake times, which earlier imports discarded."
+                        ? "Type your wake time each morning and this starts working — or re-import your WHOOP export, which carries a real bed time too."
                         : "Needs your WHOOP export. It carries the bed and wake times this is built from.")
                     : null }),
             M({ group: "day", id: "illness", label: "Early warning", scope: "temperature, breathing, oxygen",
