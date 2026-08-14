@@ -3593,10 +3593,10 @@ const centsFor = (u, F) => {
     var _a, _b, _c, _d;
     const f = F || FORMULA_DEFAULTS;
     const pin = (_a = f.priceIn) !== null && _a !== void 0 ? _a : PRICE_IN, pout = (_b = f.priceOut) !== null && _b !== void 0 ? _b : PRICE_OUT;
-    return Math.round((((u.in || 0) / 1e6 * pin
+    return (((u.in || 0) / 1e6 * pin
         + (u.out || 0) / 1e6 * pout
         + (u.cacheWrite || 0) / 1e6 * ((_c = f.priceCacheWrite) !== null && _c !== void 0 ? _c : PRICE_CACHE_WRITE)
-        + (u.cacheRead || 0) / 1e6 * ((_d = f.priceCacheRead) !== null && _d !== void 0 ? _d : PRICE_CACHE_READ)) * 100));
+        + (u.cacheRead || 0) / 1e6 * ((_d = f.priceCacheRead) !== null && _d !== void 0 ? _d : PRICE_CACHE_READ)) * 100);
 };
 /* What the cache SAVED, so the number is visible rather than asserted: what
    those cached words would have cost at full price, less what they did cost. */
@@ -3605,7 +3605,7 @@ const centsSaved = (u, F) => {
     const f = F || FORMULA_DEFAULTS;
     const pin = (_a = f.priceIn) !== null && _a !== void 0 ? _a : PRICE_IN;
     const read = (u.cacheRead || 0) / 1e6;
-    return Math.round((read * pin - read * ((_b = f.priceCacheRead) !== null && _b !== void 0 ? _b : PRICE_CACHE_READ)) * 100);
+    return (read * pin - read * ((_b = f.priceCacheRead) !== null && _b !== void 0 ? _b : PRICE_CACHE_READ)) * 100;
 };
 /* HER QUESTION, 13 August: "Why does the coach have no access to the
    Internet?" Nothing was stopping it — the app simply never asked. Every
@@ -3745,7 +3745,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 144";
+const BUILD = "14 August 2026 · 145";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -3997,6 +3997,18 @@ const BLANK = {
        deleted (rule 20) — a read that failed is exactly what you want the next
        time one fails, and a month she did not start is still evidence. */
     reviews: [],
+    /* HER RUNNING HISTORY, held on this device (build 145). Her instruction,
+       14 August: "a summary of my history that keeps updating as we go and saved
+       into the app and the coach can access and keeps updating based on anything
+       we discuss instead of sending everything to anthropic every time."
+  
+       "text" is the coach's account of her, folded forward. "hers" is anything
+       she has written or corrected herself, and it OUTRANKS the coach's version
+       wherever they disagree — the same standing her own words already have in
+       the profile. "upto" is the date it has been folded to, so an update only
+       ever has to read what happened since. Every version is kept (rule 20):
+       nothing about her history is overwritten, only added to. */
+    memory: { text: "", hers: "", upto: null, at: null, versions: [] },
 };
 /* ---------------------------------------------------------------------------
    TEXT ADDED TO A SEED AFTER SHE ALREADY HAS THE LIST
@@ -4264,6 +4276,11 @@ async function loadData() {
                 chats: Array.isArray(d.chats) ? d.chats : [],
                 profile: Array.isArray(d.profile) ? d.profile : [],
                 reviews: Array.isArray(d.reviews) ? d.reviews : [],
+                memory: (d.memory && typeof d.memory === "object")
+                    ? { text: String(d.memory.text || ""), hers: String(d.memory.hers || ""),
+                        upto: d.memory.upto || null, at: d.memory.at || null,
+                        versions: Array.isArray(d.memory.versions) ? d.memory.versions : [] }
+                    : { text: "", hers: "", upto: null, at: null, versions: [] },
                 bodywork: Array.isArray(d.bodywork) ? d.bodywork : [],
                 bwlog: d.bwlog && typeof d.bwlog === "object" ? d.bwlog : {},
                 /* An older file has neither — seed them, never wipe them (rule 20). */
@@ -12664,6 +12681,8 @@ function Settings({ data, setData, coach, setSheet }) {
             React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "edit-mobility" }) }, "Edit the mobility battery"),
             React.createElement("div", { style: { marginTop: 8 } },
                 React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "profile" }) }, "What the coach believes about you")),
+            React.createElement("div", { style: { marginTop: 8 } },
+                React.createElement(Btn, { kind: "ghost", onClick: () => setSheet({ kind: "memory" }) }, "What your coach remembers")),
             React.createElement("div", { style: { marginTop: 14 } },
                 React.createElement(ReadCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })),
             React.createElement(Card, { style: { marginTop: 14 } },
@@ -13098,6 +13117,44 @@ const wakeDay = (row) => {
 ------------------------------------------------------------------------ */
 /* ---- the read-out: what moved, why, and what to do about it -------------- */
 /* ---- every number the engine uses, exposed and editable ------------------ */
+/* ============================================================================
+   WHAT YOUR COACH REMEMBERS
+   ---------------------------------------------------------------------------
+   She can read the whole thing, and she can write into it. What she writes is
+   kept separately from what the coach wrote and OUTRANKS it everywhere — in
+   the prompt, and in every fold from here on. Every earlier version is kept
+   (rule 20), so a fold that drops something is recoverable rather than final.
+========================================================================== */
+function MemorySheet({ data, setData, close }) {
+    const m = data.memory || {};
+    const [showOld, setShowOld] = useState(false);
+    const setHers = (v) => setData((d) => ({ ...d, memory: { ...(d.memory || {}), hers: v } }));
+    const versions = (m.versions || []).slice().reverse();
+    return (React.createElement("div", null,
+        React.createElement(Eyebrow, { color: C.signal }, "What your coach remembers"),
+        React.createElement("h1", { className: "disp", style: { fontSize: 25, fontWeight: 400, lineHeight: 1.12, margin: "0 0 8px" } }, "Your history, in its words"),
+        React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 18 } }, "Kept on this device and folded forward after everything you say, so your coach carries the shape of everything older without being sent all of it again. Your own numbers are never replaced by this \u2014 they still go across exactly as you entered them."),
+        React.createElement(Card, { style: { marginBottom: 14 } },
+            React.createElement(Eyebrow, null, "What you told it yourself"),
+            React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "6px 0 10px" } }, "Anything you write here outranks everything the coach worked out on its own, and it is never overwritten by a fold. Correct it, contradict it, or tell it something it has no way of knowing."),
+            React.createElement(Note, { label: "", value: m.hers || "", onChange: setHers, hint: "Whatever you want it to know and never forget." })),
+        React.createElement(Card, { style: { marginBottom: 14 } },
+            React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 } },
+                React.createElement(Eyebrow, null, "What it has written"),
+                React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.muted } }, m.upto ? `up to ${m.upto}` : "nothing yet")),
+            String(m.text || "").trim() ? (React.createElement("div", { style: { fontSize: 13, lineHeight: 1.6, color: C.ink, whiteSpace: "pre-wrap", marginTop: 10 } }, m.text)) : (React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginTop: 10 } }, "Nothing folded yet. It builds itself from everything you have logged the first time you talk to your coach, and adds only what has changed after that."))),
+        versions.length > 0 && (React.createElement(Card, { style: { marginBottom: 14 } },
+            React.createElement("button", { onClick: () => setShowOld((v) => !v), className: "tap", style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+                    fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
+                } }, showOld ? "Hide earlier versions" : `Earlier versions (${versions.length})`),
+            React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 } }, "Nothing here is ever overwritten. If a fold leaves something out, it is still in the version before it."),
+            showOld && versions.map((v, i) => (React.createElement("div", { key: i, style: { marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` } },
+                React.createElement("div", { className: "mono", style: { fontSize: 9.5, color: C.muted, marginBottom: 6 } }, v.upto ? `up to ${v.upto}` : "undated"),
+                React.createElement("div", { style: { fontSize: 12, lineHeight: 1.55, color: C.muted, whiteSpace: "pre-wrap" } }, v.text)))))),
+        React.createElement("div", { style: { marginTop: 12 } },
+            React.createElement(Btn, { kind: "quiet", onClick: close }, "Back"))));
+}
 function Formulas({ data, setData, close }) {
     const F = formulas(data.settings);
     const set = (k, v) => setData((d) => ({
@@ -16420,6 +16477,31 @@ and follows filmed classes plus a real Pilates instructor who pushes her hard.
 
 Do not quote baseline figures from memory — every number you have is in the list below, computed from
 her own data. If a number is not there, say you don't have it rather than estimating.
+${(() => {
+            /* HER RUNNING HISTORY (build 145). Everything older than the window she set
+               is HERE rather than absent — the arc of her training in your own words,
+               folded forward as you go. It sits at the top because it is what you would
+               want to have read before answering her, and because it barely changes
+               between one message and the next, which is what makes it the cheap part. */
+            const m = data.memory || {};
+            const txt = String(m.text || "").trim();
+            const hers = String(m.hers || "").trim();
+            if (!txt && !hers)
+                return "";
+            return `
+=== HER HISTORY, AS YOU HAVE COME TO UNDERSTAND IT ===
+This is your own running account of her, kept on her device and folded forward after everything she
+says. It carries the SHAPE of everything older than the window below — what moved and when, what each
+class costs her, what her lists were for and whether they worked, what you concluded and what is
+still open. It is not a substitute for her actual numbers: anything inside the window below is given
+to you exactly as she entered it, and where the two disagree, WHAT SHE ENTERED WINS.
+${txt || "(nothing folded yet)"}${hers ? `
+
+--- AND THIS PART SHE WROTE HERSELF. IT OUTRANKS EVERYTHING ABOVE, INCLUDING YOU. ---
+${hers}` : ""}
+${m.upto ? `(folded up to ${m.upto}.)` : ""}
+`;
+        })()}
 
 Where she is right now:
 - Phase: ${coach.phase.name} — ${coach.phase.line}
@@ -16976,8 +17058,44 @@ Two or three sentences unless she asks for more.`;
            year of normal use measures 48 KB. */
         return { ...d, chats };
     });
+    /* Folding her history forward. Never blocks her, never throws at her, and
+       never claims a fold that did not happen. */
+    const folding = useRef(false);
+    const foldMemory = async (allMsgs) => {
+        var _a;
+        if (folding.current)
+            return;
+        const key = (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey;
+        if (!key && !insideClaude())
+            return;
+        folding.current = true;
+        try {
+            /* built from the data as it stands INCLUDING what she just said, which
+               is why this runs after persist rather than beside it */
+            const withChat = { ...data, chats: (() => {
+                    const c = [...(data.chats || [])].filter((x) => x.id !== sessionId.current);
+                    return [...c, { id: sessionId.current, date: coach.t, about: about || "open chat",
+                            messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
+                })() };
+            const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
+            const text = await askModel({
+                apiKey: key, system: MEMORY_SYSTEM, maxTokens: 3000, usage: spent,
+                messages: [{ role: "user", content: memoryInput(withChat, coach) }],
+            });
+            if (!text || !String(text).trim())
+                return; /* rule 23: no fold is not an empty fold */
+            setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, coach.t, coach.t, spent) }));
+        }
+        catch (e) {
+            /* silent to her, deliberately: she asked a training question and got an
+               answer. The memory simply stays where it was and catches up next time. */
+        }
+        finally {
+            folding.current = false;
+        }
+    };
     const send = async () => {
-        var _a, _b;
+        var _a, _b, _c;
         const text = draft.trim();
         if ((!text && !photo) || busy)
             return;
@@ -17018,6 +17136,21 @@ Two or three sentences unless she asks for more.`;
             const done = [...next, { role: "assistant", content: reply }];
             setMsgs(done);
             persist(done, spend);
+            /* AND THEN FOLD IT FORWARD (build 145). Her instruction was that the
+               memory updates "after everything I say".
+      
+               THE ARITHMETIC ARGUES WITH HER, so it is said out loud rather than
+               decided behind her: a fold costs about 2.6c, almost all of it the
+               rewritten memory coming back. A cached message costs about 0.4c
+               against 3.5c uncached. Fold after EVERY message and the folding
+               costs more than the caching saves. Fold once when the conversation
+               ends and the memory is identical — it reads everything since the day
+               it was last folded to, so not one word she said is missed either way.
+      
+               So: once per conversation by default, and `memoryFold: "message"` in
+               her settings if she wants it after every line. Her call, not mine. */
+            if (((_c = data.settings) === null || _c === void 0 ? void 0 : _c.memoryFold) === "message")
+                foldMemory(done);
         }
         catch (e) {
             setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
@@ -17028,6 +17161,17 @@ Two or three sentences unless she asks for more.`;
             setBusy(false);
         }
     };
+    /* THE FOLD, WHEN SHE PUTS THE CONVERSATION DOWN. One call, catching
+       everything said in it — and it runs on the way out, so it can never sit
+       between her and an answer. */
+    const msgsRef = useRef(msgs);
+    useEffect(() => { msgsRef.current = msgs; }, [msgs]);
+    useEffect(() => () => {
+        var _a;
+        if ((((_a = data.settings) === null || _a === void 0 ? void 0 : _a.memoryFold) || "conversation") !== "message"
+            && (msgsRef.current || []).some((m) => m.role === "user"))
+            foldMemory(msgsRef.current);
+    }, []);
     const openers = [
         "Why that call this week?",
         "My shoulder hurt today — what now?",
@@ -17898,7 +18042,7 @@ function CoachApp() {
                        little or the last one wraps */
                     fontSize: 9.5, fontWeight: 500, letterSpacing: "0.08em", textTransform: "uppercase",
                 } }, label))))),
-        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "written" ? (React.createElement(WrittenSheet, { data: data, coach: coach })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, show: sheet.show, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null), goTab: go })) : sheet.kind === "settings-rhythm" ? (React.createElement(RhythmSheet, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "edit-weekly" || sheet.kind === "edit-monthly" ? (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) })) : (React.createElement("div", { style: { fontSize: 13, color: C.muted, lineHeight: 1.6, padding: "20px 4px" } },
+        sheet && (React.createElement(SheetShell, { canGoBack: sheets.length > 1, onBack: () => setSheet(null), onClose: () => setSheets([]) }, sheet.kind === "weekly" || sheet.kind === "monthly" ? (React.createElement(Assessment, { which: sheet.kind, periodKey: sheet.key, data: data, setData: setData, coach: coach, close: () => setSheet(null), setSheet: setSheet })) : sheet.kind === "formulas" ? (React.createElement(Formulas, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "analysis" ? (React.createElement(Analysis, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "journal" ? (React.createElement(Journal, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "whooplog" ? (React.createElement(WhoopLog, { data: data, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "whoop" ? (React.createElement(WhoopImport, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "notes" ? (React.createElement(NotesArchive, { data: data, setData: setData, coach: coach, close: () => setSheet(null) })) : sheet.kind === "program" ? (React.createElement(ProgramView, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vital" ? (React.createElement(VitalDetail, { id: sheet.id, coach: coach, setSheet: setSheet })) : sheet.kind === "edit-mobility" ? (React.createElement(MobilityEditor, { data: data, setData: setData, coach: coach, focus: sheet.focus, close: () => setSheet(null) })) : sheet.kind === "month" ? (React.createElement(BlockCalendar, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "goals" ? (React.createElement(GoalsCard, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "memory" ? (React.createElement(MemorySheet, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "profile" ? (React.createElement(ProfileSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet })) : sheet.kind === "vitals" ? (React.createElement(VitalsAll, { coach: coach, setSheet: setSheet })) : sheet.kind === "written" ? (React.createElement(WrittenSheet, { data: data, coach: coach })) : sheet.kind === "mobility" ? (React.createElement(MobilitySheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "review" ? (React.createElement(ReviewSheet, { data: data, setData: setData, coach: coach, setSheet: setSheet, show: sheet.show, close: () => setSheet(null) })) : sheet.kind === "briefing" ? (React.createElement(Briefing, { coach: coach, setSheet: setSheet, close: () => setSheet(null) })) : sheet.kind === "chat" ? (React.createElement(CoachChat, { data: data, setData: setData, coach: coach, seed: sheet.seed, about: sheet.about, close: () => setSheet(null), goTab: go })) : sheet.kind === "settings-rhythm" ? (React.createElement(RhythmSheet, { data: data, setData: setData, close: () => setSheet(null) })) : sheet.kind === "edit-weekly" || sheet.kind === "edit-monthly" ? (React.createElement(FieldEditor, { which: sheet.kind === "edit-weekly" ? "weekly" : "monthly", data: data, setData: setData, focus: sheet.focus, close: () => setSheet(null) })) : (React.createElement("div", { style: { fontSize: 13, color: C.muted, lineHeight: 1.6, padding: "20px 4px" } },
             "This door isn't wired to anything yet (\"",
             String(sheet.kind),
             "\"). Tell the coach you saw this \u2014 it is a bug, not something you did."))))));
@@ -18249,6 +18393,174 @@ do it from the page, not read an essay.`;
    Anything the coach writes in the chat can become a real list on the Body
    page, with every box the Body page gives an exercise. This shapes the
    words it already wrote; it does not invent a different workout. */
+/* ============================================================================
+   HER RUNNING HISTORY
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 14 August, after a bank text she did not expect:
+
+     "a summary of my history that keeps updating as we go and saved into the
+      app and the coach can access and keeps updating based on anything we
+      discuss instead of sending everything to anthropic every time"
+
+   And, correcting the first version of this, which sent every number:
+
+     "not each and every number gets into the summary so it does not confuse
+      the coach. it gets uploaded only if there is a change and if there are
+      many changes it could give the highest and when it happens and the lowest
+      and when it happened or any other relevant way for a number to be
+      properly interpreted. it does not have to be the highest and lowest"
+     "instead of inputting numbers input trends where applicable"
+     "the sessions and exercise lists are very important and need to be
+      inputted but can be added to each other rather than input one by one"
+     "the most important is the number linked with my effort load for each and
+      any comments attached"
+     "it should be a summary of the lists and how they went, and which area they
+      cover and why we had this list in the first place... and if it is to
+      improve a specific area should say whether it worked or not"
+
+   THIS IS A LAYER, NEVER A REPLACEMENT. The raw detail still travels with
+   whatever window she set. Rule 34 stands: the coach must never be handed a
+   description of her in place of what she actually entered for the period it
+   is looking at. What this carries is the SHAPE of everything older, so that
+   nine months does not have to be shipped to say what nine months did.
+========================================================================== */
+/* WHAT AN UPDATE IS GIVEN — ONLY WHAT HAPPENED SINCE.
+   The first version of this handed the whole review payload to every fold,
+   which is 23,000 characters whether or not anything changed: it would have
+   COST more than the caching saved, which is the opposite of the point. An
+   update reads the deltas and nothing else. */
+const memoryDelta = (data, from, t) => {
+    const d = data || {};
+    const since = (k) => k > from && k <= t;
+    const L = [];
+    const S = (title, body) => { const b = String(body || "").trim(); if (b)
+        L.push(`\n### ${title}\n${b}`); };
+    const LG = restIsFinal(d.logs || {});
+    S("DAYS SINCE THEN", Object.keys(LG).filter(since).sort().map((k) => {
+        const l = LG[k] || {}, m = (d.morning || {})[k] || {};
+        const bits = [
+            l.completed ? `${l.type || "session"}${l.minutes ? ` ${l.minutes}min` : ""}` : (l.rest ? "rest, her choice" : null),
+            l.rpe ? `effort ${l.rpe}/10` : null,
+            l.during ? `felt ${l.during}/5 during` : null,
+            l.energyAfter ? `${l.energyAfter}/5 after` : null,
+            l.mood ? `she said she felt "${l.mood}"` : null,
+            l.sessionNote ? `she wrote: "${l.sessionNote}"` : null,
+            l.did ? `she wrote: "${l.did}"` : null,
+            (l.therapy || []).length ? `body work: ${(l.therapy || []).map((x) => `${x.type}${x.note ? ` — "${x.note}"` : ""}`).join(" + ")}` : null,
+            m.recovery ? `recovery ${m.recovery}` : null,
+            m.asleep ? `${m.asleep} min asleep` : null,
+        ].filter(Boolean);
+        return bits.length ? `  * ${k}: ${bits.join(", ")}` : null;
+    }).filter(Boolean).join("\n"));
+    S("MEASUREMENTS TAKEN SINCE THEN", [["weekly", d.weekly], ["monthly", d.monthly], ["mobility", d.mobility]]
+        .map(([which, store]) => Object.keys(store || {}).filter(since).sort()
+        .map((k) => `  * ${which} ${k}: ${JSON.stringify(store[k])}`).join("\n")).filter(Boolean).join("\n"));
+    S("WHAT SHE TOLD YOU SINCE THEN", (d.issues || []).filter((i) => i && since(i.date))
+        .map((i) => `  * ${i.date}: "${i.text}"${i.status === "closed" ? " (since closed)" : ""}`).join("\n"));
+    S("FOLLOW-UPS SINCE THEN", (d.issues || []).flatMap((i) => (i.tried || [])
+        .filter((tr) => tr && since(tr.date))
+        .map((tr) => `  * ${tr.date}, on "${i.text}": tried ${tr.what}, she scored it ${tr.helped}/5`)).join("\n"));
+    S("GOALS SCORED SINCE THEN", (d.goals || []).flatMap((g) => (g.scores || [])
+        .filter((sc) => sc && since(sc.date))
+        .map((sc) => `  * ${sc.date}, "${g.text}": ${sc.value}/10${sc.note ? ` — she wrote: "${sc.note}"` : ""}`)).join("\n"));
+    S("BODY-PAGE WORK SINCE THEN", Object.keys(d.bwlog || {}).filter(since).sort()
+        .map((k) => `  * ${k}: ${Object.keys(d.bwlog[k] || {}).length} exercises logged`).join("\n"));
+    S("WHAT YOU TALKED ABOUT SINCE THEN", (d.chats || []).filter((c) => c && since(c.date))
+        .map((c) => `  * ${c.date} — ${c.about}:\n${(c.messages || []).map((x) => `      ${x.role === "user" ? "SHE" : "YOU"}: ${x.text || ""}`).join("\n")}`).join("\n"));
+    S("READS SINCE THEN", (d.reviews || []).filter((r) => r && since(r.date) && r.ok)
+        .map((r) => `  * ${r.date}: ${(r.conclusions || []).join(" | ") || "no conclusions recorded"}`).join("\n"));
+    S("THINGS SHE WROTE SINCE THEN", [
+        ...(d.journal || []).filter((j) => j && since(j.date)).map((j) => `  * journal ${j.date}: "${j.text || ""}"`),
+        ...Object.keys(d.notes || {}).filter(since).map((k) => `  * kept note ${k}: "${(d.notes[k] || {}).text || d.notes[k]}"`),
+    ].join("\n"));
+    return L.length ? L.join("\n") : "\n(nothing has happened since then.)";
+};
+/* WHAT THE FOLD IS GIVEN. The seed reads everything she has; an update reads
+   only from the day after the memory was last folded to, because everything
+   before that is already in it. `reviewPayload` is the same assembly the read
+   uses — comprehensive, already tested, and already able to take a window. */
+const memoryInput = (data, coach) => {
+    const m = (data && data.memory) || {};
+    const t = (coach && coach.t) || today();
+    const seeding = !String(m.text || "").trim();
+    const cut = seeding ? "all" : (m.upto ? addDays(m.upto, 1) : "all");
+    const payload = seeding ? reviewPayload(data, coach, cut) : memoryDelta(data, m.upto, t);
+    const head = seeding
+        ? "THIS IS THE FIRST TIME. There is no memory yet, so what follows is EVERYTHING she has. Build\nher history from all of it."
+        : `WHAT FOLLOWS IS ONLY WHAT HAS HAPPENED SINCE ${m.upto}. Everything before that is already in\nthe memory below — carry it forward, correct it where this contradicts it, and add what is new.`;
+    const hers = String(m.hers || "").trim();
+    return [
+        head,
+        m.text ? `\n=== THE MEMORY AS IT STANDS ===\n${m.text}` : "",
+        hers ? `\n=== WHAT SHE HERSELF WROTE — THIS OUTRANKS YOU, NEVER CONTRADICT OR DROP IT ===\n${hers}` : "",
+        `\n=== WHAT TO FOLD IN ===${payload}`,
+    ].filter(Boolean).join("\n");
+};
+/* Folding is never destructive. The version that was there is pushed onto the
+   list before the new one is written, so a fold that loses something can
+   always be read back (rule 20). Failures are kept too, with their reason —
+   a fold that did not happen must never look like one that did. */
+const foldedMemory = (m, text, upto, at, spend) => {
+    const prev = m || {};
+    const keep = Array.isArray(prev.versions) ? prev.versions : [];
+    return {
+        ...prev,
+        text: String(text || "").trim(),
+        upto, at,
+        versions: [...keep, { text: prev.text || "", upto: prev.upto || null, at: prev.at || null }]
+            .filter((v) => v.text),
+        tokensIn: (prev.tokensIn || 0) + ((spend && spend.in) || 0),
+        tokensOut: (prev.tokensOut || 0) + ((spend && spend.out) || 0),
+        cost: (prev.cost || 0) + (spend ? centsFor(spend) : 0),
+    };
+};
+const MEMORY_SYSTEM = `You keep the running history of one person, Nermeen, 51, who trains to hold
+muscle through her fifties. You are her coach. This is your own memory of her — you will be handed
+it back every time you speak to her, so write it for yourself, in plain prose, as the thing you
+would want to have read before answering her.
+
+WHAT GOES IN
+
+1. WHAT SHE HAS SAID AND DECIDED. Anything she told you about herself, her life, her body, what she
+   wants, what she will not do. Her words, kept as her words.
+
+2. NUMBERS — ONLY WHERE THEY MOVED. A measurement that has not changed does not earn a line. Where
+   something changed, WRITE THE TREND RATHER THAN THE FIGURES wherever a trend says more: "her plank
+   has been climbing steadily since June and is at her best" beats a list of seconds. Where a number
+   has moved many times, give it in whatever shape makes it readable — where it started and where it
+   is now, its highest and when, its lowest and when, the direction and the rate. Choose the shape
+   that suits THAT measure and say which shape you used. Do not use one format for everything.
+
+3. SESSIONS, ADDED UP — NEVER ONE LINE PER DAY. Per class: how many times, over what span, and above
+   all THE EFFORT IT COST HER, and EVERY COMMENT SHE ATTACHED, in her own words. Those two are the
+   things she said must not be lost in the adding up.
+
+4. HER BODY-PAGE LISTS, ADDED UP. Per list: how it went, how many times, which area it covers, WHY
+   IT EXISTED IN THE FIRST PLACE, what it did to her performance, and — if it was written to improve
+   something specific — WHETHER IT WORKED. Where the reason it was made was never recorded, work it
+   out from the area, what is in it, her record and her goals, and SAY THAT YOU INFERRED IT. Grade
+   how sure you are the way the app already does: believed, tentative, or noted. If you genuinely
+   cannot tell, say you do not know. Never invent a reason.
+
+5. WHAT YOU HAVE CONCLUDED AND WHAT IS STILL OPEN. What you decided and why, what you are watching,
+   what you got wrong and corrected.
+
+WHAT STAYS OUT
+- Anything that has not changed and was already in the memory.
+- Any number you were not given. Never estimate, never round something into existence.
+- Anything that reads as a score or a streak. She has ruled those out.
+
+HOW TO WRITE IT
+- Prose, in short titled sections, oldest understanding first and newest last.
+- Warm, specific, unsentimental. Write like her coach, not like a database.
+- Dates on anything that has a date.
+- If something in the new material CONTRADICTS what the memory says, correct the memory and say
+  plainly that it changed and when.
+- ANYTHING UNDER "WHAT SHE HERSELF WROTE" OUTRANKS YOU. Never contradict it, never quietly drop it.
+
+Return ONLY the full updated memory as plain text. No preamble, no code fence, nothing before or
+after it. It replaces what came before, so anything still true must be carried forward — but the
+previous version is kept on her device either way, so nothing you leave out is destroyed.`;
 const LIST_FROM_CHAT_SYSTEM = `You are turning exercises you have ALREADY written for her, in
 conversation, into one structured list for her app. She is 51 and her right shoulder is
 rehabilitating.
