@@ -3478,7 +3478,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 141";
+const BUILD = "14 August 2026 · 142";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -18787,6 +18787,16 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         (() => { const n = Object.values(l.drillsDone || {}).filter(Boolean).length;
           return n ? `${n} ten-minutes drill${n === 1 ? "" : "s"} done` : null; })(),
         l.loads ? `lifted ${l.loads}` : null,
+        /* Build 142, her audit of 14 August. Her mood tap and her body work
+           were computed from and then thrown away — she could see a pattern
+           the coach could not point at. Both go on the day now. */
+        l.mood ? `she said she felt "${l.mood}"` : null,
+        (l.therapy || []).length
+          ? "body work: " + (l.therapy || []).map((x) => {
+              const th = THERAPIES.find((y) => y.id === x.type);
+              return `${th ? th.label : x.type}${x.minutes ? ` ${x.minutes}min` : ""}${x.note ? ` — she wrote: "${x.note}"` : ""}`;
+            }).join(" + ")
+          : null,
       ].filter(Boolean).join(", ");
       const head = l.completed
         ? (l.type || "session") + (l.minutes ? " " + l.minutes + "min" : "") + extras
@@ -18820,7 +18830,9 @@ her own data. If a number is not there, say you don't have it rather than estima
 
 Where she is right now:
 - Phase: ${coach.phase.name} — ${coach.phase.line}
-- Week ${coach.pos.week}, month ${coach.pos.month}. Theme: ${coach.themes.week}
+- Week ${coach.pos.week}, month ${coach.pos.month}, quarter ${coach.pos.quarter}.
+  This week's theme: ${coach.themes.week || "none set"}. This month's: ${coach.themes.month || "none set"}.
+  This quarter's: ${coach.themes.quarter || "none set"}. Themes describe emphasis, never a plan past the block.
 - This week: ${coach.weekDone} of ${coach.seasonTarget} sessions. Consistency ${coach.consistency}% of the last 28 days.
 - This week's call: ${coach.verdict.label} — ${coach.verdict.line}
 - Class the app prescribed for today: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min — because ${coach.prescribed.reason}` : "none"}
@@ -19199,6 +19211,47 @@ ${(() => {
     });
     return out.join(" | ") || "none imported yet";
   })()}
+- HER LIBRARY — THE ONLY CLASSES THAT MAY EVER BE NAMED. She follows filmed classes. You may never
+  invent one, never name one that is not on this list, and never replace a class with a written
+  sets-and-reps session. (The one exception is rule 10: where something she has said she wants needs
+  a muscle or a range NOTHING here reaches, you may write her exercises for it — alongside a class,
+  never instead of one, and say plainly what the library could not do.)
+${(() => {
+  const lib = (data.library || []).filter((w) => w && w.status !== "removed");
+  if (!lib.length) return "  her library is empty.";
+  return lib.map((w) => [
+    `  * ${w.name}${w.addon ? " (add-on, never a whole session)" : ""} — ${w.goal || "?"}, ${(w.durations || []).join("/") || "?"} min, intensity ${w.intensity ?? "?"}/5, recovery cost ${w.recoveryCost ?? "?"}, shoulder load ${w.shoulderLoad || "?"}${w.home ? ", can be done at home" : ""}`,
+    w.body ? `      reaches: ${Object.entries(w.body).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}/3`).join(", ")}` : null,
+    w.equipment ? `      needs: ${w.equipment}` : null,
+    w.structure ? `      how it runs: ${w.structure}` : null,
+  ].filter(Boolean).join("\n")).join("\n");
+})()}
+- WHAT SHE HAS TAKEN OFF, AND WHY — DO NOT PUT ANY OF IT BACK, AND DO NOT SUGGEST IT IN CONVERSATION.
+  Never prescribe any of these again, do not write a near-copy under another name, and do not argue
+  for them. If one of them is the only route to something she says she wants, say so plainly once and
+  let her decide. Nothing here is deleted — she can put any of it back herself whenever she likes.
+${(() => {
+  const out = [];
+  const say = (kind, label, why, when) =>
+    out.push(`  * ${kind}: "${label}"${when ? ` — taken off ${when}` : ""}${why ? `. Her reason: ${why}` : ""}`);
+  (data.drills || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("from her ten minutes", x.label, x.removedWhy, x.removedOn));
+  ((data.fields || {}).weekly || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("weekly measure", x.label, x.removedWhy, x.removedOn));
+  ((data.fields || {}).monthly || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("monthly measure", x.label, x.removedWhy, x.removedOn));
+  (data.mobTests || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("mobility test", x.label, x.removedWhy, x.removedOn));
+  (data.library || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("class", x.name, x.removedWhy, x.removedOn));
+  (data.goals || []).filter((x) => x && x.status === "removed")
+    .forEach((x) => say("goal", x.text, x.removedWhy, x.removedOn));
+  (data.bodywork || []).forEach((pg) => [...(pg.lists || []),
+    ...((pg.rounds || []).flatMap((r) => r.lists || []))]
+    .forEach((li) => (li.exercises || []).filter((x) => x && x.status === "removed")
+      .forEach((x) => say(`from her ${pg.area} list ${li.n || ""}`.trim(), x.name, x.removedWhy, x.removedOn))));
+  return out.length ? out.join("\n") : "  nothing has been taken off.";
+})()}
 - Class notes she has written: ${(data.library || []).filter((w) => w.felt).map((w) => `${w.name}: ${w.felt}`).join(" | ") || "none yet"}
 - Loads she has recorded: ${(data.library || []).filter((w) => w.resistance).map((w) => `${w.name}: ${w.resistance}`).join(" | ") || "none yet"}
 - WHAT SHE ACTUALLY LIFTED, most recent first (this is the real record; the line above is only what the class usually calls for): ${(() => {
