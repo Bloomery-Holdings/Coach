@@ -2293,6 +2293,15 @@ const parseReview = (text) => {
    and nothing is paid for twice. Anything still open — an issue she has not
    closed — is always sent too, however old it is. */
 const SCOPE_ALL = { kind: "all" };
+/* HER INSTRUCTION, 14 August: "make it see up to the last 6 months and make the
+   number of months editable and it show me how many months it will review
+   before doing it but the default is 6 months." Everything stays available —
+   she asked for it to remain a choice — but it is no longer where this opens. */
+const SCOPE_DEFAULT = { kind: "months", n: 6 };
+/* The daily coach's own window. Separate from the read's, because they are
+   different questions: a read designs a month and wants the arc; a chat
+   answers what she just asked. */
+const CHAT_SCOPE_DEFAULT = { kind: "months", n: 6 };
 const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
   if (!s || s.kind === "all") return "everything";
@@ -3401,6 +3410,29 @@ const PRICE_IN = 3, PRICE_OUT = 15;   /* dollars per million tokens */
    `search: true` attaches the web-search tool. Anthropic runs the search on
    its side and hands back the answer with its sources, so nothing new is
    installed here and her key is still the only thing that pays. */
+/* WHAT SHE HAS ACTUALLY SPENT, from what the app recorded and nothing else.
+   Her question, 14 August: "is this the amount I actually used by the app so
+   far?" The app could not answer, because until build 143 the daily chat
+   recorded nothing at all. It records now — and this only ever adds up what
+   is on the record. A conversation from before build 143 carries no cost, and
+   says so rather than being guessed at (rule 23). */
+const spendSince = (data, from) => {
+  const chats = (data.chats || []).filter((c) => c && (!from || c.date >= from));
+  const reads = (data.reviews || []).filter((r) => r && (!from || r.date >= from));
+  const sumC = chats.reduce((a, c) => a + (Number(c.cost) || 0), 0);
+  const sumR = reads.reduce((a, r) => a + (Number(r.cost) || 0), 0);
+  const unknown = chats.filter((c) => c.cost === undefined).length;
+  return {
+    chatCents: sumC, readCents: sumR, cents: sumC + sumR,
+    chats: chats.length, reads: reads.length, unknown,
+    tokensIn: chats.reduce((a, c) => a + (Number(c.tokensIn) || 0), 0)
+            + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0),
+    tokensOut: chats.reduce((a, c) => a + (Number(c.tokensOut) || 0), 0)
+             + reads.reduce((a, r) => a + (Number(r.tokensOut) || 0), 0),
+  };
+};
+const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
+
 const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false }) => {
   const headers = { "Content-Type": "application/json" };
   if (!insideClaude()) {
@@ -3478,7 +3510,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 142";
+const BUILD = "14 August 2026 · 143";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10561,11 +10593,11 @@ function SessionClock({ log, write, coach }) {
    further for the reasoning and the month it drew up. */
 function ReadCard({ data, setData, coach, setSheet }) {
   const last = coach.lastReview;
-  const scope = data.settings?.readScope || SCOPE_ALL;
+  const scope = data.settings?.readScope || SCOPE_DEFAULT;
   const setScope = (s) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: s } }));
   return (
     <Card style={{ background: C.pist }}>
-      <Eyebrow color={C.signal}>Read my data</Eyebrow>
+      <Eyebrow color={C.signal}>Next month's programme</Eyebrow>
       {/* Her instruction, 12 August: "Why do I have all these explanations
           under Read my data. Fold under info tab." */}
       <div style={{ margin: "5px 0 11px" }}>
@@ -10575,8 +10607,11 @@ function ReadCard({ data, setData, coach, setSheet }) {
         </InfoNote>
       </div>
       <ScopePicker scope={scope} onPick={setScope} />
+      {/* Her instruction, 14 August: "it show me how many months it will review
+          before doing it". The window is on the button, so a read can never run
+          over a period she did not see. */}
       <Btn kind="signal" disabled={!scopeReady(scope)} onClick={() => setSheet({ kind: "review" })}>
-        Ask the coach to read everything
+        {scopeReady(scope) ? `Design next month from ${scopeLabel(scope)}` : "Type how far back first"}
       </Btn>
 
       {last && (
@@ -11558,7 +11593,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           Her question, 11 August: "Where do I see the reply?" One line, no
           duplication — it opens the read itself. The whole of it, and every
           earlier one, lives in Progress. */}
-      {isToday && <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+      {/* THE READ LEFT THIS PAGE on 14 August, her instruction. It lives in
+          Settings now. Nothing about it changed except where it is. */}
 
 
       {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
@@ -13128,7 +13164,7 @@ function Progress({ data, setData, coach, setSheet }) {
           It needs to be visible." So it is a card, not a fold. */}
       <Card style={{ marginBottom: 11 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-          <Eyebrow color={C.signal}>The coach's read</Eyebrow>
+          <Eyebrow color={C.signal}>Next month's programme</Eyebrow>
           <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
             {(coach.reviews || []).length ? `${coach.reviews.length} kept` : "whenever you want"}
           </span>
@@ -13137,10 +13173,11 @@ function Progress({ data, setData, coach, setSheet }) {
           Everything you have logged, read and interpreted — conclusions, advice, where to put the
           work, and the rules worth holding to. As often as you like; never on a schedule.
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
-            Ask the coach to read everything
-          </Btn>
+        {/* The button and its window moved to Settings on 14 August. Every
+            read you have ever had stays here, because this is where history
+            lives. */}
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
+          Run it from Settings.
         </div>
         {!(coach.reviews || []).length ? (
           <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
@@ -13430,7 +13467,7 @@ function Progress({ data, setData, coach, setSheet }) {
 }
 
 /* ------------------------------------------------------------ SETTINGS ---- */
-function Settings({ data, setData, setSheet }) {
+function Settings({ data, setData, coach, setSheet }) {
   const s = data.settings;
   const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
 
@@ -13785,6 +13822,57 @@ function Settings({ data, setData, setSheet }) {
         <div style={{ marginTop: 8 }}>
           <Btn kind="ghost" onClick={() => setSheet({ kind: "profile" })}>What the coach believes about you</Btn>
         </div>
+        {/* NEXT MONTH'S PROGRAMME. Moved here from Today on 14 August, her
+            instruction, because this is the sheet with the fewest fields. */}
+        <div style={{ marginTop: 14 }}>
+          <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />
+        </div>
+        {/* WHAT IT COSTS. Her question, 14 August, holding a bank text: "is
+            this the amount I actually used by the app so far?" Nothing here is
+            estimated — it adds up what was recorded and says plainly where
+            there is no record. */}
+        <Card style={{ marginTop: 14 }}>
+          <Eyebrow>What your coach has cost</Eyebrow>
+          {(() => {
+            const t = today();
+            const rows = [
+              ["Today", spendSince(data, t)],
+              ["Last 7 days", spendSince(data, addDays(t, -6))],
+              ["Last 30 days", spendSince(data, addDays(t, -29))],
+              ["Everything on the record", spendSince(data, null)],
+            ];
+            const all = rows[3][1];
+            return (
+              <>
+                {rows.map(([label, v]) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between",
+                    alignItems: "baseline", padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: 12.5, color: C.muted }}>{label}</span>
+                    <span className="mono" style={{ fontSize: 13, color: C.ink }}>{money(v.cents)}</span>
+                  </div>
+                ))}
+                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
+                  {all.cents === 0 && all.chats === 0 && all.reads === 0
+                    ? "Nothing recorded yet."
+                    : `${money(all.chatCents)} talking across ${all.chats} conversation${all.chats === 1 ? "" : "s"}, ${money(all.readCents)} on ${all.reads} read${all.reads === 1 ? "" : "s"}. ${all.tokensIn.toLocaleString()} in, ${all.tokensOut.toLocaleString()} out.`}
+                </div>
+                {all.unknown > 0 && (
+                  <div style={{ fontSize: 11.5, color: C.ochre, lineHeight: 1.5, marginTop: 8 }}>
+                    {all.unknown} conversation{all.unknown === 1 ? "" : "s"} from before this was
+                    recorded carr{all.unknown === 1 ? "ies" : "y"} no cost. They are not counted above,
+                    and I will not invent a figure for them.
+                  </div>
+                )}
+                <div style={{ marginTop: 10 }}>
+                  <InfoNote small inherit
+                    why={`This is what the app itself recorded, at $${PRICE_IN} per million words in and $${PRICE_OUT} per million out. It is not your Anthropic bill — anything else on the same account is not in here. The bill itself is at console.anthropic.com under Usage.`}>
+                    <span style={{ fontSize: 12, color: C.muted }}>Where this number comes from</span>
+                  </InfoNote>
+                </div>
+              </>
+            );
+          })()}
+        </Card>
         <div style={{ marginBottom: 12 }} />
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
           Rename exercises, change units, reorder, or add your own. Renaming keeps the history — the chart just picks up the new name.
@@ -18010,7 +18098,7 @@ function ReadAnswer({ rec }) {
    One of the three, never a form to fill in. What the window leaves out is
    carried by the earlier reads, which always go in full. */
 function ScopePicker({ scope, onPick }) {
-  const s = scope || SCOPE_ALL;
+  const s = scope || SCOPE_DEFAULT;
   const opts = [
     { k: "all", label: "Everything" },
     { k: "days", label: "Days" },
@@ -18090,7 +18178,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   /* Her choice of how far back this read looks — one of them, never all
      three. Kept in her settings so the app opens on whatever she chose last,
      and changeable every single time (rules 12, 13). */
-  const scope = data.settings?.readScope || SCOPE_ALL;
+  const scope = data.settings?.readScope || SCOPE_DEFAULT;
   const setScope = (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: sc } }));
 
   /* built here rather than in the engine: it is only wanted on this screen,
@@ -18202,7 +18290,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     <div>
       <Eyebrow color={C.signal}>{mode === "read" ? "Where you are" : "The month, read properly"}</Eyebrow>
       <h1 className="disp" style={{ fontSize: 27, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 10px" }}>
-        {mode === "read" ? "Read everything I have so far" : "Read the month, design the next one"}
+        {mode === "read" ? "Read my history and tell me what it shows" : "Read it and design next month's programme"}
       </h1>
 
       <div style={{ fontSize: 13.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 }}>
@@ -18745,8 +18833,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
        first, in the same detail the fortnight used to carry. */
     const loggedDays = Object.keys(data.logs || {});
     const morningDays = Object.keys(data.morning || {});
+    /* HER WINDOW, set by her under "talk to your coach" (build 143). It bounds
+       the DAY-BY-DAY detail and nothing else — every open item in the record,
+       every goal, every paused item, every previous read's conclusions and
+       everything she has written still travel in full whatever she sets. */
+    const chatCut = scopeCutoff(data.settings?.chatScope || CHAT_SCOPE_DEFAULT, coach.t);
     const recentDays = Array.from(new Set([...loggedDays, ...morningDays]))
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t).sort();
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t
+        && (chatCut === "all" || d >= chatCut)).sort();
     /* THE SAME SETTLED STATE THE REST OF THE APP READS. This read the raw
        record, so a day carrying both a rest flag and a session was described to
        the coach as a completed session — the one surface where the model forms
@@ -19322,8 +19416,17 @@ Two or three sentences unless she asks for more.`;
      before the model is asked as well as after. Rule 15: nothing she says is
      lost. It used to be saved only on success, inside the try — so a failed
      call, a missing key or a thrown prompt took her words with it. */
-  const persist = (all) => setData((d) => {
+  const persist = (all, spent) => setData((d) => {
+    /* Build 143: what this conversation has cost, accumulated across its
+       messages rather than overwritten, so the number on a conversation is
+       the whole conversation and not its last exchange. */
+    const prev = (d.chats || []).find((c) => c.id === sessionId.current) || {};
     const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
+      tokensIn: (prev.tokensIn || 0) + ((spent && spent.in) || 0),
+      tokensOut: (prev.tokensOut || 0) + ((spent && spent.out) || 0),
+      cost: (prev.cost || 0) + (spent
+        ? Math.round((((spent.in || 0) / 1e6 * PRICE_IN) + ((spent.out || 0) / 1e6 * PRICE_OUT)) * 100)
+        : 0),
       messages: all.map((m) => ({ role: m.role, text: m.content,
         ...(m.image ? { image: m.image } : {}) })) };
     /* Everything said today lives in ONE entry. The other same-day entries
@@ -19359,15 +19462,21 @@ Two or three sentences unless she asks for more.`;
               data: String(m.image).split(",")[1] || "" } },
             ...(m.content ? [{ type: "text", text: m.content }] : []) ] }
         : { role: m.role, content: m.content });
+      /* Build 143, her question of 14 August: "is this the amount I actually
+         used by the app so far?" The app could not answer, because this call
+         never asked. It does now, and what it costs is written on the
+         conversation and totalled in Settings. */
+      const spend = { in: 0, out: 0 };
       const reply = await askModel({
         apiKey: data.settings?.apiKey,
         system: context(),
         messages: next.map(blockify),
         search: data.settings?.webSearch !== false,
+        usage: spend,
       }) || "I couldn't get a response just then. Try again in a moment.";
       const done = [...next, { role: "assistant", content: reply }];
       setMsgs(done);
-      persist(done);
+      persist(done, spend);
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
         ? "I need an API key to talk to you outside the Claude app. Settings, then Your data, then paste one in — it stays on this device."
@@ -19387,8 +19496,16 @@ Two or three sentences unless she asks for more.`;
       <Eyebrow color={C.ochre}>Talk to your coach</Eyebrow>
       <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>Ask me anything</h1>
       <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 }}>
-        I can see your week, your battery and the call I made. Argue with it if you think I'm wrong.
+        I can see your battery, the call I made, and every day you logged in the window you set below.
+        Argue with any of it if you think I'm wrong.
       </div>
+      {/* HER INSTRUCTION, 14 August: "a year from now doesn't need to be
+          inspected every time I ask the coach something simple." Her field,
+          exactly like the one on the read. It bounds the day-by-day detail
+          only — the record, her goals, what she has written and every earlier
+          read still go in full whatever she sets here. */}
+      <ScopePicker scope={data.settings?.chatScope || CHAT_SCOPE_DEFAULT}
+        onPick={(sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } }))} />
 
       {/* EVERY CONVERSATION SHE HAS EVER HAD, ONE TAP AWAY. Today's is on the
           page already; the rest are here rather than gone. */}
@@ -20456,7 +20573,7 @@ function CoachApp() {
             {tab === "plan" && <Workouts data={data} setData={setData} coach={coach} />}
             {tab === "body" && <BodyWork data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "progress" && <Progress data={data} setData={setData} coach={coach} setSheet={setSheet} />}
-            {tab === "settings" && <Settings data={data} setData={setData} setSheet={setSheet} />}
+            {tab === "settings" && <Settings data={data} setData={setData} coach={coach} setSheet={setSheet} />}
           </>
         )}
 
