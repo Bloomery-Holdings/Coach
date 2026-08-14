@@ -205,6 +205,121 @@ const FORMULA_DEFAULTS = {
        than a strength measure does before it means anything. */
     asymmetryPct: 15, /* mobility battery */
     bilateralPct: 10, /* strength battery - a 10% gap is worth closing */
+    /* ---- EVERYTHING BELOW WAS A LITERAL INSIDE THE ENGINE ------------------
+       Her instruction, 14 August: "nothing should be hardcoded." These are the
+       numbers that decided what the coach SAID — the word on a card, the colour
+       of it, whether something was raised at all. They were unreachable. They
+       are hers now, and every one of them is read from settings rather than
+       from the line of code it used to live on. */
+    /* Sleep and recovery, day by day */
+    sleepIdeal: 8, /* hours that score a full mark in the week's health score */
+    sleepShortDrop: 1.5, /* hours under her own median that make a night "short"    */
+    sleepShortAbs: 6, /* ...or, with no median yet, fewer hours than this        */
+    recoveryOkGap: 5, /* points under baseline still counted as recovered        */
+    recoveryCeilingGap: 10, /* baseline + this scores a full recovery mark             */
+    recoveryLowGap: 8, /* points under baseline that count as a low morning       */
+    recoveryHighGap: 8, /* points over baseline that count as a good one           */
+    rpeQualityMax: 8, /* last week's effort at or under this reads as sustainable */
+    /* Habit formation */
+    habitDays: 91, /* the exercise habit-formation figure the score builds to */
+    habitStrong: 75, /* at or above: close to automatic                         */
+    habitForming: 45, /* at or above: forming. Under it, still early             */
+    cueStrong: 80, /* same-time-of-day routine: strong                        */
+    cueLoose: 60, /* ...loose. Under it, scattered                           */
+    /* What a short night is, in minutes of sleep, for the two places that ask */
+    momentumSleepMins: 360, /* under this counts against the day's momentum            */
+    brakeSleepMins: 390, /* under this is tested as a brake on training             */
+    asleepLongMins: 420, /* long enough that light sleep is about quality, not time  */
+    /* How big a difference has to be before a pattern is named at all */
+    patternLift: 15, /* percentage points that make something a motivator       */
+    patternBrake: 20, /* percentage points that make something a brake           */
+    patternTrend: 20, /* percentage points of change that make a trend           */
+    patternNeutral: 10, /* difference small enough to call something "no effect"   */
+    /* Illness signals, against her own baseline */
+    illTempRise: 0.4, /* skin temperature, degrees above baseline                */
+    illRespRise: 1.0, /* breaths per minute above baseline                       */
+    illSpo2Floor: 95, /* blood oxygen under this is flagged                      */
+    /* Body composition */
+    muscleGainRate: 0.0075, /* realistic muscle gain, fraction of lean mass per year   */
+    /* WHOOP drifts */
+    rhrDriftUp: 3, /* bpm above the month: flagged                            */
+    rhrDriftDown: -2, /* bpm below the month: a good sign                        */
+    rhrHigh: 60, /* a resting heart rate worth mentioning on its own        */
+    hrvDriftDown: -10, /* percent under baseline: flagged                         */
+    hrvDriftUp: 8, /* percent over baseline: a good sign                      */
+    cardiacDriftGood: -2, /* bpm lower across the month                              */
+    cardiacDriftBad: 2, /* bpm higher across the month                             */
+    cardiacDriftStrong: -3, /* enough of a fall to say out loud                        */
+    adaptGood: 5, /* percent less recovery cost from hard days               */
+    adaptStrong: 8, /* ...enough to act on                                     */
+    adaptBad: -5, /* percent more: flagged                                   */
+    /* Sleep quality */
+    timingRegular: 45, /* minutes of spread that read as very regular             */
+    timingScattered: 75, /* ...and over this, scattered                             */
+    restorativeStrong: 40, /* percent deep+REM                                        */
+    restorativeAdequate: 30, /* ...under this, light                                    */
+    debtPaid: 30, /* minutes of sleep debt that count as paid off            */
+    debtManageable: 90, /* ...over this, accumulating                              */
+    /* Adherence. A window, never a streak. */
+    consistencyHigh: 85, /* enough to say something about it                        */
+    consistencyStrong: 80, /* strong                                                  */
+    consistencyGood: 75, /* good enough to add                                      */
+    consistencyUnder: 70, /* under this, the week is doing less than it could        */
+    consistencyHolding: 60, /* holding. Under it, slipping                             */
+    /* Coverage and variety */
+    coverWhole: 6, /* body regions reached: whole body                        */
+    coverNarrow: 4, /* ...at or under this, narrow                             */
+    varietyWide: 5, /* different classes in the window: wide                   */
+    varietyOk: 3, /* ...between the two, reasonable                          */
+    varietyNarrow: 2, /* ...at or under this, narrow                             */
+    affectOk: 0.5, /* in-the-room feeling that already reads as positive      */
+    setsMetCount: 5, /* regions hitting their set target: dose met              */
+    setsBuildingCount: 3, /* ...building                                             */
+    /* Mobility */
+    mobStrong: 75, /* overall mobility percent: strong                        */
+    mobOk: 50, /* ...adequate. Under it, needs work                       */
+    mobFlag: 60, /* under this the coach raises it                          */
+    mobOverdueDays: 10, /* days since the battery before it is chased              */
+    mobGapFlag: 10, /* left-right gap, percent, worth naming                   */
+    /* Shoulder */
+    shoulderClear: 4, /* morning score at or above: clear to load                */
+    shoulderLowMax: 3, /* at or under: a low reading                              */
+    shoulderTrendGood: 4.5, /* trend worth saying out loud                             */
+    shoulderTrendBad: 3, /* under this, protect it                                  */
+    shoulderQuietDays: 28, /* days silent before the record stops guarding            */
+    shoulderRetireDays: 42, /* ...and before it offers to switch the guard off         */
+    /* How it feels, and what it gives back */
+    affectGood: 1, /* mean in-the-room feeling that reads as good             */
+    affectFlag: -1, /* ...at or under this, raised                             */
+    givesBackGood: 0.3, /* leaves her better                                       */
+    givesBackBad: -0.3, /* costs more than it returns                              */
+    givesBackFlag: -0.5, /* ...enough to raise                                      */
+    barrierWins: 3, /* times she trained anyway, before it is named            */
+    /* Load */
+    hardDayLoad: 300, /* minutes x effort that make a day "hard"                 */
+    chronicGrowthSafe: 10, /* percent a week the base may grow                        */
+    weeksPastDropout: 14, /* weeks training past the median dropout point            */
+    /* Writing, and how a block runs */
+    writingDown: -40, /* percent fewer words: well down                          */
+    writingUp: 20, /* percent more: up                                        */
+    writingFlag: -50, /* ...enough to raise                                      */
+    blockSpreadFlag: 15, /* percentage-point spread across a block worth naming     */
+    blockSpreadBad: 25, /* ...enough to redesign around                            */
+    /* How much evidence before anything is said at all (rule 16). Lower these
+       and the app will speak sooner and be wrong more often. */
+    minOccurrences: 2, /* times a thing must recur before it is a pattern         */
+    minEvidence: 3, /* readings behind a named pattern                         */
+    minDaysForPattern: 10, /* days in the window before day-of-week patterns are read */
+    minHardDays: 8, /* hard days before adaptation is calculated               */
+    minBaselineReadings: 5, /* readings before a recovery or sleep median is trusted   */
+    /* How she rates her own confidence, and what that permits */
+    confidenceHigh: 8, /* at or above: a good week to move a variable             */
+    confidenceSteady: 6, /* at or above: hold. Under it, simplify                   */
+    healthCoverage: 0.6, /* share of the week's score present before it is not "partial" */
+    /* When the app decides she has moved past restoration */
+    phaseGymDays: 7, /* days with a new gym before it stops being brand new     */
+    phaseBuildWeeks: 8, /* weeks of real training, shoulder settled, before building */
+    phaseFamiliariseWeeks: 4, /* ...and before familiarising                             */
 };
 const formulas = (settings) => ({ ...FORMULA_DEFAULTS, ...((settings === null || settings === void 0 ? void 0 : settings.formulas) || {}) });
 /* ---- STARTING ASSESSMENT FIELDS ------------------------------------------
@@ -271,7 +386,7 @@ const recoveryBaseline = (morning, t) => {
         if (!isNaN(v) && v > 0)
             vals.push(v);
     }
-    if (vals.length < 5)
+    if (vals.length < FORMULA_DEFAULTS.minBaselineReadings)
         return null;
     vals.sort((a, b) => a - b);
     return Math.round(vals[Math.floor(vals.length / 2)]);
@@ -287,7 +402,7 @@ const sleepBaseline = (logs, t) => {
         if (!isNaN(v) && v > 0)
             vals.push(v);
     }
-    if (vals.length < 5)
+    if (vals.length < FORMULA_DEFAULTS.minBaselineReadings)
         return null;
     vals.sort((a, b) => a - b);
     return Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
@@ -299,19 +414,19 @@ const bandByKey = (k) => BAND_OFFSETS.find((b) => b.key === k) || null;
 const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
     if (v === null || v === "" || isNaN(Number(v)))
         return null;
-    const base = baseline || 55;
+    const base = baseline || F.recBaselineFallback;
     const offs = [F.bandGreen, F.bandSteady, F.bandEasy, -999];
     const i = offs.findIndex((o) => Number(v) >= base + o);
     const band = BAND_OFFSETS[i < 0 ? 3 : i];
     return { ...band, base, threshold: base + offs[i < 0 ? 3 : i] };
 };
 /* --- confidence: how she rates herself decides how ambitious to be --------- */
-const confidenceRule = (c) => {
+const confidenceRule = (c, F = FORMULA_DEFAULTS) => {
     if (c === null || isNaN(c))
         return null;
-    if (c >= 8)
+    if (c >= F.confidenceHigh)
         return { key: "up", line: "Confidence is high. Good week to move a variable." };
-    if (c >= 6)
+    if (c >= F.confidenceSteady)
         return { key: "hold", line: "Confidence is steady. Keep things where they are." };
     return { key: "down", line: "Confidence is low. Simplify — fewer variables, cleaner sessions." };
 };
@@ -338,7 +453,7 @@ const trendOf = (series) => {
 const HEALTH_WEIGHTS = { completion: 40, recovery: 20, sleep: 15, strength: 10, mobility: 10, balance: 5 };
 /* Nothing above is fixed. These are the starting values; Settings → Formulas
    edits them and the engine reads the edited ones from that point on. */
-const healthScore = (parts, weights = HEALTH_WEIGHTS) => {
+const healthScore = (parts, weights = HEALTH_WEIGHTS, F = FORMULA_DEFAULTS) => {
     let got = 0, weight = 0;
     Object.entries(weights).forEach(([k, w]) => {
         const v = parts[k];
@@ -350,7 +465,7 @@ const healthScore = (parts, weights = HEALTH_WEIGHTS) => {
     const total = Object.values(weights).reduce((a, b) => a + b, 0);
     if (!weight)
         return null;
-    return { score: Math.round((got / weight) * 100), coverage: weight / total, partial: weight / total < 0.6 };
+    return { score: Math.round((got / weight) * 100), coverage: weight / total, partial: weight / total < F.healthCoverage };
 };
 /* --- season: winter is for holding on, not for personal bests ------------- */
 const seasonOf = (t) => {
@@ -2813,12 +2928,12 @@ const PHASES = {
    The gym date still governs when there IS one. Without one, the app watches
    the two things the phase is actually about: whether she has been training at
    all, and whether the shoulder is still the thing talking. */
-const phaseFor = (t, gymDate, evidence) => {
+const phaseFor = (t, gymDate, evidence, F = FORMULA_DEFAULTS) => {
     if (gymDate) {
         const days = Math.floor((parse(t) - parse(gymDate)) / 86400000);
         if (days < 0)
             return "restoration";
-        if (days < 7)
+        if (days < F.phaseGymDays)
             return "familiarise";
         return "building";
     }
@@ -2826,9 +2941,9 @@ const phaseFor = (t, gymDate, evidence) => {
         return "restoration";
     /* eight weeks of real training with a settled shoulder is a building block by
        any reading of it, whether or not she ever typed a date into Settings */
-    if (evidence.weeks >= 8 && evidence.shoulderSettled)
+    if (evidence.weeks >= F.phaseBuildWeeks && evidence.shoulderSettled)
         return "building";
-    if (evidence.weeks >= 4)
+    if (evidence.weeks >= F.phaseFamiliariseWeeks)
         return "familiarise";
     return "restoration";
 };
@@ -3526,7 +3641,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "13 August 2026 · 139";
+const BUILD = "14 August 2026 · 140";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5017,9 +5132,9 @@ function useCoach(data, day, clock) {
                said about the shoulder for four weeks. Never mentioned = nothing
                to settle. */
             return { weeks, shoulderSettled: !shoulderGuard
-                    || (!shoulderTold.length && (shoulderQuietDays === null || shoulderQuietDays >= 28)) };
+                    || (!shoulderTold.length && (shoulderQuietDays === null || shoulderQuietDays >= FX.shoulderQuietDays)) };
         })();
-        const phaseKey = phaseFor(t, settings.gymDate, phaseEvidence);
+        const phaseKey = phaseFor(t, settings.gymDate, phaseEvidence, FX);
         const phase = { key: phaseKey, ...PHASES[phaseKey] };
         /* TWO LISTS, AND THE DIFFERENCE MATTERS.
     
@@ -5093,7 +5208,7 @@ function useCoach(data, day, clock) {
         const sleepValue = Number(loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.sleep);
         const sleepBase = sleepBaseline(logs, t);
         const sleptHours = !isNaN(sleepValue) && sleepValue > 0 ? Math.round(sleepValue * 10) / 10 : null;
-        const sleepShort = sleptHours !== null && (sleepBase ? sleptHours <= sleepBase - 1.5 : sleptHours < 6);
+        const sleepShort = sleptHours !== null && (sleepBase ? sleptHours <= sleepBase - FX.sleepShortDrop : sleptHours < FX.sleepShortAbs);
         const sleepWhy = !sleepShort ? null
             : sleepBase
                 ? `you slept ${sleptHours} hours against your usual ${sleepBase}, so this is a step below what I would otherwise have picked`
@@ -5137,7 +5252,7 @@ function useCoach(data, day, clock) {
         const lastWeek = weekly[lastWeekKey] || null;
         const prevWeek = weekly[weekStart(addDays(t, -14), startOn)] || null;
         const confRaw = lastWeek ? Number(lastWeek.confidence) : NaN;
-        const confidence = confidenceRule(isNaN(confRaw) ? null : confRaw);
+        const confidence = confidenceRule(isNaN(confRaw) ? null : confRaw, FX);
         /* The daily 1-5 comfort tap is gone (her decision, 12 August), so the
            week's comfort is read off the record instead: a fresh complaint is
            a no, an open-but-quiet one is unknown, a silent record is a yes. */
@@ -5151,9 +5266,9 @@ function useCoach(data, day, clock) {
             ? weeklyVerdict({
                 hitTarget: weekDone >= seasonTarget ? true : (weekDone >= seasonTarget - 1 ? null : false),
                 comfortOk,
-                recoveryOk: recAvg === null ? null : recAvg >= recBaseline - 5,
+                recoveryOk: recAvg === null ? null : recAvg >= recBaseline - FX.recoveryOkGap,
                 confidence: confidence ? confidence.key === "up" : null,
-                quality: isNaN(qualityRaw) ? null : qualityRaw <= 8,
+                quality: isNaN(qualityRaw) ? null : qualityRaw <= FX.rpeQualityMax,
             })
             : { key: "paused", label: "Progression paused",
                 line: season.key === "maintain" ? "Maintenance season. Nothing needs to get harder right now."
@@ -5179,17 +5294,17 @@ function useCoach(data, day, clock) {
             completion: seasonTarget && firstSession
                 ? weekDone / Math.max(1, seasonTarget * Math.min(1, (Math.round((parse(t) - parse(firstSession)) / 86400000) + 1) / 7))
                 : null,
-            recovery: recAvg === null ? null : Math.min(1, recAvg / (recBaseline + 10)),
-            sleep: sleepVals.length ? Math.min(1, (sleepVals.reduce((a, b) => a + b, 0) / sleepVals.length) / 8) : null,
+            recovery: recAvg === null ? null : Math.min(1, recAvg / (recBaseline + FX.recoveryCeilingGap)),
+            sleep: sleepVals.length ? Math.min(1, (sleepVals.reduce((a, b) => a + b, 0) / sleepVals.length) / FX.sleepIdeal) : null,
             strength: capBest("push"),
             mobility: capBest("mobility"),
             balance: capBest("balance"),
         }, { completion: F.wCompletion, recovery: F.wRecovery, sleep: F.wSleep,
-            strength: F.wStrength, mobility: F.wMobility, balance: F.wBalance });
+            strength: F.wStrength, mobility: F.wMobility, balance: F.wBalance }, FX);
         /* ---- every measure, analysed comparatively ---- */
         const ctx = {
             hitTarget: weekDone >= seasonTarget,
-            recoveryOk: recAvg === null ? true : recAvg >= recBaseline - 5,
+            recoveryOk: recAvg === null ? true : recAvg >= recBaseline - FX.recoveryOkGap,
             shoulderIssue: shoulderSore,
         };
         /* Every number she logs, including the ones with no right direction. The
@@ -5827,7 +5942,7 @@ function useCoach(data, day, clock) {
             /* 91 days is the habit-formation research figure for exercise — how long
                repetition takes to become automatic. It is NOT a plan and nothing is
                scheduled from it; the programme remains one month at a time. */
-            const reps = Math.min(1, (weeksTraining * 7) / 91);
+            const reps = Math.min(1, (weeksTraining * 7) / FX.habitDays);
             const stick = Math.min(1, consistency / 85);
             /* AUDIT ITEM 14 (rule 23): a missing cue reading used to become an
                invented 0.5 that still printed as a percentage. The score now
@@ -5856,7 +5971,7 @@ function useCoach(data, day, clock) {
                 const slept = Number(m.asleep) || (Number((_b = logs[d]) === null || _b === void 0 ? void 0 : _b.sleep) ? Number(logs[d].sleep) * 60 : 0);
                 const gapBefore = !((_c = logs[addDays(d, -1)]) === null || _c === void 0 ? void 0 : _c.completed) && !((_d = logs[addDays(d, -2)]) === null || _d === void 0 ? void 0 : _d.completed);
                 if ((rec > 0 && recBaseline && rec < recBaseline - 8) ||
-                    (sh > 0 && sh <= 2) || (slept > 0 && slept < 360) || gapBefore)
+                    (sh > 0 && sh <= 2) || (slept > 0 && slept < FX.momentumSleepMins) || gapBefore)
                     n++;
             }
             return n;
@@ -5977,7 +6092,7 @@ function useCoach(data, day, clock) {
                     if (r === null)
                         return;
                     const lift = Math.round((r - base) * 100);
-                    if (lift >= 15)
+                    if (lift >= FX.patternLift)
                         out.push({ kind: "season", tag: tag.id,
                             text: `You mention ${label(tag.id)} noticeably more between ${se.label.toLowerCase()} — ${Math.round(r * 100)}% of what you write then, against ${Math.round(base * 100)}% across the year.`,
                             n: sub.length });
@@ -5988,11 +6103,11 @@ function useCoach(data, day, clock) {
                 const week = voice.filter((x) => x.dow > 0 && x.dow < 6);
                 if (weekend.length >= 6 && week.length >= 6) {
                     const rw = rateOf(tag.id, weekend), rd = rateOf(tag.id, week);
-                    if (rw !== null && rd !== null && Math.round((rw - rd) * 100) >= 15)
+                    if (rw !== null && rd !== null && Math.round((rw - rd) * 100) >= FX.patternLift)
                         out.push({ kind: "week", tag: tag.id,
                             text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} comes up far more at weekends than on weekdays — ${Math.round(rw * 100)}% against ${Math.round(rd * 100)}%.`,
                             n: weekend.length });
-                    if (rw !== null && rd !== null && Math.round((rd - rw) * 100) >= 15)
+                    if (rw !== null && rd !== null && Math.round((rd - rw) * 100) >= FX.patternLift)
                         out.push({ kind: "week", tag: tag.id,
                             text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} is a weekday thing for you — ${Math.round(rd * 100)}% against ${Math.round(rw * 100)}% at weekends.`,
                             n: week.length });
@@ -6004,10 +6119,10 @@ function useCoach(data, day, clock) {
                     const rr = rateOf(tag.id, recent), ro = rateOf(tag.id, older);
                     if (rr !== null && ro !== null) {
                         const lift = Math.round((rr - ro) * 100);
-                        if (lift >= 20)
+                        if (lift >= FX.patternTrend)
                             out.push({ kind: "trend", tag: tag.id,
                                 text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} has been coming up more this month than it used to — ${Math.round(rr * 100)}% against ${Math.round(ro * 100)}% before.`, n: recent.length });
-                        if (lift <= -20)
+                        if (lift <= -FX.patternTrend)
                             out.push({ kind: "trend", tag: tag.id,
                                 text: `You mention ${label(tag.id)} less than you used to — ${Math.round(rr * 100)}% this month against ${Math.round(ro * 100)}% before. Worth noticing; those shifts are invisible day to day.`, n: recent.length });
                     }
@@ -6042,7 +6157,7 @@ function useCoach(data, day, clock) {
                     restPrev: !((_b = logs[addDays(d, -1)]) === null || _b === void 0 ? void 0 : _b.completed),
                 });
             }
-            if (days.length < 10)
+            if (days.length < FX.minDaysForPattern)
                 return out;
             const rate = (f) => {
                 const sub = days.filter(f);
@@ -6056,30 +6171,30 @@ function useCoach(data, day, clock) {
             const bestDow = [...byDow].sort((a, b) => b.pct - a.pct)[0];
             const worstDow = [...byDow].sort((a, b) => a.pct - b.pct)[0];
             const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-            if (bestDow && bestDow.pct - base >= 15)
+            if (bestDow && bestDow.pct - base >= FX.patternLift)
                 out.motivators.push(`${DOW[bestDow.dow]}s are your strongest day — you train on ${bestDow.pct}% of them against ${base}% overall`);
-            if (worstDow && base - worstDow.pct >= 20)
+            if (worstDow && base - worstDow.pct >= FX.patternBrake)
                 out.brakes.push(`${DOW[worstDow.dow]}s are where sessions go missing — ${worstDow.pct}% against ${base}% overall`);
             /* recovery: does a low score actually stop her? */
-            const lowRec = rate((x) => x.rec !== null && recBaseline && x.rec < recBaseline - 8);
-            const highRec = rate((x) => x.rec !== null && recBaseline && x.rec > recBaseline + 8);
-            if (lowRec && base - lowRec.pct >= 20)
+            const lowRec = rate((x) => x.rec !== null && recBaseline && x.rec < recBaseline - FX.recoveryLowGap);
+            const highRec = rate((x) => x.rec !== null && recBaseline && x.rec > recBaseline + FX.recoveryHighGap);
+            if (lowRec && base - lowRec.pct >= FX.patternBrake)
                 out.brakes.push(`a low recovery score stops you — ${lowRec.pct}% of those days get trained against ${base}% overall`);
-            else if (lowRec && Math.abs(lowRec.pct - base) < 10)
+            else if (lowRec && Math.abs(lowRec.pct - base) < FX.patternNeutral)
                 out.motivators.push(`a low recovery score doesn't stop you, which is unusual and worth knowing`);
-            if (highRec && highRec.pct - base >= 15)
+            if (highRec && highRec.pct - base >= FX.patternLift)
                 out.motivators.push(`you reliably use a good recovery morning — ${highRec.pct}% of them get trained`);
             /* sleep */
-            const shortSleep = rate((x) => x.slept !== null && x.slept < 390);
-            if (shortSleep && base - shortSleep.pct >= 20)
+            const shortSleep = rate((x) => x.slept !== null && x.slept < FX.brakeSleepMins);
+            if (shortSleep && base - shortSleep.pct >= FX.patternBrake)
                 out.brakes.push(`a short night is one of the strongest brakes on you — ${shortSleep.pct}% against ${base}%`);
             /* body work the day before */
             const afterBody = rate((x) => x.bodyPrev);
-            if (afterBody && afterBody.pct - base >= 15)
+            if (afterBody && afterBody.pct - base >= FX.patternLift)
                 out.motivators.push(`the day after body work you almost always train — ${afterBody.pct}%`);
             /* coming off a rest day */
             const afterRest = rate((x) => x.restPrev);
-            if (afterRest && base - afterRest.pct >= 20)
+            if (afterRest && base - afterRest.pct >= FX.patternBrake)
                 out.brakes.push(`getting going again after a day off is where it slips — ${afterRest.pct}% against ${base}%`);
             /* what feels good */
             if (affectByClass.length >= 2) {
@@ -6170,7 +6285,7 @@ function useCoach(data, day, clock) {
                 if (!(l === null || l === void 0 ? void 0 : l.completed))
                     continue;
                 const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
-                if (ld < 300)
+                if (ld < FX.hardDayLoad)
                     continue;
                 const base = Number((_a = morning === null || morning === void 0 ? void 0 : morning[d]) === null || _a === void 0 ? void 0 : _a.recovery) || null;
                 if (!base)
@@ -6182,7 +6297,7 @@ function useCoach(data, day, clock) {
                         hard.push({ lag: n, delta: r - base });
                 });
             }
-            if (hard.length < 8)
+            if (hard.length < FX.minHardDays)
                 return null;
             const at = (n) => {
                 const sub2 = hard.filter((h) => h.lag === n);
@@ -6194,7 +6309,7 @@ function useCoach(data, day, clock) {
             const worst = d2 < d1 ? 2 : 1;
             /* was there a hard session exactly worst-lag days ago? */
             const back = logs[addDays(t, -worst)];
-            const hardThen = (back === null || back === void 0 ? void 0 : back.completed) && ((Number(back.minutes) || 0) * (Number(back.rpe) || 0)) >= 300;
+            const hardThen = (back === null || back === void 0 ? void 0 : back.completed) && ((Number(back.minutes) || 0) * (Number(back.rpe) || 0)) >= FX.hardDayLoad;
             return hardThen ? { worst } : null;
         })();
         const dislikes = (() => {
@@ -6452,7 +6567,7 @@ function useCoach(data, day, clock) {
             nudges.push({ tone: "warm", text: `${improving.length} measures improved. Whatever you did over the last fortnight, do it again.` });
         if (pbCount > 0 && improving.some((m) => m.isBest))
             nudges.push({ tone: "warm", text: `New personal best in ${improving.filter((m) => m.isBest).map((m) => m.label.toLowerCase()).join(" and ")}. That's the whole point of measuring.` });
-        if (consistency >= 85)
+        if (consistency >= FX.consistencyHigh)
             nudges.push({ tone: "warm", text: `${consistency}% consistency over four weeks. Most people never get near that.` });
         if ((recovery === null || recovery === void 0 ? void 0 : recovery.key) === "rest" && !loggedToday)
             nudges.push({ tone: "firm", text: "Recovery is well below your normal. Doing nothing today is the correct training decision, not a missed day." });
@@ -6713,19 +6828,19 @@ function useCoach(data, day, clock) {
                 return "These five start working once your sessions carry an effort score — the tap is at the bottom of this card, right after you log. Until then the app is counting attendance, which is the least interesting thing about you.";
             if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "spike")
                 parts.push("This week is a long way above your normal, and sudden jumps are where injuries come from — not hard training, sudden training. Take the next one easier.");
-            else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "under" && consistency < 70)
+            else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "under" && consistency < FX.consistencyUnder)
                 parts.push("You're doing less than your body is prepared for, and missing sessions on top. Neither is a crisis on its own; together they're a drift worth stopping.");
             else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "under")
                 parts.push("You're showing up reliably but the work has got lighter. There's room to push — your body is prepared for more than you're giving it.");
-            else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "good" && consistency >= 75)
+            else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "good" && consistency >= FX.consistencyGood)
                 parts.push("Consistent, and training at a level your body is ready for. This is exactly the boring middle where progress actually happens.");
             else if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "high")
                 parts.push("Heavier than your usual month. Fine for one week — not two in a row.");
             else
                 parts.push("The load is reasonable; the gaps between sessions are the thing to tighten.");
-            if (covered <= 4 && thinnest.length)
+            if (covered <= FX.coverNarrow && thinnest.length)
                 parts.push(`${thinnest.slice(0, 2).map((r) => r.label.toLowerCase()).join(" and ")} barely got touched — that's where the next add-on should go.`);
-            if (adaptation !== null && adaptation > 8)
+            if (adaptation !== null && adaptation > FX.adaptStrong)
                 parts.push("And the same effort is costing you less recovery than it did a month ago, which is the part no strength number will tell you.");
             return parts.join(" ");
         };
@@ -6747,11 +6862,11 @@ function useCoach(data, day, clock) {
         const respNow = mean(readMorning("respiratory", 3));
         const spo2Now = mean(readMorning("spo2", 3));
         const illnessFlags = [];
-        if (tempBase && tempNow && tempNow - tempBase >= 0.4)
+        if (tempBase && tempNow && tempNow - tempBase >= FX.illTempRise)
             illnessFlags.push("skin temperature up");
-        if (respBase && respNow && respNow - respBase >= 1.0)
+        if (respBase && respNow && respNow - respBase >= FX.illRespRise)
             illnessFlags.push("breathing rate up");
-        if (spo2Now && spo2Now < 95)
+        if (spo2Now && spo2Now < FX.illSpo2Floor)
             illnessFlags.push("blood oxygen below 95%");
         /* ---- THE SMALLER DOOR ----------------------------------------------
            Rule 4 as amended: the coach never accepts a no and closes the
@@ -6842,7 +6957,7 @@ function useCoach(data, day, clock) {
            difference in percentage points of body composition, which at ~30% muscle
            made the credit about three and a half times too generous. */
         const expectedLoss = (monthsSpan && muscleFirst > 0)
-            ? muscleFirst * (0.0075 / 12) * monthsSpan : 0;
+            ? muscleFirst * (FX.muscleGainRate / 12) * monthsSpan : 0;
         const muscleCredit = (muscleNow > 0 && muscleFirst > 0 && monthsSpan)
             ? Math.round(((muscleNow - muscleFirst) + expectedLoss) * 100) / 100 : null;
         /* sleep: we have durations, not bed and wake times, so this is variability
@@ -6939,7 +7054,7 @@ function useCoach(data, day, clock) {
             ? Math.round(((strengthNow - strengthFirst) / strengthFirst) * 100 / (loadSinceFirst / 1000) * 10) / 10 : null;
         /* shoulder: what it has actually cost */
         const shoulderDays = Object.keys(logs).filter((d) => { var _a; return Number((_a = logs[d]) === null || _a === void 0 ? void 0 : _a.shoulder) > 0; });
-        const shoulderLow = shoulderDays.filter((d) => Number(logs[d].shoulder) <= 3).length;
+        const shoulderLow = shoulderDays.filter((d) => Number(logs[d].shoulder) <= FX.shoulderLowMax).length;
         const shoulderCost = shoulderDays.length ? Math.round((shoulderLow / shoulderDays.length) * 100) : null;
         const shoulderRecent = shoulderDays.filter((d) => d >= addDays(t, -28));
         const shoulderTrend = shoulderRecent.length >= 3 && shoulderDays.length > shoulderRecent.length
@@ -6967,7 +7082,7 @@ function useCoach(data, day, clock) {
             if (pm && am < pm)
                 return { key: "back", color: C.clay,
                     text: "A little worse this morning than it was during the session. Not alarming, but it's the signal to hold the load where it is rather than adding to it — the morning reading is the one that decides." };
-            if (am >= 4)
+            if (am >= FX.shoulderClear)
                 return { key: "clear", color: C.moss,
                     text: "Back to baseline overnight. That load was right — you can go up a step next time it comes round." };
             if (pm && am >= pm)
@@ -7143,7 +7258,7 @@ function useCoach(data, day, clock) {
                 if (!(l === null || l === void 0 ? void 0 : l.completed))
                     continue;
                 const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
-                if (ld < 300)
+                if (ld < FX.hardDayLoad)
                     continue;
                 const rec = (n) => { var _a; return Number((_a = morning === null || morning === void 0 ? void 0 : morning[addDays(d, n)]) === null || _a === void 0 ? void 0 : _a.recovery) || null; };
                 const base = Number((_a = morning === null || morning === void 0 ? void 0 : morning[d]) === null || _a === void 0 ? void 0 : _a.recovery) || null;
@@ -7155,7 +7270,7 @@ function useCoach(data, day, clock) {
                 if (r2)
                     hard.push({ lag: 2, delta: r2 - base });
             }
-            if (hard.length < 8)
+            if (hard.length < FX.minHardDays)
                 return null;
             const at = (n) => {
                 const sub = hard.filter((h) => h.lag === n);
@@ -7353,8 +7468,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "autonomic", label: "Autonomic", scope: "7 days vs 28",
                 display: rhrDrift === null ? "—" : `${rhrDrift > 0 ? "+" : ""}${Math.round(rhrDrift)}`,
                 sub: rhrDrift === null ? "needs 28 days of WHOOP"
-                    : rhrDrift <= -2 ? "settling" : rhrDrift >= 3 ? "elevated" : "stable",
-                color: rhrDrift === null ? C.muted : rhrDrift <= -2 ? C.moss : rhrDrift >= 3 ? C.ochre : C.ink,
+                    : rhrDrift <= FX.rhrDriftDown ? "settling" : rhrDrift >= FX.rhrDriftUp ? "elevated" : "stable",
+                color: rhrDrift === null ? C.muted : rhrDrift <= FX.rhrDriftDown ? C.moss : rhrDrift >= FX.rhrDriftUp ? C.ochre : C.ink,
                 plain: "Your resting heart rate this week against your own month, in beats per minute.",
                 how: "Mean resting heart rate over 7 days minus the mean over 28 days. Weekly, never daily — single-morning readings are mostly noise.",
                 meaning: `${rhr28 !== null || hrv28 !== null
@@ -7365,9 +7480,9 @@ function useCoach(data, day, clock) {
                 display: timingSpread === null ? (slpSD === null ? "—" : `${Math.round(slpSD / 60 * 10) / 10}h`)
                     : `${Math.round(timingSpread / 6) / 10}h`,
                 sub: timingSpread === null ? (slpSD === null ? "needs WHOOP history" : "duration only — reimport for timing")
-                    : `${timingSpread < 45 ? "very regular" : timingSpread < 75 ? "reasonable" : "scattered"} · ${timingBasis}`,
+                    : `${timingSpread < FX.timingRegular ? "very regular" : timingSpread < FX.timingScattered ? "reasonable" : "scattered"} · ${timingBasis}`,
                 color: timingSpread === null ? C.muted
-                    : timingSpread < 45 ? C.moss : timingSpread < 75 ? C.ink : C.ochre,
+                    : timingSpread < FX.timingRegular ? C.moss : timingSpread < FX.timingScattered ? C.ink : C.ochre,
                 plain: "How much the times you sleep and wake drift from night to night.",
                 how: "Circular spread across 28 days of whatever real times exist: the wake time you type each morning, and your sleep-onset time when a WHOOP import has one. Circular so that 23:50 and 00:10 count as twenty minutes apart, not twenty-three hours. HER CORRECTION, 13 August: a bedtime is never worked out from your wake time minus your hours slept — those hours are hours ASLEEP, not hours in bed, so that subtraction would invent a time you were never in bed at.",
                 meaning: `How long you sleep matters less than whether you sleep it at the same time. Across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Measured on ${timingBasis}, your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night. Pulling that under an hour is worth more than an extra session.` : "Once your WHOOP history is in, this says how much your own timing drifts."}${bedSpread === null ? " Your bed time is deliberately not part of this. HER CORRECTION, 13 August: the hours you log are hours ASLEEP, not hours in bed — so subtracting them from your wake time would invent a bedtime that was never true. Only a WHOOP import carries the real one." : ""}`,
@@ -7401,8 +7516,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "sleepquality", label: "Restorative sleep", scope: "deep + REM share",
                 display: restorativePct === null ? "—" : `${restorativePct}%`,
                 sub: restorativePct === null ? "needs WHOOP history"
-                    : restorativePct >= 40 ? "strong" : restorativePct >= 30 ? "adequate" : "light",
-                color: restorativePct === null ? C.muted : restorativePct >= 40 ? C.moss : restorativePct >= 30 ? C.ink : C.ochre,
+                    : restorativePct >= FX.restorativeStrong ? "strong" : restorativePct >= FX.restorativeAdequate ? "adequate" : "light",
+                color: restorativePct === null ? C.muted : restorativePct >= FX.restorativeStrong ? C.moss : restorativePct >= FX.restorativeAdequate ? C.ink : C.ochre,
                 plain: "How much of your sleep is deep or REM rather than light.",
                 how: "Deep plus REM minutes as a share of total sleep, averaged over 14 nights.",
                 meaning: `Nine hours of mostly light sleep does less than seven hours with a good deep and REM share. Deep sleep is when physical repair happens — the part that matters after a strength day — and REM is where the nervous system recovers. Around 40% of the night in the two together is a good share for an adult. ${effNow ? `Your sleep efficiency is ${Math.round(effNow)}%${disturbNow ? `, with about ${Math.round(disturbNow)} disturbances a night` : ""}.` : ""}`,
@@ -7410,8 +7525,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "sleepdebt", label: "Sleep debt", scope: "last 7 nights",
                 display: debtNow === null ? "—" : `${Math.round(debtNow / 6) / 10}h`,
                 sub: debtNow === null ? "needs WHOOP history"
-                    : debtNow < 30 ? "paid off" : debtNow < 90 ? "manageable" : "accumulating",
-                color: debtNow === null ? C.muted : debtNow < 30 ? C.moss : debtNow < 90 ? C.ink : C.ochre,
+                    : debtNow < FX.debtPaid ? "paid off" : debtNow < FX.debtManageable ? "manageable" : "accumulating",
+                color: debtNow === null ? C.muted : debtNow < FX.debtPaid ? C.moss : debtNow < FX.debtManageable ? C.ink : C.ochre,
                 plain: "How far behind your own sleep need you are running.",
                 how: "WHOOP's calculated sleep debt, averaged across seven nights. It compares what your body needed, given recent strain, against what you actually got.",
                 meaning: "This is the number that explains a bad recovery score when nothing else does. Debt accumulates quietly across a week and then shows up as a flat, heavy day you can't account for. It is also the most fixable thing on this whole list — an earlier bedtime clears it faster than any training change.",
@@ -7419,8 +7534,8 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "cardiac", label: "Working heart rate", scope: "this month vs last",
                 display: avgHrNow === null ? "—" : String(Math.round(avgHrNow)),
                 sub: cardiacDrift === null ? "needs two months"
-                    : cardiacDrift <= -2 ? `${Math.abs(cardiacDrift)} bpm lower` : cardiacDrift >= 2 ? `${cardiacDrift} bpm higher` : "steady",
-                color: cardiacDrift === null ? C.muted : cardiacDrift <= -2 ? C.moss : cardiacDrift >= 2 ? C.ochre : C.ink,
+                    : cardiacDrift <= FX.cardiacDriftGood ? `${Math.abs(cardiacDrift)} bpm lower` : cardiacDrift >= FX.cardiacDriftBad ? `${cardiacDrift} bpm higher` : "steady",
+                color: cardiacDrift === null ? C.muted : cardiacDrift <= FX.cardiacDriftGood ? C.moss : cardiacDrift >= FX.cardiacDriftBad ? C.ochre : C.ink,
                 plain: "Your average heart rate across the day, and whether it is falling.",
                 how: "Mean of WHOOP's daily average heart rate over 28 days, against the 28 days before. Max heart rate is shown alongside for context.",
                 meaning: `Resting heart rate tells you about recovery; this tells you about the work. If your average day costs fewer beats than it did a month ago while you are doing the same or more, your heart has got better at the job. ${maxHrNow ? `Your daily maximum averages ${Math.round(maxHrNow)}, which is the ceiling your hard sessions are reaching.` : ""}`,
@@ -7428,8 +7543,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "habit", label: "Habit strength", scope: "how automatic this has become",
                 display: habitStrength === null ? "—" : `${habitStrength}%`,
                 sub: habitStrength === null ? "needs a few weeks"
-                    : habitStrength >= 75 ? "close to automatic" : habitStrength >= 45 ? "forming" : "early",
-                color: habitStrength === null ? C.muted : habitStrength >= 75 ? C.moss : C.ink,
+                    : habitStrength >= FX.habitStrong ? "close to automatic" : habitStrength >= FX.habitForming ? "forming" : "early",
+                color: habitStrength === null ? C.muted : habitStrength >= FX.habitStrong ? C.moss : C.ink,
                 plain: "How far training has moved from a decision to a default.",
                 how: "Three parts: how long you have been repeating it against the roughly three months exercise takes to become automatic, how consistently you train on the same days, and your 28-day consistency. This is a description of habit formation, not a plan — your programme is still designed one month at a time.",
                 meaning: "The research here is unusually specific and unusually reassuring. Habits take a median of 66 days to form and about 91 days for exercise — so if it still feels like effort at week six, that is the normal timeline, not a failure of will. The same work also found that missing one opportunity does not measurably damage the process. What does damage it is missing repeatedly in the same week. This number climbs fastest when you train on the same days rather than fitting sessions in wherever they land.",
@@ -7437,8 +7552,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "cue", label: "Same days", scope: "cue consistency",
                 display: cueConsistency === null ? "—" : `${cueConsistency}%`,
                 sub: cueConsistency === null ? "needs two weeks"
-                    : cueConsistency >= 80 ? "strong routine" : cueConsistency >= 60 ? "loose routine" : "scattered",
-                color: cueConsistency === null ? C.muted : cueConsistency >= 80 ? C.moss : C.ochre,
+                    : cueConsistency >= FX.cueStrong ? "strong routine" : cueConsistency >= FX.cueLoose ? "loose routine" : "scattered",
+                color: cueConsistency === null ? C.muted : cueConsistency >= FX.cueStrong ? C.moss : C.ochre,
                 plain: "How much of your training lands on the same days each week.",
                 how: "The share of your sessions over eight weeks falling on your four most-used weekdays.",
                 meaning: "A stable cue is what turns a behaviour automatic — the same days, ideally the same time, attached to something that already happens. Scattered training can still be plenty of training, but it stays a decision every single time, and decisions are what run out on the days you are tired. This is the cheapest change available to you: not more sessions, just more predictable ones.",
@@ -7446,8 +7561,8 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "feels", label: "How it feels", scope: "during, not after",
                 display: affectMean === null ? "—" : `${affectMean > 0 ? "+" : ""}${affectMean}`,
                 sub: affectMean === null ? "needs three sessions"
-                    : affectMean >= 1 ? "good in the room" : affectMean >= 0 ? "neutral" : "harder than it should be",
-                color: affectMean === null ? C.muted : affectMean >= 0.5 ? C.moss : affectMean < 0 ? C.ochre : C.ink,
+                    : affectMean >= FX.affectGood ? "good in the room" : affectMean >= 0 ? "neutral" : "harder than it should be",
+                color: affectMean === null ? C.muted : affectMean >= FX.affectOk ? C.moss : affectMean < 0 ? C.ochre : C.ink,
                 plain: "How training feels while you are doing it, on a scale of minus two to plus two.",
                 how: "Your during-session rating averaged over 28 days, and broken down by class.",
                 meaning: `This is the most under-rated number in the app. How exercise feels DURING predicts whether you keep doing it; how it feels afterwards does not. One study found each point of positive in-session feeling was worth about forty extra minutes of training a week a year later. So this is not a comfort metric — it is an adherence metric. ${affectByClass.length ? `Your best so far: ${affectByClass[0].name} at ${affectByClass[0].score > 0 ? "+" : ""}${affectByClass[0].score}.${affectByClass.length > 1 && affectByClass[affectByClass.length - 1].score < 0 ? ` Your hardest: ${affectByClass[affectByClass.length - 1].name}.` : ""}` : ""}`,
@@ -7457,7 +7572,7 @@ function useCoach(data, day, clock) {
                 sub: mobScore === null ? "no test logged yet"
                     : mobAsym.length ? `${mobAsym[0].label} ${mobAsym[0].gapPct}% apart`
                         : mobWeakest.length ? `shortest: ${mobWeakest[0].label}` : "even",
-                color: mobScore === null ? C.muted : mobScore >= 75 ? C.moss : mobScore >= 50 ? C.ink : C.ochre,
+                color: mobScore === null ? C.muted : mobScore >= FX.mobStrong ? C.moss : mobScore >= FX.mobOk ? C.ink : C.ochre,
                 plain: "How freely your body moves, across the tests of range rather than strength.",
                 how: "Each test is scored against its own range where it has one, and against your own best on that test where it does not — then averaged. Built from whatever is in your mobility battery — a length test per muscle group rather than a general movement screen: the standing and seated forward folds and the straight-leg raise for the hamstrings, legs-apart for the adductors, heel-to-bottom for the quads and hip flexors, overhead and behind-the-back reach for the shoulders, and seated rotation for the mid-back. Five are measured left and right. A gap between sides counts against the score in proportion to its size — and it is also what chooses your drills.",
                 meaning: `Strength keeps muscle; range keeps what you can do with it. These are the movements that quietly disappear without anyone noticing, because nothing tests them until the day you need one. ${mobWeakest.length ? `Your shortest right now is ${mobWeakest[0].label.toLowerCase()}, which is why it drives your daily ten minutes.` : ""}${mobAsym.length ? ` Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart side to side — closing that matters more than improving either side alone.` : ""}`,
@@ -7474,8 +7589,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "writing", label: "How much you write", scope: "14 days vs the 14 before",
                 display: writing === null ? "—" : String(writing.now),
                 sub: writing === null ? "needs history"
-                    : writing.drop <= -40 ? "well down" : writing.drop >= 20 ? "up" : "steady",
-                color: writing === null ? C.muted : writing.drop <= -40 ? C.ochre : C.moss,
+                    : writing.drop <= FX.writingDown ? "well down" : writing.drop >= FX.writingUp ? "up" : "steady",
+                color: writing === null ? C.muted : writing.drop <= FX.writingDown ? C.ochre : C.moss,
                 plain: "How many notes, entries and conversations you've added lately.",
                 how: "Session notes, daily notes, journal entries and conversations in the last fortnight, against the fortnight before.",
                 meaning: "This is the earliest warning the app has. Engagement drops in the writing before it drops in the training — usually a couple of weeks before. It is not a target and you are not expected to write more; it is simply the thing I watch to know whether to ask how you're doing.",
@@ -7501,7 +7616,7 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "blockcurve", label: "Where you dip", scope: "week within a block",
                 display: blockCurve === null ? "—" : `wk ${blockCurve.worst.week}`,
                 sub: blockCurve === null ? "needs two blocks" : `${blockCurve.worst.pct}% vs ${blockCurve.best.pct}% at best`,
-                color: blockCurve === null ? C.muted : blockCurve.spread >= 25 ? C.ochre : C.ink,
+                color: blockCurve === null ? C.muted : blockCurve.spread >= FX.blockSpreadBad ? C.ochre : C.ink,
                 plain: "Which week of a block your sessions go missing.",
                 how: "Completion rate by position within a block, across every block so far.",
                 meaning: `Most people have one. ${blockCurve ? `Yours is week ${blockCurve.worst.week}, at ${blockCurve.worst.pct}% against ${blockCurve.best.pct}% in your best week.` : ""} Once it's known it stops being a failure and becomes a design input — the easier week gets built in there deliberately instead of happening anyway.`,
@@ -7584,8 +7699,8 @@ function useCoach(data, day, clock) {
                 display: afterMean === null ? "—" : `${afterMean}/5`,
                 sub: afterMean === null ? "needs three sessions"
                     : givesBack === null ? "how you feel afterwards"
-                        : givesBack > 0.3 ? "leaves you better" : givesBack < -0.3 ? "costing more than it returns" : "even",
-                color: afterMean === null ? C.muted : givesBack > 0.3 ? C.moss : givesBack < -0.3 ? C.ochre : C.ink,
+                        : givesBack > FX.givesBackGood ? "leaves you better" : givesBack < FX.givesBackBad ? "costing more than it returns" : "even",
+                color: afterMean === null ? C.muted : givesBack > FX.givesBackGood ? C.moss : givesBack < FX.givesBackBad ? C.ochre : C.ink,
                 plain: "How you feel after a session, set against how it felt during.",
                 how: "Your after-session energy averaged over 28 days, compared with the during-session rating over the same period.",
                 meaning: "Training should leave you better than it found you — not every time, but on average. When sessions consistently feel harder during and flatter afterwards, that is the profile that comes before people stop, and it usually means intensity has crept past where it needs to be rather than anything about willingness. This is the pair of numbers that catches it early, while it is still a small adjustment.",
@@ -7593,7 +7708,7 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "barriers", label: "Trained anyway", scope: "last 28 days",
                 display: String(barrierWins),
                 sub: barrierWins === 0 ? "none yet" : "sessions with something in the way",
-                color: barrierWins >= 3 ? C.moss : C.ink,
+                color: barrierWins >= FX.barrierWins ? C.moss : C.ink,
                 plain: "Sessions you completed on days when something was against you.",
                 how: "Counts completed sessions on days with low recovery, poor sleep, a sore shoulder, or following a two-day gap.",
                 meaning: "Confidence that you can train predicts starting. Confidence that you can train when conditions are bad predicts still being here in a year — that distinction is one of the clearest findings in the adherence literature. Every one of these is evidence that a bad day does not have to cost you the session, and that evidence is what carries you through the weeks that go wrong.",
@@ -7611,8 +7726,8 @@ function useCoach(data, day, clock) {
             M({ group: "week", id: "volume", label: "Weekly sets", scope: "regions at 6+ sets",
                 display: setsTotal ? `${setsMet}/${SET_REGIONS.length}` : "—",
                 sub: !setsTotal ? "counts only sets you actually counted"
-                    : setsMet >= 5 ? "dose met" : setsShort.length ? `${setsShort[0].label.toLowerCase()} lowest` : "building",
-                color: !setsTotal ? C.muted : setsMet >= 5 ? C.moss : setsMet >= 3 ? C.ink : C.ochre,
+                    : setsMet >= FX.setsMetCount ? "dose met" : setsShort.length ? `${setsShort[0].label.toLowerCase()} lowest` : "building",
+                color: !setsTotal ? C.muted : setsMet >= FX.setsMetCount ? C.moss : setsMet >= FX.setsBuildingCount ? C.ink : C.ochre,
                 plain: "How many body regions are getting the six-plus weekly counted sets that hold muscle. Filmed classes are invisible here, on your instruction — their sets cannot honestly be counted.",
                 how: "Only sets you actually counted — benchmarks, coach-designed work, your Body-tab logs — distributed across regions by body map, totalled over seven days. The app no longer asks for a set count after filmed classes, because the choreography decides and counting is not possible.",
                 meaning: `This is the measure that speaks most directly to your actual goal. For post-menopausal women the research puts the dose for holding or building muscle above six to eight sets per muscle per week, and ten or more to reliably prevent lean-mass loss. The app holds you to ${FX.setTarget} as the floor, which you can change. It is a volume prescription, not an attendance one — four sessions a week is plenty if the sets are there, and useless if they aren't. ${setsTotal ? `Lowest right now: ${setsShort.slice(0, 2).map((r) => `${r.label.toLowerCase()} at ${sets7[r.id]}`).join(", ")}.` : ""}`,
@@ -7645,8 +7760,8 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "base", label: "Fitness base", scope: "this month vs last",
                 display: chronicGrowth === null ? "—" : `${chronicGrowth > 0 ? "+" : ""}${chronicGrowth}%`,
                 sub: chronicGrowth === null ? "needs two months of effort scores"
-                    : chronicGrowth > 0 ? "expanding" : chronicGrowth < -10 ? "contracting" : "level",
-                color: chronicGrowth === null ? C.muted : chronicGrowth > 0 ? C.moss : chronicGrowth < -10 ? C.ochre : C.ink,
+                    : chronicGrowth > 0 ? "expanding" : chronicGrowth < -FX.chronicGrowthSafe ? "contracting" : "level",
+                color: chronicGrowth === null ? C.muted : chronicGrowth > 0 ? C.moss : chronicGrowth < -FX.chronicGrowthSafe ? C.ochre : C.ink,
                 plain: "Whether your typical week is getting bigger, or just spikier.",
                 how: "Average weekly load over the last 28 days, against the 28 days before that.",
                 meaning: "Balance tells you whether this week fits your month. This tells you whether the month itself is growing. Fitness develops when the base rises steadily while individual weeks stay close to it — a flat base with occasional big weeks is the pattern that produces injuries rather than progress.",
@@ -7654,8 +7769,8 @@ function useCoach(data, day, clock) {
             M({ group: "month", id: "variety", label: "Variety", scope: "last 28 days",
                 /* no sessions is not "narrow" — it is nothing to count (rule 23) */
                 display: variety28 ? String(variety28) : "—",
-                sub: !variety28 ? "no sessions in the window yet" : variety28 >= 5 ? "wide" : variety28 >= 3 ? "reasonable" : "narrow",
-                color: !variety28 ? C.muted : variety28 >= 5 ? C.moss : variety28 >= 3 ? C.ink : C.ochre,
+                sub: !variety28 ? "no sessions in the window yet" : variety28 >= FX.varietyWide ? "wide" : variety28 >= FX.varietyOk ? "reasonable" : "narrow",
+                color: !variety28 ? C.muted : variety28 >= FX.varietyWide ? C.moss : variety28 >= FX.varietyOk ? C.ink : C.ochre,
                 plain: "How many different classes you've done this month.",
                 how: "Distinct class names across completed sessions in 28 days.",
                 meaning: "Not variety for its own sake. In a large cohort of people starting training, greater diversity of equipment and modality was associated with lower dropout — it is an adherence protector, which makes it a genuine training variable rather than a nice-to-have.",
@@ -7663,8 +7778,8 @@ function useCoach(data, day, clock) {
             M({ group: "quarter", id: "progression", label: "Progression rate", scope: "safe ceiling 10%/week",
                 display: chronicGrowth === null ? "—" : `${Math.round((chronicGrowth || 0) / 4)}%`,
                 sub: chronicGrowth === null ? "needs effort scores"
-                    : Math.abs(chronicGrowth / 4) <= 10 ? "within the safe rate" : "faster than advised",
-                color: chronicGrowth === null ? C.muted : Math.abs(chronicGrowth / 4) <= 10 ? C.moss : C.ochre,
+                    : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? "within the safe rate" : "faster than advised",
+                color: chronicGrowth === null ? C.muted : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? C.moss : C.ochre,
                 plain: "How fast your training load is climbing, per week.",
                 how: "Month-over-month change in average weekly load, divided across four weeks.",
                 meaning: "The load-management literature is consistent that increases beyond about 10% a week are where trouble starts. This is the number that lets you build for a year without a setback — slower than you'd like, and far more likely to still be going in twelve months.",
@@ -7684,9 +7799,9 @@ function useCoach(data, day, clock) {
                    one session too high displayed "—  just started" — the exact
                    opposite of the one thing this metric exists to say. */
                 display: weekOfTraining ? `${weekOfTraining}w` : "—",
-                sub: weeksTraining >= 14 ? "past the median dropout"
+                sub: weeksTraining >= FX.weeksPastDropout ? "past the median dropout"
                     : weeksTraining >= 1 ? "building" : weekOfTraining ? "week one" : "not started",
-                color: weeksTraining >= 14 ? C.moss : C.ink,
+                color: weeksTraining >= FX.weeksPastDropout ? C.moss : C.ink,
                 plain: "How many weeks you have been training, against when most people quit.",
                 how: "Which week you are in, counted from your first logged session — so the day you start you are in week one. Not weeks that hit a target: still being here is the thing being measured.",
                 meaning: "In a large study of people beginning resistance training, the median dropout came at 14 weeks and only 18% were still going at six months. The over-50s were the group most likely to keep going — 24% against 15% for the under-40s. Every week past that mark is the most meaningful thing this app measures, and no other number captures it.",
@@ -7733,9 +7848,9 @@ function useCoach(data, day, clock) {
                 value: firstSession ? consistency : null,
                 display: firstSession ? `${consistency}%` : "—",
                 sub: !firstSession ? "starts with your first session"
-                    : consistency >= 80 ? "strong" : consistency >= 60 ? "holding" : "slipping",
+                    : consistency >= FX.consistencyStrong ? "strong" : consistency >= FX.consistencyHolding ? "holding" : "slipping",
                 color: !firstSession ? C.muted
-                    : consistency >= 80 ? C.moss : consistency >= 60 ? C.ink : C.ochre,
+                    : consistency >= FX.consistencyStrong ? C.moss : consistency >= FX.consistencyHolding ? C.ink : C.ochre,
                 plain: "The share of your scheduled sessions you actually did, over four weeks.",
                 meaning: "Of everything measured here, this is the one that predicts whether you are still training a year from now. In a large study of people starting resistance training, consistency over the first 28 days was the strongest single predictor of who was still going months later — stronger than age, sex or experience. It is deliberately a 28-day window and not a streak, because a streak punishes one bad day and this doesn't.",
                 need: firstSession ? null : "Starts counting from your first logged session — there is nothing before that to be a share of.",
@@ -7743,8 +7858,8 @@ function useCoach(data, day, clock) {
             {
                 id: "coverage", label: "Coverage", scope: "body regions, last 7 days",
                 value: covered, display: `${covered}/${REGIONS.length}`,
-                sub: covered >= 6 ? "whole body" : covered >= 4 ? `${thinnest.length} thin` : "narrow",
-                color: covered >= 6 ? C.moss : covered >= 4 ? C.ink : C.ochre,
+                sub: covered >= FX.coverWhole ? "whole body" : covered >= FX.coverNarrow ? `${thinnest.length} thin` : "narrow",
+                color: covered >= FX.coverWhole ? C.moss : covered >= FX.coverNarrow ? C.ink : C.ochre,
                 plain: "How many parts of your body took a real share of the week's work.",
                 meaning: `Until now this app watched one shoulder and nothing else. It now accounts for legs, back, chest, shoulders, arms, core and heart separately, because the regions that quietly disappear are the ones nobody is counting. ${thinnest.length ? `Thinnest right now: ${thinnest.slice(0, 3).map((r) => r.label.toLowerCase()).join(", ")}.` : "Everything is getting a share."}`,
                 need: hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
@@ -7753,8 +7868,8 @@ function useCoach(data, day, clock) {
                 id: "adaptation", label: "Adaptation", scope: "this month vs last",
                 value: adaptation, display: adaptation === null ? "—" : `${adaptation >= 0 ? "+" : ""}${adaptation}%`,
                 sub: adaptation === null ? "needs two months of WHOOP"
-                    : adaptation > 5 ? "getting easier" : adaptation < -5 ? "costing more" : "steady",
-                color: adaptation === null ? C.muted : adaptation > 5 ? C.moss : adaptation < -5 ? C.ochre : C.ink,
+                    : adaptation > FX.adaptGood ? "getting easier" : adaptation < FX.adaptBad ? "costing more" : "steady",
+                color: adaptation === null ? C.muted : adaptation > FX.adaptGood ? C.moss : adaptation < FX.adaptBad ? C.ochre : C.ink,
                 plain: "How much recovery a hard day costs you now, against what it cost a month ago.",
                 meaning: "The cleanest evidence of fitness there is, and it needs nothing from you but wearing the WHOOP. When a strain of 12 used to knock eight points off your recovery and now knocks off four, your body has stopped treating that effort as an emergency. Strength numbers move slowly and noisily; this moves every single day. A positive number means the same work is costing you less.",
                 need: adaptation === null ? "Needs about eight weeks of WHOOP history, and a stretch of hard days where strain actually cost you recovery — otherwise there is no cost to compare against." : null,
@@ -7865,39 +7980,39 @@ function useCoach(data, day, clock) {
                     out.notes.push({ kind: "gap", id: mt.id, text: `${mt.label} still has no data — ${mt.need || "needs more history"}` });
             });
             /* WHOOP, all of it */
-            if (rhrDrift !== null && rhrDrift >= 3)
+            if (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp)
                 out.flags.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.round(rhrDrift)} bpm above the month` });
-            if (rhrDrift !== null && rhrDrift <= -2)
+            if (rhrDrift !== null && rhrDrift <= FX.rhrDriftDown)
                 out.strong.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.abs(Math.round(rhrDrift))} bpm below the month` });
-            if (hrvDrift !== null && hrvDrift <= -10)
+            if (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown)
                 out.flags.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.abs(Math.round(hrvDrift))}% under its baseline` });
-            if (hrvDrift !== null && hrvDrift >= 8)
+            if (hrvDrift !== null && hrvDrift >= FX.hrvDriftUp)
                 out.strong.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.round(hrvDrift)}% above baseline` });
-            if (timingSpread !== null && timingSpread >= 75)
+            if (timingSpread !== null && timingSpread >= FX.timingScattered)
                 out.flags.push({ kind: "whoop", id: "sleep", text: `sleep timing swinging ${Math.round(timingSpread / 6) / 10} hours` });
-            if (adaptation !== null && adaptation > 5)
+            if (adaptation !== null && adaptation > FX.adaptGood)
                 out.strong.push({ kind: "whoop", id: "adapt", text: `hard days costing ${adaptation}% less recovery` });
-            if (adaptation !== null && adaptation < -5)
+            if (adaptation !== null && adaptation < FX.adaptBad)
                 out.flags.push({ kind: "whoop", id: "adapt", text: `hard days costing ${Math.abs(adaptation)}% more recovery` });
             /* body composition and the shoulder */
             if (muscleCredit !== null && muscleCredit > 0)
                 out.strong.push({ kind: "body", id: "muscle", text: `muscle ${muscleCredit} ahead of the expected decline` });
             if (worstGap && worstGap.gap >= FX.bilateralPct)
                 out.weak.push({ kind: "body", id: "asym", text: `${worstGap.gap}% gap between sides on ${worstGap.label.toLowerCase()}` });
-            if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= 4.5)
+            if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= FX.shoulderTrendGood)
                 out.strong.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5` });
-            if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < 3)
+            if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < FX.shoulderTrendBad)
                 out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
             /* adherence and load */
-            if (consistency >= 80)
+            if (consistency >= FX.consistencyStrong)
                 out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
-            if (consistency < 60)
+            if (consistency < FX.consistencyHolding)
                 out.flags.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
             if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "spike")
                 out.flags.push({ kind: "load", id: "acwr", text: `load spiking at ${acwr}` });
             if ((acwrBand === null || acwrBand === void 0 ? void 0 : acwrBand.key) === "under")
                 out.weak.push({ kind: "load", id: "acwr", text: `load running under your base at ${acwr}` });
-            if (variety28 <= 2)
+            if (variety28 <= FX.varietyNarrow)
                 out.weak.push({ kind: "variety", id: "variety", text: `only ${variety28} different classes` });
             /* THE MOBILITY BATTERY. Rule 8 names it and the sweep did not read it at
                all — `analysis` is the weekly and monthly batteries only. */
@@ -7909,7 +8024,7 @@ function useCoach(data, day, clock) {
                 if (r.gapPct !== null && r.gapPct >= FX.asymmetryPct)
                     out.flags.push({ kind: "mobility", id: r.id, text: `${r.label} is ${r.gapPct}% apart left to right` });
             });
-            if (mobScore !== null && mobScore < 60)
+            if (mobScore !== null && mobScore < FX.mobFlag)
                 out.flags.push({ kind: "mobility", id: "mobscore", text: `mobility overall at ${mobScore}%` });
             /* WHAT SHE SAID SHE WANTS TO BE ABLE TO DO. It reached proposeNext and
                never the evidence the month is designed from (rule 9). */
@@ -7923,7 +8038,7 @@ function useCoach(data, day, clock) {
             /* HER DIP WEEK (review card 27): a week of the block that reliably
                costs her sessions is named to the designer, so the next block plans
                that week lighter on purpose instead of discovering it again. */
-            if (blockCurve && blockCurve.spread >= 15)
+            if (blockCurve && blockCurve.spread >= FX.blockSpreadFlag)
                 out.flags.push({ kind: "blockcurve", id: "dip",
                     text: `week ${blockCurve.worst.week} of a block is reliably her weak one (${blockCurve.worst.pct}% vs ${blockCurve.best.pct}% in week ${blockCurve.best.week}) — plan that week lighter on purpose` });
             /* RETURN ON LOAD. Its own meaning calls it "the earliest sign a
@@ -7999,10 +8114,10 @@ function useCoach(data, day, clock) {
             };
             const month = parse(t).getMonth();
             const wintering = month === 11 || month === 0 || month === 1;
-            const deload = (rhrDrift !== null && rhrDrift >= 3) || (hrvDrift !== null && hrvDrift <= -10);
-            const shoulderWorse = shoulderAMTrend !== null && shoulderAMTrend < 3;
-            const spiking = chronicGrowth !== null && chronicGrowth / 4 > 10;
-            const ready = consistency >= 80 && !deload && !shoulderWorse && !spiking && realDown.length === 0;
+            const deload = (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp) || (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown);
+            const shoulderWorse = shoulderAMTrend !== null && shoulderAMTrend < FX.shoulderTrendBad;
+            const spiking = chronicGrowth !== null && chronicGrowth / 4 > FX.chronicGrowthSafe;
+            const ready = consistency >= FX.consistencyStrong && !deload && !shoulderWorse && !spiking && realDown.length === 0;
             /* ---- WHAT SHE SAID, NOT JUST WHAT SHE DID ------------------------
                Rule 8 says the review reads everything she wrote. It never did — it
                counted her notes and emitted a line telling a human to read them.
@@ -8070,7 +8185,7 @@ function useCoach(data, day, clock) {
             else if (shoulderWorse) {
                 fired.push({ id: "shoulder", note: "Your shoulder was reading below 3 most mornings after training. Same number of strength days, no added overhead load." });
             }
-            else if (firstSession && addDays(firstSession, 6) <= t && consistency < 60) {
+            else if (firstSession && addDays(firstSession, 6) <= t && consistency < FX.consistencyHolding) {
                 /* AUDIT ITEM 16: with no history at all this fired at 0% and wrote
                    "you hit 0%" into the design — judging her on days that never
                    carried a plan (rule 24). It needs a real week of evidence now. */
@@ -8093,7 +8208,7 @@ function useCoach(data, day, clock) {
                 fired.push({ id: "hold", note: "Nothing in the numbers argues for more or less. Same shape, run it again — repetition is what makes a block work." });
             }
             /* what she said she wants comes before what the numbers prefer */
-            if (openGoals.length || mobAsym.length || (mobScore !== null && mobScore < 60)) {
+            if (openGoals.length || mobAsym.length || (mobScore !== null && mobScore < FX.mobFlag)) {
                 const bits = [];
                 if (openGoals.length)
                     bits.push(`she's working toward "${openGoals[0].text}"`);
@@ -8385,13 +8500,13 @@ function useCoach(data, day, clock) {
         /* WEEK */
         if (dormant.length && totalSessions >= 6)
             raise("week", "firm", `Nothing for ${dormant.map(goalLabel).join(" or ")} in a fortnight. That's the part that quietly disappears — put one in this week and it stops being a gap.`);
-        if (rhrDrift !== null && rhrDrift >= 3)
+        if (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp)
             raise("week", "firm", `Your resting heart rate has sat about ${Math.round(rhrDrift)} beats above your month's normal for a week. That's usually sleep, stress or a bug — not training. Go easier until it settles.`);
-        if (rhrDrift !== null && rhrDrift <= -2)
+        if (rhrDrift !== null && rhrDrift <= FX.rhrDriftDown)
             raise("week", "warm", `Resting heart rate is running ${Math.abs(Math.round(rhrDrift))} beats below your own month-long average. That is your heart getting better at its job, and it is the least arguable evidence you have.`);
-        if (rhrDrift !== null && Math.abs(rhrDrift) < 2 && rhr28 !== null && rhr28 >= 60)
+        if (rhrDrift !== null && Math.abs(rhrDrift) < Math.abs(FX.rhrDriftDown) && rhr28 !== null && rhr28 >= FX.rhrHigh)
             raise("month", "push", `Your resting heart rate is holding around ${Math.round(rhr28)}. That's your baseline, and it's the number cardio moves — it is the single clearest return on the cardio days in your block.`);
-        if (hrvDrift !== null && hrvDrift <= -10)
+        if (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown)
             raise("week", "firm", "Your heart rate variability has been about a tenth below normal all week. One low morning is noise; a week of them isn't. Take the easy version of whatever comes next.");
         if (slp7 && slp28 && slp7 < slp28 - 45)
             raise("week", "firm", `You're sleeping roughly ${Math.round((slp28 - slp7) / 60 * 10) / 10} hours less than your usual this week. Fix that before you worry about anything in the gym.`);
@@ -8399,9 +8514,9 @@ function useCoach(data, day, clock) {
             raise("week", "warm", `Week's target already met — ${weekDone} of ${seasonTarget}. Anything else is profit, so choose it because you want it.`);
         if (setsShort.length && setsTotal > 0 && setsShort[0].sets < SET_TARGET)
             raise("week", "firm", `${setsShort[0].label} has had ${setsShort[0].sets} working sets this week against a target of six. That gap is the one that decides whether you hold muscle, and no amount of showing up fixes it — it needs sets.`);
-        if (setsMet >= 5)
+        if (setsMet >= FX.setsMetCount)
             raise("week", "warm", `${setsMet} of seven regions are at the six-set mark. That's the dose the research actually calls for, and most people training four days a week never reach it.`);
-        if (timingSpread !== null && timingSpread >= 75)
+        if (timingSpread !== null && timingSpread >= FX.timingScattered)
             raise("week", "push", `Your sleep timing swings by about ${Math.round(timingSpread / 6) / 10} hours night to night. Regularity predicts more than duration does — and you already have the hours. Pulling bedtime into a narrower window is the cheapest gain available to you.`);
         /* One switch, and it means it. "Track shoulder comfort" off must remove
            the shoulder as a READING everywhere — no comfort score, no morning
@@ -8445,15 +8560,15 @@ function useCoach(data, day, clock) {
            gone. Quiet record for six weeks -> the coach says the constraint has
            stopped earning its place. Nothing is switched off FOR her — the
            restriction already stands down by itself when the record is quiet. */
-        if (settings.shoulderInjury && !shoulderTold.length && shoulderQuietDays !== null && shoulderQuietDays >= 42)
+        if (settings.shoulderInjury && !shoulderTold.length && shoulderQuietDays !== null && shoulderQuietDays >= FX.shoulderRetireDays)
             raise("month", "warm", `Nothing about your shoulder in the record for ${Math.floor(shoulderQuietDays / 7)} weeks. A joint that quiet has stopped being a constraint — I'm not restricting your day-to-day picks any more, and I'll only step back in if you tell me it's talking again.`);
         if (illnessFlags.length >= 2)
             raise("day", "firm", `Two of your early-warning signals are moving together — ${illnessFlags.join(" and ")}. That usually shows up a day or two before you feel it. Take the easy version today; resting at the start of something costs less than pushing through it does.`);
-        if (debtNow !== null && debtNow >= 90)
+        if (debtNow !== null && debtNow >= FX.debtManageable)
             raise("week", "push", `You're carrying about ${Math.round(debtNow / 6) / 10} hours of sleep debt. That's the most likely explanation for any flat day this week, and an earlier bedtime clears it faster than any change to your training would.`);
-        if (restorativePct !== null && restorativePct < 30 && asleepNow > 420)
+        if (restorativePct !== null && restorativePct < FX.restorativeAdequate && asleepNow > FX.asleepLongMins)
             raise("week", "push", `You're sleeping plenty — about ${Math.round(asleepNow / 6) / 10} hours — but only ${restorativePct}% of it is deep or REM. Long and light does less repair than shorter and deeper. Worth looking at room temperature, alcohol and screen time before adding any training.`);
-        if (cardiacDrift !== null && cardiacDrift <= -3)
+        if (cardiacDrift !== null && cardiacDrift <= FX.cardiacDriftStrong)
             raise("month", "warm", `Your average daily heart rate is ${Math.abs(cardiacDrift)} beats lower than last month. Same life, fewer beats — that is a heart that has got better at its job, and it is the clearest return your cardio days have produced.`);
         if (bodywork.reactive && !loggedToday)
             raise("day", "firm", `You had ${bodywork.reactive.label.toLowerCase()} in the last day or two. ${bodywork.reactive.why} Today is the lighter version — that isn't caution, it's how you get the benefit of the session you paid for.`);
@@ -8463,7 +8578,7 @@ function useCoach(data, day, clock) {
             raise("day", "push", `${bodywork.support.label} yesterday. ${bodywork.support.why} If you were going to push a session this week, today is the day for it.`);
         if (supportResponse !== null && supportResponse >= 4)
             raise("month", "warm", `Your recovery score comes in about ${supportResponse} points higher the morning after restorative body work. That's your own data, not a claim — worth booking those before the weeks you know will be heavy.`);
-        if (reactiveResponse !== null && reactiveResponse <= -5)
+        if (reactiveResponse !== null && reactiveResponse <= FX.adaptBad)
             raise("month", "push", `Deep body work costs you about ${Math.abs(reactiveResponse)} recovery points the next morning. Not a reason to stop — a reason to put it the day before a rest day rather than the day before a hard one.`);
         if (!loggedToday && !restDay && prescribed && (prescribed.id === "wod" || prescribed.name === "CrossFit-style WOD"))
             raise("day", "firm", "A WOD is the highest-cost session in your library and the easiest one to overreach on. Take the scaled version, keep overhead work off it unless the shoulder woke up clear, and stop a round early rather than a round late.");
@@ -8499,7 +8614,7 @@ function useCoach(data, day, clock) {
            the one setting every other number depends on. */
         if (!scheduleSet(settings))
             raise("week", "warm", `I am counting your consistency against ${scheduleSummary(schedule)}, because that is the default — not because you told me. How often do you actually want to train, and in what pattern? Settings, then Training. Everything I say about how you are doing is a share of that number, so it is worth two minutes.`);
-        if (mobDue && mobDaysAgo !== null && mobDaysAgo >= 10)
+        if (mobDue && mobDaysAgo !== null && mobDaysAgo >= FX.mobOverdueDays)
             raise("week", "push", `${mobDaysAgo} days since your mobility tests. They set what your daily ten minutes should be, so when they go stale the drills stop being aimed at anything.`, true);
         /* ---- WHAT THE BATTERY SAID -------------------------------------
            The half hour she just spent is the biggest single thing she does all
@@ -8515,7 +8630,7 @@ function useCoach(data, day, clock) {
         if (batteryRead) {
             if (batteryRead.first) {
                 const bits = [];
-                if (worstGap && worstGap.gap >= 10)
+                if (worstGap && worstGap.gap >= FX.mobGapFlag)
                     bits.push(`your ${worstGap.label.toLowerCase()} is ${worstGap.gap}% apart between sides, the ${worstGap.weak} being the shorter`);
                 if (mobWeakest.length)
                     bits.push(`${mobWeakest[0].label.toLowerCase()} is the shortest thing on the mobility side`);
@@ -8532,7 +8647,7 @@ function useCoach(data, day, clock) {
         }
         if (mobAsym.length)
             raise("month", "push", `Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart between sides. Asymmetry is worth more attention than either side's absolute number — the tight side is doing less and something else is compensating. Work the restricted side twice for every once on the free side until it closes.`);
-        if (mobWeakest.length && mobScore !== null && mobScore < 60)
+        if (mobWeakest.length && mobScore !== null && mobScore < FX.mobFlag)
             raise("month", "warm", `${mobWeakest[0].label} is the shortest thing you have. ${mobWeakest[0].why} That's what your daily ten minutes is aimed at, and range usually moves faster than strength does — expect something visible inside a month.`);
         goalCheckDue.forEach((g) => {
             if (goalCheckDue.indexOf(g) > 0)
@@ -8550,13 +8665,13 @@ function useCoach(data, day, clock) {
             if (moved >= 2 && goalCheckDue.length === 0)
                 raise("month", "warm", `"${g.text}" has gone from ${sc[0].value} to ${sc.slice(-1)[0].value} out of ten since you started tracking it. That is the kind of change you'd never notice day to day, which is exactly why it's worth writing down.`);
         });
-        if (writing !== null && writing.drop <= -50 && consistency >= 60)
+        if (writing !== null && writing.drop <= FX.writingFlag && consistency >= FX.consistencyHolding)
             raise("week", "warm", `You've written a lot less these last two weeks than the fortnight before. Sessions are still happening, so nothing is wrong on paper — but that drop usually comes before the sessions do, so I'd rather ask now. How are you finding it?`);
         if (swaps && swaps.pct < 60 && swaps.avoided)
             raise("month", "push", `You keep my pick about ${swaps.pct}% of the time, and ${swaps.avoided[0]} is what you swap out of most${swaps.chosen ? `, usually for ${swaps.chosen[0]}` : ""}. That's information, not disobedience. Do you want it out of the rotation, or is there a version of it you'd actually do?`);
         if (restarts && restarts.improving && restarts.runs >= 4)
             raise("month", "warm", `Your runs are lasting longer than they used to — averaging ${restarts.lateAvg} sessions now against ${restarts.earlyAvg} earlier on. Everyone stops sometimes; what decides the year is whether each restart holds longer than the last. Yours are.`);
-        if (blockCurve && blockCurve.spread >= 25)
+        if (blockCurve && blockCurve.spread >= FX.blockSpreadBad)
             raise("month", "warm", `Week ${blockCurve.worst.week} of a block is where your sessions go missing — ${blockCurve.worst.pct}% against ${blockCurve.best.pct}% in your best week. That's consistent enough to design around rather than fight: the next block puts the easier week there deliberately.`);
         if (domsLag && domsLag.worst === 2)
             raise("week", "warm", `Hard sessions catch up with you on the second morning, not the first — you drop about ${Math.abs(domsLag.d2)} recovery points on day two against ${Math.abs(domsLag.d1)} on day one. Worth knowing when you're spacing the heavy days; the day after is not the one to protect.`);
@@ -8613,24 +8728,24 @@ function useCoach(data, day, clock) {
             raise("day", "push", `Two weeks running where more than a couple of sessions slipped. Not a verdict — a pattern worth naming while it's small. Usually it means the plan stopped fitting the week rather than anything about you. Tell me what's actually in the way and I'll build around it.`, { lead: 2 });
         else if (lapseState === "wobble")
             raise("day", "warm", `A couple missed this week. Genuinely fine — the habit research found missing one opportunity does nothing measurable to the process. It's the repeated weeks that count, and this is one week.`, { lead: 2 });
-        if (habitStrength !== null && habitStrength < 45 && weeksTraining >= 3)
+        if (habitStrength !== null && habitStrength < FX.habitForming && weeksTraining >= FX.minEvidence)
             raise("week", "warm", `You're ${weeksTraining} weeks in. Exercise takes around three months to stop being a decision — so if it still takes effort to start, that is the normal timeline rather than a sign of anything. Keep the days consistent and it gets cheaper on its own.`);
-        if (cueConsistency !== null && cueConsistency < 60 && weeksTraining >= 3)
+        if (cueConsistency !== null && cueConsistency < FX.cueLoose && weeksTraining >= FX.minEvidence)
             raise("week", "push", `Your sessions are landing on scattered days. That's still training, but it stays a decision every time — and decisions are what run out on the tired days. Same days each week is the cheapest change available to you: not more work, just more predictable work.`);
-        if (barrierWins >= 3)
+        if (barrierWins >= FX.barrierWins)
             raise("month", "warm", `${barrierWins} sessions this month on days when something was against you — low recovery, short sleep, or coming off a gap. That is the specific thing that predicts still training a year from now, more than any number in the strength battery.`);
         if (affectByClass.length >= 2 && affectByClass[0].score >= 1)
             raise("month", "warm", `${affectByClass[0].name} is the one that reliably feels good while you're doing it. That matters more than it sounds — how a session feels during is one of the better predictors of whether you'll do it again. Worth keeping it in the week even when it isn't the obvious training choice.`);
-        if (givesBack !== null && givesBack < -0.5)
+        if (givesBack !== null && givesBack < FX.givesBackFlag)
             raise("month", "push", "Your sessions have been feeling harder in the room than they leave you feeling afterwards. Training should give more back than it takes, on average — when it stops doing that it's usually intensity rather than anything about you. Worth dropping a notch for a fortnight and seeing if it turns around.");
-        if (affectMean !== null && affectMean <= -1)
+        if (affectMean !== null && affectMean <= FX.affectFlag)
             raise("week", "firm", `Your sessions have been feeling hard in the room lately, not just afterwards. That's worth taking seriously rather than pushing through — it's an early dropout signal, and the usual cause is intensity creeping above where it needs to be. Let's drop it a notch and see if the feeling comes back.`);
-        if (weeksTraining >= 14)
+        if (weeksTraining >= FX.weeksPastDropout)
             raise("year", "warm", `${weeksTraining} weeks. Median dropout in beginner cohorts is around fourteen — you're past the point where most people stop, and women over fifty are the age group with the highest sustained-participation rate of all. This is the least arguable evidence in the app.`);
         /* MONTH */
-        if (variety28 >= 5)
+        if (variety28 >= FX.varietyWide)
             raise("month", "warm", `${variety28} different classes this month. Variety is one of the few things that reliably predicts still being here next year, so this counts for more than it looks.`);
-        if (variety28 <= 2 && totalSessions >= 12)
+        if (variety28 <= FX.varietyNarrow && totalSessions >= 12)
             raise("month", "push", "You've done the same one or two classes all month. Pick something you haven't touched — novelty is what stops this going stale.");
         if (monthDone >= monthTarget)
             raise("month", "warm", `${monthDone} sessions this month against a target of ${monthTarget}. That's a month you'd have found unimaginable a year ago.`);
@@ -8688,7 +8803,7 @@ function useCoach(data, day, clock) {
             message = `Logged. That's ${weekDone} of ${target} this week.`;
         else if (restDay)
             message = "Rest day. Recovery is part of the plan, not a gap in it.";
-        else if (consistency >= 70)
+        else if (consistency >= FX.consistencyUnder)
             message = "You've been reliable this month. Keep the line moving.";
         else if (totalSessions === 0)
             message = "First session is the only hard one. Everything after is maintenance.";
@@ -12861,6 +12976,8 @@ function Formulas({ data, setData, close }) {
                 ["wStrength", "Strength"], ["wMobility", "Mobility"], ["wBalance", "Balance"]] },
         { title: "Consistency", note: "How far back the consistency percentage looks.",
             rows: [["consistencyWindow", "Days counted"]] },
+        { title: "Recovery baseline", note: "Where the baseline stands until enough of your own scores exist to set it. Once they do, yours replaces this.",
+            rows: [["recBaselineFallback", "Baseline until your own scores can say"]] },
         { title: "Load balance", note: "Acute against chronic workload. Inside the corridor is where training is productive; above the spike line is where injuries come from — not from hard training, but from sudden training.",
             rows: [["acwrLow", "Below this: doing less than you're built for"],
                 ["acwrHigh", "Above this: pushing"],
@@ -12875,6 +12992,111 @@ function Formulas({ data, setData, close }) {
                 ["mdcBody", "Muscle % and body fat %"],
                 ["asymmetryPct", "Left-right gap worth naming (mobility)"],
                 ["bilateralPct", "Left-right gap worth naming (strength)"]] },
+        /* Her instruction, 14 August: "nothing should be hardcoded." Everything
+           from here down used to be a number typed into the engine, where she
+           could not reach it. */
+        { title: "Sleep and recovery, day to day", note: "What counts as a short night, and how far under your own baseline still counts as recovered. A short night can only ever make a day gentler, never harder.",
+            rows: [["sleepIdeal", "Hours of sleep that score full marks"],
+                ["sleepShortDrop", "Hours under your median that make a night short"],
+                ["sleepShortAbs", "…or, with no median yet, fewer hours than"],
+                ["recoveryOkGap", "Points under baseline still counted as recovered"],
+                ["recoveryCeilingGap", "Baseline + this scores full marks"],
+                ["recoveryLowGap", "Points under baseline that count as a low morning"],
+                ["recoveryHighGap", "Points over baseline that count as a good one"],
+                ["rpeQualityMax", "Last week's effort at or under this reads as sustainable"],
+                ["confidenceHigh", "Confidence at or above this: move a variable"],
+                ["confidenceSteady", "…at or above this: hold"],
+                ["healthCoverage", "Share of the score present before it stops saying partial"]] },
+        { title: "Habit", note: "The research figure the habit score builds towards, and where it stops being early. Nothing here is a streak — a missed day costs nothing.",
+            rows: [["habitDays", "Days of practice the score builds to"],
+                ["habitStrong", "Score at or above: close to automatic"],
+                ["habitForming", "…at or above: forming"],
+                ["cueStrong", "Same-time routine at or above: strong"],
+                ["cueLoose", "…at or above: loose"],
+                ["weeksPastDropout", "Weeks trained that pass the median dropout point"]] },
+        { title: "Sleep, measured", note: "The WHOOP figures, in the units WHOOP gives them. Spread is minutes; restorative is a percentage of the night; debt is minutes.",
+            rows: [["timingRegular", "Timing spread under this: very regular"],
+                ["timingScattered", "…at or over this: scattered"],
+                ["restorativeStrong", "Deep + REM at or above: strong"],
+                ["restorativeAdequate", "…at or above: adequate"],
+                ["debtPaid", "Sleep debt under this: paid off"],
+                ["debtManageable", "…under this: manageable"],
+                ["asleepLongMins", "Long enough that quality, not length, is the question"],
+                ["momentumSleepMins", "Minutes of sleep under this cost the day momentum"],
+                ["brakeSleepMins", "…and under this it is tested as a brake on training"]] },
+        { title: "Heart and adaptation", note: "Drifts against your own month, never against a population.",
+            rows: [["rhrDriftUp", "Resting heart rate this far above the month: flagged"],
+                ["rhrDriftDown", "…this far below: a good sign"],
+                ["rhrHigh", "A resting rate worth mentioning on its own"],
+                ["hrvDriftDown", "HRV this % under baseline: flagged"],
+                ["hrvDriftUp", "…this % over: a good sign"],
+                ["cardiacDriftGood", "Cardiac drift, bpm lower across the month"],
+                ["cardiacDriftBad", "…bpm higher"],
+                ["cardiacDriftStrong", "…enough of a fall to say out loud"],
+                ["adaptGood", "Hard days costing this % less: getting easier"],
+                ["adaptStrong", "…enough to act on"],
+                ["adaptBad", "…this % more: costing you"]] },
+        { title: "Illness signals", note: "Against your own baseline. When these are up, the ladder continues but the rungs become mobility and walking, never load.",
+            rows: [["illTempRise", "Skin temperature, degrees above baseline"],
+                ["illRespRise", "Breaths per minute above baseline"],
+                ["illSpo2Floor", "Blood oxygen under this is flagged"]] },
+        { title: "Adherence and coverage", note: "Consistency is a window, never a streak. One missed session is invisible.",
+            rows: [["consistencyHigh", "Consistency at or above this is worth saying"],
+                ["consistencyStrong", "…strong"],
+                ["consistencyGood", "…good enough to add"],
+                ["consistencyUnder", "…under this, doing less than you could"],
+                ["consistencyHolding", "…holding. Under it, slipping"],
+                ["coverWhole", "Body regions reached: whole body"],
+                ["coverNarrow", "…at or under this, narrow"],
+                ["varietyWide", "Different classes in the window: wide"],
+                ["varietyOk", "…reasonable"],
+                ["varietyNarrow", "…at or under this, narrow"],
+                ["setsMetCount", "Regions hitting their set target: dose met"],
+                ["setsBuildingCount", "…building"]] },
+        { title: "Mobility and the shoulder", note: "Rule 19: nothing follows you forever. The quiet-days numbers are what let the shoulder guard retire.",
+            rows: [["mobStrong", "Overall mobility at or above: strong"],
+                ["mobOk", "…adequate"],
+                ["mobFlag", "…under this, raised with you"],
+                ["mobOverdueDays", "Days since the battery before it is chased"],
+                ["mobGapFlag", "Left-right gap, %, worth naming"],
+                ["shoulderClear", "Morning score at or above: clear to load"],
+                ["shoulderLowMax", "…at or under: a low reading"],
+                ["shoulderTrendGood", "Trend worth saying out loud"],
+                ["shoulderTrendBad", "…under this, protect it"],
+                ["shoulderQuietDays", "Days silent before the record stops guarding"],
+                ["shoulderRetireDays", "…before it offers to switch the guard off"]] },
+        { title: "How it feels, and what it gives back", note: "How exercise feels during predicts whether you keep doing it. These decide when that is said out loud.",
+            rows: [["affectGood", "Mean feeling at or above: good in the room"],
+                ["affectOk", "…already reads as positive"],
+                ["affectFlag", "…at or under this, raised"],
+                ["givesBackGood", "Leaves you better above"],
+                ["givesBackBad", "Costs more than it returns below"],
+                ["givesBackFlag", "…enough to raise"],
+                ["barrierWins", "Times you trained anyway before it is named"]] },
+        { title: "Load and blocks", note: "What makes a day hard, how fast the base may grow, and how uneven a block can run before it is redesigned.",
+            rows: [["hardDayLoad", "Minutes × effort that make a day hard"],
+                ["chronicGrowthSafe", "% a week the base may safely grow"],
+                ["blockSpreadFlag", "Spread across a block worth naming"],
+                ["blockSpreadBad", "…enough to redesign around"],
+                ["phaseGymDays", "Days with a new gym before it stops being new"],
+                ["phaseBuildWeeks", "Weeks trained, shoulder settled, before building"],
+                ["phaseFamiliariseWeeks", "…before familiarising"]] },
+        { title: "What you write", note: "Writing less is one of the earliest signs of a hard stretch, which is why it is watched at all.",
+            rows: [["writingDown", "% fewer words: well down"],
+                ["writingUp", "% more: up"],
+                ["writingFlag", "…enough to ask how you are"]] },
+        { title: "How much evidence before anything is said", note: "Rule 16: patterns are computed, never guessed. Lower these and the app will speak sooner and be wrong more often. Raise them and it stays quiet longer.",
+            rows: [["patternLift", "Percentage points that make something a motivator"],
+                ["patternBrake", "…a brake"],
+                ["patternTrend", "…a trend in what you write"],
+                ["patternNeutral", "…small enough to call no effect"],
+                ["minOccurrences", "Times a thing must recur before it is a pattern"],
+                ["minEvidence", "Readings behind a named pattern"],
+                ["minDaysForPattern", "Days in the window before weekday patterns are read"],
+                ["minHardDays", "Hard days before adaptation is calculated"],
+                ["minBaselineReadings", "Readings before a median is trusted"]] },
+        { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
+            rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
     ];
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.signal }, "Formulas"),
@@ -16185,6 +16407,18 @@ ${(() => {
             if (st.gymDate)
                 out.push(`  * Gym membership dated ${st.gymDate}`);
             out.push(`  * Symptom tracking: ${st.trackSymptoms ? "on" : "off"}`);
+            /* Build 140, her instruction 14 August: "nothing should be hardcoded."
+               Every threshold the app judges her by is hers to move now, so the coach
+               has to know which ones she HAS moved — otherwise it will explain a
+               verdict using a number she has already changed. Only the differences are
+               sent; the defaults are in the code you are already reasoning about. */
+            {
+                const F0 = FORMULA_DEFAULTS, mine = st.formulas || {};
+                const moved = Object.keys(F0).filter((k) => mine[k] !== undefined && Number(mine[k]) !== Number(F0[k]));
+                out.push(moved.length
+                    ? `  * THRESHOLDS SHE HAS CHANGED HERSELF — these override the defaults everywhere, and she meant them: ${moved.map((k) => `${k} ${F0[k]} → ${mine[k]}`).join(", ")}`
+                    : `  * Thresholds: she has not changed any of them; every number the app judges her by is still at its default.`);
+            }
             return out.join("\n");
         })()}
 - EVERY READ YOU HAVE EVER DONE FOR HER, oldest first — your own earlier conclusions, in your own
