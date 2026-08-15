@@ -126,6 +126,25 @@ const FORMULA_DEFAULTS = {
   recoveryHighGap: 8,      /* points over baseline that count as a good one           */
   rpeQualityMax: 8,        /* last week's effort at or under this reads as sustainable */
 
+  /* ---- THE NUMBER TO BEAT ------------------------------------------------
+     HER DECISION, 15 August: "make it aim 15% higher". It used to be the
+     weekly verdict's own step - 5% up on a good week, 2% on a mixed one, and
+     MINUS 5% on a bad one, which is how a battery came to ask her for less
+     than she had already done. One number now, hers, editable like the rest. */
+  aimStep: 0.15,           /* how far past her last result the battery aims */
+
+  /* ---- THE RETEST CLOCK --------------------------------------------------
+     A pause is not a removal, so every paused measure carries the date it is
+     worth trying again. The waits are the published time-courses for the
+     tissue that has to change, not a guess, and every one of them is hers to
+     move. */
+  retestKneeWeeks: 6,      /* knee pain and function: change appears at 4-6 weeks */
+  retestShoulderWeeks: 6,  /* shoulder: 6 weeks interim, 12 for a verdict */
+  retestStrengthWeeks: 4,  /* strength in a supporting muscle: first real change */
+  retestRomWeeks: 4,       /* range of movement, at 5+ minutes per muscle per week */
+  retestTendonWeeks: 12,   /* tendon lags muscle by about a month */
+  retestMoodWeeks: 4,      /* mood and motivation: same session, 4-weekly trend */
+
   /* Habit formation */
   habitDays: 91,           /* the exercise habit-formation figure the score builds to */
   habitStrong: 75,         /* at or above: close to automatic                         */
@@ -1417,13 +1436,64 @@ const standInFor = (f, sitting, pool) => {
    put in its place. One function so the card that offers the swap and the
    battery that renders it can never disagree about what is being measured. */
 const sittingKey = (which, key) => which + ":" + key;
+/* ============================================================================
+   ONE PLACE DECIDES WHAT SHE IS ASKED FOR
+   ---------------------------------------------------------------------------
+   HER REPORT, 15 August: "it still has the squat in there."
+
+   The coach can set status:"removed" on a battery measure, tell her it is done
+   and write it into the do-not-prescribe list the monthly read gets - and the
+   battery screen would still ask for it the following week, because not one of
+   the twenty-odd places that read the field lists ever looked at status. Rule
+   33: settle it once, in the view the engine reads, not at every call site.
+
+   AND A PAUSE IS NOT A REMOVAL. Her correction, 14 August: "it was never meant
+   to be forever." A paused measure keeps every reading it has ever taken and
+   its place in every chart; what it also carries is why it stopped, what is
+   being trained instead, and the date it is worth trying again.
+   ==========================================================================*/
+const isLive = (x) => !!x && x.status !== "removed" && x.status !== "paused" && x.status !== "retired";
+const liveFields = (data) => ({
+  weekly: (((data || {}).fields || {}).weekly || []).filter(isLive),
+  monthly: (((data || {}).fields || {}).monthly || []).filter(isLive),
+});
+const allFields = (data) => [
+  ...(((data || {}).fields || {}).weekly || []).map((f) => ({ ...f, which: "weekly" })),
+  ...(((data || {}).fields || {}).monthly || []).map((f) => ({ ...f, which: "monthly" })),
+];
+/* Everything paused, with what stands in for it and when it is next due.
+   Read by the battery screen, by Today and by the coach - one list, one
+   answer, so none of them can disagree with another. */
+const pausedFields = (data) => allFields(data).filter((f) => f.status === "paused");
+/* HER INSTRUCTION, 15 August: "the removed squat should be replaced by another
+   exercise testing the strength of muscles we r working to be able to do the
+   squat" - so a pause names its replacement, and the replacement is a real
+   battery measure with a number, not a drill nobody scores. */
+const standInMeasure = (data, id) => allFields(data)
+  .find((f) => [].concat(f.standsInFor || []).includes(id)) || null;
+const retestDue = (f, t) => !!f && !!f.retestOn && String(f.retestOn) <= String(t);
+/* The wait is derived from what has to change underneath, never invented. */
+const retestWeeksFor = (why, F) => {
+  const s = String(why || "").toLowerCase();
+  if (s.includes("knee")) return Number(F.retestKneeWeeks) || 6;
+  if (s.includes("shoulder")) return Number(F.retestShoulderWeeks) || 6;
+  if (s.includes("tendon")) return Number(F.retestTendonWeeks) || 12;
+  if (s.includes("range") || s.includes("mobility")) return Number(F.retestRomWeeks) || 4;
+  if (s.includes("mood") || s.includes("motivation")) return Number(F.retestMoodWeeks) || 4;
+  return Number(F.retestStrengthWeeks) || 4;
+};
+
 const sittingFields = (data, which, key) => {
   const sk = sittingKey(which, key);
   const out = (data.skips || {})[sk] || [];
   const swapped = Object.values((data.standIns || {})[sk] || {});
+  /* Rule 33, settled in one place: a paused or removed measure is not asked
+     for on any screen that asks her for a number. It stays in the pool below,
+     so it is still visible, still reversible, and still in every chart. */
+  const live = liveFields(data);
   const base = which === "weekly"
-    ? (data.fields?.weekly || []).filter((f) => f.inWeekly !== false)
-    : [...(data.fields?.monthly || []), ...(data.fields?.weekly || [])];
+    ? live.weekly.filter((f) => f.inWeekly !== false)
+    : [...live.monthly, ...live.weekly];
   const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
   const kept = base.filter((f) => !out.includes(f.id));
   const added = swapped
@@ -1851,7 +1921,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = wk[k] || {};
       const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
       return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -1917,7 +1987,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = mo[k] || {};
       const vals = (d.fields?.monthly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
       return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -2185,6 +2255,35 @@ const reviewPayload = (data, coach, cut) => {
      used to be handed every drill she has ever had with nothing marking the
      ones she had removed, and is then asked to write the next month's ten
      minutes. It would have put them straight back. */
+  /* HER CORRECTION, 14-15 August. This section used to be headed DO NOT PUT ANY
+     OF IT BACK, which was the opposite of what she meant: "it was never meant
+     to be forever." A pause now says why it happened, what is being trained in
+     its place, and the date it is due - and the coach's job is to get her back
+     to it, not to forget it. */
+  S("WHAT IS PAUSED, WHAT STANDS IN FOR IT, AND WHEN IT IS DUE AGAIN", rvSafe(() => {
+    const ps = pausedFields(d);
+    if (!ps.length) return "nothing is paused.";
+    const rows = ps.map((f) => {
+      const si = standInMeasure(d, f.id);
+      const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
+      return `  * ${f.label} (${f.which} battery) - paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
+        + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
+        + `${si ? ` Standing in: ${si.label}.` : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : ""}`
+        + ` Due to be tried again ${f.retestOn || "?"}${f.retestWeeks ? ` (${f.retestWeeks} weeks, the time this tissue needs before a change is real)` : ""}.`
+        + `${feels ? ` Her own score on it: ${feels}.` : ""}`;
+    });
+    return "PAUSED IS NOT REMOVED. Every one of these is coming back, and getting her back to it is your job.\n"
+      + "Do not prescribe the paused movement itself, and do not write a near-copy under another name.\n"
+      + "DO train what has to get strong for it to return, watch the stand-in measure, and say plainly when\n"
+      + "the stand-in has moved enough that the paused one is worth trying before its date - you may raise it\n"
+      + "early on the evidence. If a date has passed, offer the retest warmly and accept 'not yet' or 'never'.\n"
+      + "AND HER OWN GOALS GO THROUGH THE SAME GATE (her instruction, 15 August): everything she has said she\n"
+      + "wants to be able to do must still be worked AND tested every week and every month - but reach it by a\n"
+      + "route that avoids every area listed here. Never prescribe or test a goal through a paused area. Where\n"
+      + "the only honest test would load one, say so, and test the supporting capacity instead.\n"
+      + rows.join("\n");
+  }));
+
   S("WHAT SHE HAS TAKEN OFF, AND WHY — DO NOT PUT ANY OF IT BACK", rvSafe(() => {
     const out = [];
     const say = (kind, label, why, when) =>
@@ -3188,6 +3287,27 @@ const SEED_WEEKLY = [
     why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
+  /* ---- WHAT STANDS IN WHILE THE SQUAT IS PAUSED --------------------------
+     HER INSTRUCTION, 15 August: a paused measure is replaced by one that tests
+     the muscles being trained to earn it back - "anything I am working on needs
+     to be tested at weekly and monthly batteries to gauge improvement". Both of
+     these are inWeekly, so they are asked for every week AND every month (the
+     monthly sitting is the monthly list plus the whole weekly one).
+
+     Why these two and not another squat: in patellofemoral pain the work that
+     changes the knee soonest is at the HIP, not the knee - extension and
+     abduction - and both can be loaded hard with the knee near straight, which
+     is where kneecap joint stress is lowest. The hip thrust is the anchor
+     because the lower body needs one for the weekly score to balance, and it
+     is the same unit as the squat it replaces, so the two are comparable. */
+  { id: "hipthrust", mins: 1.5, cap: "lower",    label: "Hip thrust",       role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: true,
+    standsInFor: "squat", rungs: [], rung: 0,
+    how: "Shoulders on the edge of a sofa or bench, feet flat and hip-width, weight across your hips - dumbbell, kettlebell, a loaded bag, the SAME thing every time. Drive through your heels until hips, knees and shoulders make a straight line, squeeze hard at the top, lower under control. That is one. Sixty seconds. Your shins stay near vertical and your knees never travel forward, which is what keeps it off your kneecaps. Log the weight and the reps.",
+    why: "The strongest hip-extension test you can do with your knees almost straight. It is the glute strength that has to come back before a deep squat is worth asking for again - and unlike the squat, it does not put your kneecap under load to measure it." },
+  { id: "hipabd", mins: 1.25, cap: "lower",    label: "Hip abduction",    role: "rotating", type: "number", unit: "reps in 30s each side", better: "up", inWeekly: true,
+    standsInFor: "squat", bilateral: true,
+    how: "Lie on your side, hips stacked, bottom knee bent for balance, top leg straight and in line with your body. Lift it about 45 degrees, lead with the heel, toes pointing forward rather than up, lower slowly. Thirty seconds a side, count each side on its own. If it is easy, add an ankle weight or a band above the knees and keep it the same every week.",
+    why: "Weak hip abductors let the knee fall inwards under load, which is the single most repeatable finding in knee pain in women. This is the number that says whether that is changing - and it says it per side, so it also shows which leg is the problem." },
   { id: "pushup", mins: 1.25, cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
     how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
@@ -3198,6 +3318,16 @@ const SEED_WEEKLY = [
   { id: "raise", mins: 1.5, cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. Log the weight and the reps in the minute.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
+  /* ---- WHAT STANDS IN WHILE THE OVERHEAD WORK IS PAUSED ------------------
+     HER INSTRUCTION, 15 August: "same with shoulder". The shoulder press and
+     the lateral raise are the two that load the joint overhead; they pause,
+     and this takes their place. External rotation strength is the measure that
+     tracks a rehabilitating shoulder in the published trials, and it is done
+     with the elbow at your side, well below the range that hurts. */
+  { id: "exrot", mins: 1.5, cap: "push",     label: "External rotation", role: "rotating", type: "weightreps", unit: "kg x reps in 30s each side", better: "up", inWeekly: true,
+    standsInFor: ["press", "raise"], bilateral: true, rungs: [], rung: 0,
+    how: "Elbow tucked against your side and bent to a right angle, forearm across your stomach, holding a band anchored at elbow height or a light dumbbell while lying on your side. Rotate the forearm outwards, keeping the elbow pinned to your ribs, then back under control. Thirty seconds a side. Roll a towel between elbow and ribs if the elbow drifts. Log the weight or band and the reps for each side.",
+    why: "The rotator cuff is what holds the ball centred in the socket, and its strength - not how much you can press overhead - is what the shoulder trials track while a shoulder is settling. It is also two-sided, so it shows the gap between the rehabilitating side and the good one closing." },
   { id: "dip", mins: 1.25, cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
     why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
@@ -3244,7 +3374,7 @@ const SEED_WEEKLY = [
   { id: "burpees", mins: 1.25, cap: "cardio",   label: "Burpees",          role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Squat, hands down, feet back, chest to floor, feet in, stand and jump. Count full repetitions.",
     why: "The hardest sixty seconds in the battery, and the one that most reflects everything at once. Scale it by stepping the feet back rather than jumping." },
-  { id: "treadmill", mins: 7, cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: false ,
+  { id: "treadmill", mins: 7, cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true, machine: true ,
     how: "One kilometre. Walking counts. Same machine, same incline or resistance, every single time — rename this row if you switch, because a kilometre on a treadmill and a kilometre on an elliptical are two different tests and comparing them tells you nothing.",
     why: "Aerobic fitness. Lower is better, and because the settings are fixed the time is a clean read on the heart and lungs." },
 
@@ -3744,7 +3874,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 149";
+const BUILD = "15 August 2026 · 153";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3830,7 +3960,10 @@ const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "ellip
    migration exactly once. The two constants below stay only to record when
    each retirement was introduced.
 ========================================================================== */
-const SEED_VERSION = 73;
+/* 74: bumped 15 August so addNewFields runs once more and returns any seed row
+   the old delete button removed from her list. Her readings were never touched;
+   they simply had no row left to appear under. */
+const SEED_VERSION = 74;
 const BATTERY_TIDY = 56;        /* build that retired the first five rows      */
 const MOBILITY_REBUILD = 62;    /* build that rebuilt mobility by muscle length */
 
@@ -4022,6 +4155,72 @@ const BLANK = {
    Tonight it costs nothing: she has not logged a battery yet. Tomorrow it
    would cost her a column.
 ========================================================================== */
+/* ============================================================================
+   A REMOVAL IS A PAUSE - AND A PAUSE NAMES ITS REPLACEMENT
+   ---------------------------------------------------------------------------
+   HER CORRECTION, 14 August: "when I tell the coach to remove any knee hurting
+   exercises, I don't mean that he should remove it forever... it was never
+   meant to be forever." And 15 August: "the removed squat should be replaced by
+   another exercise testing the strength of muscles we r working to be able to
+   do the squat", "same with shoulder", "anything I am working on needs to be
+   tested at weekly and monthly batteries to gauge improvement."
+
+   So this runs once. The squat and the two overhead lifts stop being asked for,
+   each says why and what is being trained instead, each carries the date it is
+   worth trying again - derived from how long the tissue underneath actually
+   takes to change, not a round number - and the hip thrust, hip abduction and
+   external rotation rows take their places in both batteries.
+
+   Nothing is deleted. Every reading any of them has ever had stays, stays in
+   every chart, and comes straight back the day she puts one back.
+   ==========================================================================*/
+const REHAB_PAUSE = 151;
+const pauseRehab = (list, d, t) => {
+  if ((d.settings || {}).rehabPause >= REHAB_PAUSE) return list;
+  const F = formulas(d.settings || {});
+  const wks = (why) => retestWeeksFor(why, F);
+  const P = {
+    squat: { area: "knee", why: "Deep squats hurt your knees",
+      instead: "Hip thrust and hip abduction, which load the same muscles with the knee near straight",
+      note: "Kneecap joint stress climbs the whole way from straight to a right angle, and this test asks for the bottom of that range every week." },
+    press: { area: "shoulder", why: "Your right shoulder is still settling",
+      instead: "External rotation at your side, which is what the shoulder trials actually track",
+      note: "Pressing overhead is the last thing a rehabilitating shoulder gets back, not the first." },
+    raise: { area: "shoulder", why: "Your right shoulder is still settling",
+      instead: "External rotation at your side, which is what the shoulder trials actually track",
+      note: "A lateral raise loads the joint at exactly the angle that is sore." },
+  };
+  return list.map((f) => {
+    const p = P[f.id];
+    if (p && !f.status) return { ...f, status: "paused", area: p.area, pausedOn: t,
+      pausedWhy: p.why, pausedNote: p.note, pausedInstead: p.instead,
+      retestWeeks: wks(p.area), retestOn: addDays(t, 7 * wks(p.area)), feels: [] };
+    return f;
+  });
+};
+
+/* ---- A KILOMETRE IS NOT A KILOMETRE ---------------------------------------
+   HER INSTRUCTION, 12 August: "I did one kilometre on the rowing machine but
+   there was no field to say which machine." And again 15 August: "which machine
+   should have calculations like one kilometre and how many minutes... the rower
+   or any cardio machine should show also intensity."
+
+   So a cardio row carries three things with the number: how far, on what, and
+   at what setting. Without them the time compares to nothing — a kilometre on a
+   rower at level 8 and a kilometre on a treadmill at level 2 are two different
+   tests, and calling the gap between them progress would be a lie (rule 23).
+   These travel with the number everywhere it is shown or sent.
+-------------------------------------------------------------------------- */
+const qualifiers = (entry, f) => {
+  if (!entry || !f) return "";
+  const g = (k) => String(entry[f.id + k] ?? "").trim();
+  const bits = [];
+  if (g("__dist")) bits.push(g("__dist") + " km");
+  if (g("__machine")) bits.push("on the " + g("__machine"));
+  if (g("__level")) bits.push("at " + g("__level"));
+  return bits.length ? ` (${bits.join(", ")})` : "";
+};
+
 const fillFromSeed = (list, seed, keys) => {
   if (!Array.isArray(list) || !list.length) return list;
   return list.map((f) => {
@@ -4193,7 +4392,7 @@ async function loadData() {
       return {
         ...BLANK, ...d,
         logs: repairLogs(d),
-        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION },
+        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION, rehabPause: REHAB_PAUSE },
         /* `label` and `bilateral` are new to this list, and they are the
            reason a correction could never reach her. Split squat said "L/R"
            and gave one box; shoulder press and lateral raise, which are
@@ -4202,13 +4401,13 @@ async function loadData() {
            guarded by their own *Edited flag, so anything she renames or sets
            herself is hers permanently. */
         fields: {
-          weekly: d.fields?.weekly?.length
+          weekly: pauseRehab(d.fields?.weekly?.length
             ? addNewFields(
                 retireFields(
-                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]),
                   d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
-            : SEED_WEEKLY,
+            : SEED_WEEKLY, d, today()),
           /* ---- WHERE BODY COMPOSITION WENT ---------------------------
              HER REPORT, 10 August: "Body composition all of a sudden
              disappeared from my monthly measurements. I was going to log it
@@ -4798,7 +4997,12 @@ const saveData = async (d) => {
    ==========================================================================*/
 function useCoach(data, day, clock) {
   return useMemo(() => {
-    const { settings, weekly, monthly, fields } = data;
+    const { settings, weekly, monthly } = data;
+    /* Rule 33, and the reason her battery kept asking for the squat: the
+       engine reads the LIVE lists. Anything paused or removed is out of every
+       target, score and count from here down, and nothing downstream has to
+       remember to check. Her stored file is untouched — see liveFields. */
+    const fields = liveFields(data);
     /* Her instruction, 12 August: a rest day is authoritative. Every question
        below this line — sessions, totals, frequency, minutes, streaks,
        adherence, volume, progression, milestones, and everything the coach is
@@ -9925,10 +10129,27 @@ const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
           machine but there was no field to say which machine." Every cardio
           row takes the machine with the number, because a kilometre on a
           rower and a kilometre on a treadmill are two different tests. */}
-      {f.cap === "cardio" && (
-        <Field label="Which machine" unit="rower, treadmill, bike…" type="text"
-          value={form[f.id + "__machine"] || ""}
-          onChange={(v) => set(f.id + "__machine", v)} />
+      {/* HER INSTRUCTION, 12 August: "I did one kilometre on the rowing
+          machine but there was no field to say which machine." Extended
+          15 August: how far, and at what setting.
+
+          It used to appear on ANY row whose cap was "cardio" — which put a
+          "which machine" box under BURPEES, where it means nothing, and left
+          the only row it belonged on out of the weekly sitting entirely. It
+          is a flag on the row now, hers to switch on or off like everything
+          else, rather than a guess made from the row's category. */}
+      {f.machine && (
+        <>
+          <Field label="How far" unit="km" type="text"
+            value={form[f.id + "__dist"] || ""}
+            onChange={(v) => set(f.id + "__dist", v)} />
+          <Field label="Which machine" unit="rower, treadmill, bike…" type="text"
+            value={form[f.id + "__machine"] || ""}
+            onChange={(v) => set(f.id + "__machine", v)} />
+          <Field label="At what setting" unit="resistance, level or incline" type="text"
+            value={form[f.id + "__level"] || ""}
+            onChange={(v) => set(f.id + "__level", v)} />
+        </>
       )}
       <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
         history={history} ask={ask} seeAll={seeAll} />
@@ -14555,7 +14776,26 @@ function FieldEditor({ which, data, setData, close, focus }) {
       return n;
     });
   };
-  const remove = (id) => setFor(id)((l) => l.filter((f) => f.id !== id));
+  /* ---- WHY HER ROW VANISHED WITH HER NUMBERS IN IT ----------------------
+     HER REPORT, 15 August: "when I tried to change the squats to bridges, it
+     just disappeared. I pushed weekly after I edited, and it just disappeared
+     off the list after I've entered my numbers."
+
+     This × deleted the field OBJECT out of her list. The readings themselves
+     were never touched — they sit in data.weekly under the row's id — but with
+     no row left to render them, they became invisible with no way back, and
+     addNewFields could not return the row because its one-time stamp had
+     already been spent. The line above this screen even promised the opposite:
+     "hides it from the form but leaves past entries untouched."
+
+     It sets aside now, dated, exactly like everything else the app removes
+     (rule 20): out of every sitting, still in the list, still in every chart,
+     and one tap from coming back with its numbers still under it. */
+  const remove = (id) => setFor(id)((l) => l.map((f) => (f.id === id
+    ? { ...f, status: "removed", removedOn: today(), removedWhy: "she set it aside from the field editor" }
+    : f)));
+  const putBackField = (id) => setFor(id)((l) => l.map((f) => (f.id === id
+    ? { ...f, status: "live", unremovedOn: today() } : f)));
   const add = () => {
     const f = { id: newId(), label: "New measure", unit: "reps", type: "number", better: "up",
       cap: "", role: "rotating", inWeekly: !both, rungs: [] };
@@ -14575,7 +14815,8 @@ function FieldEditor({ which, data, setData, close, focus }) {
       <Eyebrow color={C.ochre}>{which === "weekly" ? "Weekly check" : "Monthly benchmark"} fields</Eyebrow>
       <h2 className="disp" style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>What do you want to measure?</h2>
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 16px", lineHeight: 1.45 }}>
-        Tap a row to edit it. Deleting a measure hides it from the form but leaves past entries untouched.
+        Tap a row to edit it. Setting one aside takes it out of the form and leaves every number you ever
+        logged against it exactly where it is — put it back and they are all still under it.
       </p>
 
       <Card style={{ padding: 8 }}>
@@ -14598,6 +14839,8 @@ function FieldEditor({ which, data, setData, close, focus }) {
                   {f.cap ? f.cap + " · " : ""}{f.role === "anchor" ? "anchor" : "rotating"}
                   {f.inWeekly !== false ? " · weekly" : " · monthly only"}
                   {f.rungs?.length > 1 ? ` · ${f.rungs.length} rungs` : ""}
+                  {/* Tapping × has to LOOK like it did something (rule 11). */}
+                  {f.status === "removed" ? " · SET ASIDE" : f.status === "paused" ? " · PAUSED" : ""}
                 </div>
               </button>
               {/* "I can only add or remove — I can't edit an existing one."
@@ -14609,9 +14852,16 @@ function FieldEditor({ which, data, setData, close, focus }) {
                 color: openId === f.id ? C.chalk : C.signal, cursor: "pointer",
                 padding: "5px 10px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
                 flexShrink: 0 }}>{openId === f.id ? "close" : "edit"}</button>
-              <button onClick={() => remove(f.id)} className="tap" style={{
-                border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
-              }}>×</button>
+              {f.status === "removed" || f.status === "paused" ? (
+                <button onClick={() => putBackField(f.id)} className="tap" style={{
+                  border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                  cursor: "pointer", color: C.moss, fontSize: 11, fontWeight: 600,
+                  padding: "5px 9px", fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
+              ) : (
+                <button onClick={() => remove(f.id)} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
+                }}>×</button>
+              )}
             </div>
 
             {openId === f.id && (
@@ -14974,6 +15224,15 @@ function Formulas({ data, setData, close }) {
              ["confidenceHigh", "Confidence at or above this: move a variable"],
              ["confidenceSteady", "…at or above this: hold"],
              ["healthCoverage", "Share of the score present before it stops saying partial"]] },
+
+    { title: "The number to beat, and the retest clock", note: "How far past your last result the battery asks you to go, and how long a paused measure waits before it is worth trying again. The waits come from the published time-course of whatever has to change underneath - muscle, tendon, joint or mood - rather than from a round number.",
+      rows: [["aimStep", "How far past your last result the battery aims (0.15 = 15%)"],
+             ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
+             ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
+             ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
+             ["retestRomWeeks", "Weeks before a range-of-movement measure is retested"],
+             ["retestTendonWeeks", "Weeks before a tendon measure is retested"],
+             ["retestMoodWeeks", "Weeks before a mood or motivation trend is read again"]] },
 
     { title: "Habit", note: "The research figure the habit score builds towards, and where it stops being early. Nothing here is a streak — a missed day costs nothing.",
       rows: [["habitDays", "Days of practice the score builds to"],
@@ -16036,6 +16295,46 @@ Avoid anything close to these: ${(Object.values(data.notes || {}).slice(-12).map
    it is dropped; otherwise it is genuinely new and gets appended. That is
    correct on both kinds of browser, which matters because she uses one and
    this was written on the other. */
+/* ---- WHY DICTATION REPEATED ITSELF, OVER AND OVER -------------------------
+   HER REPORT, 15 August, with a screenshot: one sentence about burpees written
+   into the box nine times, each copy with a few more of the words she had just
+   said stuck on the front.
+
+   Two faults, and they compounded each other.
+
+   ONE: a recognition session that had ENDED could still write. Chrome on
+   Android ends the session at every pause and we restart it — but the ended
+   object kept its handlers, so a late result from the session just finished
+   arrived after its text had already been banked, and got banked a second
+   time. The fix is in `onend`: an ended session is disconnected before the
+   next one starts, so only the live session can ever write.
+
+   TWO: the merge could only recognise a repeat at the very start or the very
+   end of what it already had. Android re-sends earlier phrases in the middle
+   of a new session's result list, so a repeat arriving anywhere else was read
+   as new speech and appended. Both are idempotent now: text already present is
+   never added again, and where the end of what we have overlaps the start of
+   what has arrived, the overlap is stitched rather than duplicated.
+
+   The minimum lengths matter. "Yes" said twice is two answers, not one
+   repeated — so a short phrase is still allowed to repeat, and only something
+   long enough to be a genuine re-send is collapsed.
+------------------------------------------------------------------------- */
+const SAID_AGAIN_MIN = 24;   /* chars before a repeat is treated as a re-send */
+/* An overlap of "and my" is six characters and is exactly the shape a re-send
+   takes, so the floor is low — but it must fall on WHOLE WORDS at both ends,
+   or "an apple" and "apple pie" would be stitched into one by five letters
+   that happen to line up. */
+const OVERLAP_MIN = 6;
+const stitch = (a, b, la, lb) => {
+  for (let n = Math.min(la.length, lb.length); n >= OVERLAP_MIN; n--) {
+    if (la.slice(-n) !== lb.slice(0, n)) continue;
+    const startsClean = n === la.length || /\s/.test(la[la.length - n - 1]);
+    const endsClean = n === lb.length || /\s/.test(lb[n]);
+    if (startsClean && endsClean) return (a + b.slice(n)).replace(/\s+/g, " ").trim();
+  }
+  return null;
+};
 const mergeHeard = (soFar, next) => {
   const a = String(soFar || "").trim();
   const b = String(next || "").trim();
@@ -16044,16 +16343,31 @@ const mergeHeard = (soFar, next) => {
   const la = a.toLowerCase(), lb = b.toLowerCase();
   if (lb.startsWith(la)) return b;      /* the same phrase, grown */
   if (la.endsWith(lb)) return a;        /* already have these words */
+  /* the same words arriving again from somewhere in the middle of the list */
+  if (lb.length >= SAID_AGAIN_MIN && la.includes(lb)) return a;
+  const st = stitch(a, b, la, lb);
+  if (st !== null) return st;
   return a + " " + b;
 };
 
 /* Two bursts either side of a pause are two different things she said, not
    one restated — so they are JOINED, never merged. mergeHeard is right within
-   a single burst and wrong across two, because "yes" after "yes" is two. */
+   a single burst and wrong across two, because "yes" after "yes" is two.
+   But a burst that arrives holding everything said before it is not a second
+   thing she said, it is the same thing sent twice, and that is what this
+   catches without touching the short repeats that are real. */
 const joinSpeech = (a, b) => {
   const x = String(a || "").trim(), y = String(b || "").trim();
   if (!x) return y;
   if (!y) return x;
+  const lx = x.toLowerCase(), ly = y.toLowerCase();
+  if (ly.length >= SAID_AGAIN_MIN || lx.length >= SAID_AGAIN_MIN) {
+    if (lx === ly) return x;
+    if (lx.includes(ly)) return x;      /* already banked */
+    if (ly.includes(lx)) return y;      /* the new session re-sent the lot */
+    const st = stitch(x, y, lx, ly);
+    if (st !== null) return st;
+  }
   return x + " " + y;
 };
 
@@ -16131,6 +16445,11 @@ function useDictation(onText) {
         setProblem("Dictation keeps stopping on its own. Type instead for now — the box beside the microphone takes typing.");
         return;
       }
+      /* An ENDED session must never write again. It kept its handlers, so a
+         late result from the session just finished arrived after its text had
+         been banked and was banked a second time — which is what wrote her
+         sentence into the box nine times (15 August). */
+      if (r) { r.onresult = null; r.onend = null; r.onerror = null; r.onstart = null; }
       /* bank the burst that just ended — the next session starts empty */
       carried.current = joinSpeech(carried.current, heardNow.current);
       heardNow.current = "";
@@ -19261,7 +19580,21 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
   };
   const endRef = useRef(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
+  /* HER REPORT, 14 August: "where did u put the token and money counter????"
+     It was at the top of this screen. So was the window field from build 143,
+     and the header. None of it was reachable, because this scrolled to the
+     bottom on the way IN — every time — and pushed the whole top of the sheet
+     out of view before she ever saw it. A screen she has to scroll UP to
+     discover is a screen she does not know exists.
+
+     It now scrolls only when the conversation actually MOVES: when she sends
+     something, or when the coach answers. Opening it leaves her at the top,
+     where the things the app is trying to tell her are. */
+  const scrolled = useRef(false);
+  useEffect(() => {
+    if (!scrolled.current) { scrolled.current = true; return; }
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, busy]);
 
   const context = () => {
     /* ---- WHY THE COACH KEPT FORGETTING WHAT SHE HAD JUST DONE ----------
@@ -19763,14 +20096,14 @@ ${(() => {
   const ks = Object.keys(data.weekly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.weekly[k][f.id + "__machine"] ? ` (on the ${data.weekly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.weekly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
 ${(() => {
   const ks = Object.keys(data.monthly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.monthly[k][f.id + "__machine"] ? ` (on the ${data.monthly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.monthly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
@@ -19834,7 +20167,32 @@ ${(() => {
     w.structure ? `      how it runs: ${w.structure}` : null,
   ].filter(Boolean).join("\n")).join("\n");
 })()}
-- WHAT SHE HAS TAKEN OFF, AND WHY — DO NOT PUT ANY OF IT BACK, AND DO NOT SUGGEST IT IN CONVERSATION.
+- WHAT IS PAUSED, WHAT STANDS IN FOR IT, AND WHEN IT IS DUE AGAIN: ${(() => {
+    const ps = pausedFields(data);
+    if (!ps.length) return "nothing is paused.";
+    return "PAUSED IS NOT REMOVED. Every one of these is coming back, and getting her back to it is your job.\n"
+      + "  Do not prescribe the paused movement itself and do not write a near-copy under another name. DO train\n"
+      + "  what has to get strong for it to return, watch the stand-in measure, and say plainly when the stand-in\n"
+      + "  has moved enough that the paused one is worth trying before its date — you may raise it early on the\n"
+      + "  evidence. When a date has arrived, offer the retest warmly, and accept 'not yet' or 'never' as answers.\n"
+      + "  HER OWN GOALS GO THROUGH THE SAME GATE (her instruction, 15 August): everything she has said she wants\n"
+      + "  to be able to do must still be worked AND tested every week and every month — but reach it by a route\n"
+      + "  that avoids every area named here. Never prescribe or test a goal through a paused area. Where the only\n"
+      + "  honest test would load one, say so plainly and test the supporting capacity instead.\n"
+      + ps.map((f) => {
+          const si = standInMeasure(data, f.id);
+          const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
+          return `  * ${f.label} (${f.which} battery) — paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
+            + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
+            + `${si ? ` Standing in: ${si.label} — that is the number that earns it back.`
+                   : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : ""}`
+            + ` Due to be tried again ${f.retestOn || "?"}`
+            + `${f.retestWeeks ? ` (${f.retestWeeks} weeks — how long this tissue needs before a change is real)` : ""}.`
+            + `${retestDue(f, coach.t) ? " THAT DATE HAS ARRIVED — offer it today." : ""}`
+            + `${feels ? ` Her own score on it: ${feels}.` : ""}`;
+        }).join("\n");
+  })()}
+- WHAT SHE HAS TAKEN OFF FOR GOOD, AND WHY — DO NOT PUT ANY OF IT BACK, AND DO NOT SUGGEST IT IN CONVERSATION.
   Never prescribe any of these again, do not write a near-copy under another name, and do not argue
   for them. If one of them is the only route to something she says she wants, say so plainly once and
   let her decide. Nothing here is deleted — she can put any of it back herself whenever she likes.
@@ -20330,15 +20688,39 @@ Two or three sentences unless she asks for more.`;
         <div ref={endRef} />
       </div>
 
-      {/* HER REPORT, 10 August: "there is no send button after I finish my
-          recording." There was — three screens down. A long dictation grew the
-          box until Send was pushed off the bottom of the sheet, which from
-          where she stands is a missing button. The composer is pinned to the
-          bottom of the screen now, the box stops growing at a third of it and
-          scrolls inside itself past that, and Send sits beside the mic where
-          it can never leave. */}
+      {/* WHAT IT HAS COST, WHERE SHE CANNOT MISS IT.
+          Her report, 14 August: "where did u put the token and money counter????"
+
+          It was there — at the top of this screen, along with the window field
+          added in build 143 and the header itself. NONE OF IT WAS VISIBLE,
+          because the conversation scrolled itself to the bottom the moment the
+          sheet opened and pushed everything above it off the screen.
+
+          Two fixes. The scroll no longer fires on the way in (below), and the
+          figure now also sits on the composer, which is pinned to the bottom
+          and can never leave — the same reasoning that put Send there after her
+          report of 10 August. */}
       <div style={{ position: "sticky", bottom: 0, background: C.chalk,
         padding: "10px 0 4px", borderTop: `1px solid ${C.line}` }}>
+        {(() => {
+          const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
+          const all = spendSince(data, null);
+          const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
+          return (
+            <div aria-label="what this is costing"
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                width: "100%", padding: "0 2px 8px" }}>
+              <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+                {started
+                  ? `this talk ${money(here.cost || 0)} · ${(Number(here.tokensIn) || 0).toLocaleString()} in, ${(Number(here.tokensOut) || 0).toLocaleString()} out`
+                  : "this talk — nothing spent yet"}
+              </span>
+              <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
+                all of it {money(all.cents)}
+              </span>
+            </div>
+          );
+        })()}
         {photo && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
             <img src={photo} alt="ready to send" style={{ height: 52, borderRadius: 8 }} />
@@ -20392,8 +20774,13 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     /* an open shoulder entry in the record is enough to stop asking for
        more overhead (her rule, 12 August: the record is the source) */
     const sore = overhead && !!coach.shoulderSore;
-    const step = frozen || sore ? 0
-      : coach.verdict.key === "advance" ? 0.05 : coach.verdict.key === "reduce" ? -0.05 : 0.02;
+    /* HER DECISION, 15 August: "make it aim 15% higher". What was here read
+       the weekly verdict — and a "pull back" verdict made the step NEGATIVE,
+       so the battery asked her to beat a number BELOW what she had just done
+       while printing "that beats what you did" underneath it. One number now,
+       hers, in her formulas. A frozen or sore shoulder still holds. */
+    const FX = formulas((data && data.settings) || {});
+    const step = frozen || sore ? 0 : (Number(FX.aimStep) || 0.15);
     let raw = m.better === "down" ? m.now * (1 - step) : m.now * (1 + step);
     /* and never more than half a kilo a week on anything overhead */
     if (overhead && step > 0 && f.type === "weightreps") {
@@ -20442,7 +20829,10 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       const upW = Math.round((w + stepUp) * 10) / 10;
       const repsAtUpW = Math.max(1, Math.ceil(raw / upW));
       const repsSameW = Math.max(r + 1, Math.ceil(raw / w));
-      const worthIt = repsAtUpW >= Math.ceil(r * 0.66);
+      /* CARD 2: never say "that beats what you did" unless it does. The line
+         was printed without checking, so a lower aim came with a claim that
+         was arithmetically false. */
+      const worthIt = repsAtUpW >= Math.ceil(r * 0.66) && upW * repsAtUpW > m.now;
       const aim = worthIt
         ? `go up to ${upW} ${loadUnit(f)} and get ${say(repsAtUpW)} — that beats what you did`
         : `stay at ${w} ${loadUnit(f)} and get ${say(repsSameW)}`;
@@ -20481,6 +20871,25 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     if (standIns[sk]) { const m = { ...standIns[sk] }; delete m[id]; standIns[sk] = m; }
     return { ...d, skips, standIns };
   });
+  /* A pause is hers to end, to postpone, or to make permanent — from here,
+     where she is standing, rather than a settings screen (rule 11). "Never"
+     is an available answer, chosen by her, never assumed (her instruction). */
+  const mapFields = (fn) => setData((d) => ({ ...d, fields: { ...(d.fields || {}),
+    weekly: ((d.fields || {}).weekly || []).map(fn),
+    monthly: ((d.fields || {}).monthly || []).map(fn) } }));
+  const unpause = (id) => mapFields((f) => (f.id === id
+    ? { ...f, status: "live", unpausedOn: coach.t } : f));
+  const pushOut = (id) => mapFields((f) => (f.id === id
+    ? { ...f, retestOn: addDays(coach.t, 7 * (Number(f.retestWeeks) || 4)),
+        postponed: [...(f.postponed || []), coach.t] } : f));
+  const neverAgain = (id) => mapFields((f) => (f.id === id
+    ? { ...f, status: "removed", removedOn: coach.t, removedWhy: "her answer, asked at the time: never" } : f));
+  const lastFeel = (f) => { const a = f.feels || []; return a.length ? a[a.length - 1].score : null; };
+  const scoreFeel = (id, n) => mapFields((f) => (f.id === id
+    ? { ...f, feels: [...(f.feels || []).filter((x) => x.on !== coach.t), { on: coach.t, score: n }] } : f));
+  const pausedHere = pausedFields(data).filter((f) => (isWeekly ? f.which === "weekly" : true));
+  const pauseBtn = { padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+    border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink, fontFamily: "inherit" };
   const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
   const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
   /* ============================================================================
@@ -20665,6 +21074,60 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
         Change what's measured — add, remove, rename, reorder →
       </button>
+
+      {/* HER CORRECTION, 14-15 August: a pause is not a removal. It says why it
+          stopped, what is standing in for it, when it is due - and she can put
+          it back, push it out, or end it for good, from where she is standing. */}
+      {pausedHere.length > 0 && (
+        <Card style={{ marginBottom: 12 }}>
+          <Eyebrow>Paused, and what is standing in</Eyebrow>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 4 }}>
+            Not dropped. Every number you ever logged on these is still here and still in your charts —
+            they are just not being asked for while the work that earns them back is going in.
+          </div>
+          {pausedHere.map((f) => {
+            const si = standInMeasure(data, f.id);
+            const due = retestDue(f, coach.t);
+            return (
+              <div key={f.id} style={{ padding: "11px 0 3px", borderTop: `1px solid ${C.line}` }}>
+                <div className="disp" style={{ fontSize: 14.5, marginBottom: 3 }}>{f.label}</div>
+                <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
+                  {f.pausedWhy || "Paused"}.{f.pausedNote ? " " + f.pausedNote : ""}
+                </div>
+                {si ? (
+                  <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginTop: 5 }}>
+                    {si.label} is in its place — and it is the number that earns this one back.
+                  </div>
+                ) : f.pausedInstead ? (
+                  <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginTop: 5 }}>
+                    {f.pausedInstead}.
+                  </div>
+                ) : null}
+                <div className="mono" style={{ fontSize: 10, letterSpacing: "0.06em",
+                  color: due ? C.clay : C.muted, marginTop: 7 }}>
+                  {due ? "DUE — WORTH TRYING AGAIN NOW" : `worth trying again ${f.retestOn || "—"}`}
+                  {f.retestWeeks ? ` · ${f.retestWeeks} weeks, which is how long this takes to change` : ""}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11.5, color: C.muted, marginRight: 3 }}>How does it feel today?</span>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <button key={n} onClick={() => scoreFeel(f.id, n)} className="tap" style={{
+                      width: 25, height: 25, borderRadius: 6, cursor: "pointer", fontSize: 11,
+                      border: `1px solid ${C.line}`, fontFamily: "inherit",
+                      background: lastFeel(f) === n ? C.signal : "transparent",
+                      color: lastFeel(f) === n ? C.chalk : C.ink }}>{n}</button>
+                  ))}
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+                  <button onClick={() => unpause(f.id)} className="tap" style={pauseBtn}>Put it back</button>
+                  <button onClick={() => pushOut(f.id)} className="tap" style={pauseBtn}>Not yet — ask me later</button>
+                  <button onClick={() => neverAgain(f.id)} className="tap" style={pauseBtn}>Never</button>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
 
       {/* Rule 12: what she took out is visible and reversible from where she
           is standing, not buried in a settings fold. */}
