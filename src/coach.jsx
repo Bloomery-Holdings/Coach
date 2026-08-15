@@ -3879,7 +3879,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 157";
+const BUILD = "15 August 2026 · 158";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4036,7 +4036,11 @@ const BLANK = {
        Internet so it can get me video links and anything I want." On by
        default because she asked for it; switchable because it costs a
        little more per answer and the choice is hers (rule 12). */
-    webSearch: true,
+    /* OFF by default from 15 August. It was on for every message, five
+       searches a message, every page read charged as words and then carried
+       forward and charged again. She turns it on when she wants it, from the
+       switch beside the coach. */
+    webSearch: false,
     /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
@@ -20569,6 +20573,35 @@ Two or three sentences unless she asks for more.`;
           </Card>
         );
       })()}
+      {/* HER INSTRUCTION, 15 August: "Make access to Internet optional. I
+          toggle that I turn on or off. And I need it next to talk to my coach."
+
+          It lived in Settings and was ON for every message, with up to five
+          searches a message — and every page the coach read came back as words
+          she paid for, uncached, and stayed in the conversation to be paid for
+          again on the next message. It is off unless she turns it on, and the
+          switch is here, where she is about to talk. */}
+      <Card style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <Eyebrow>The internet</Eyebrow>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
+              {data.settings?.webSearch
+                ? "On for this conversation. Your coach can look things up — and what it reads, you pay for."
+                : "Off. Your coach answers from your own history only, which is most of what you ask it anyway."}
+            </div>
+          </div>
+          <button onClick={() => setData((d) => ({ ...d,
+            settings: { ...(d.settings || {}), webSearch: !(d.settings || {}).webSearch } }))}
+            className="tap" style={{
+              flexShrink: 0, padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+              fontSize: 12.5, fontWeight: 600, fontFamily: "inherit",
+              border: `1.5px solid ${data.settings?.webSearch ? C.signal : C.line}`,
+              background: data.settings?.webSearch ? C.signal : "transparent",
+              color: data.settings?.webSearch ? C.chalk : C.ink,
+            }}>{data.settings?.webSearch ? "On" : "Off"}</button>
+        </div>
+      </Card>
       <ScopePicker scope={data.settings?.chatScope || CHAT_SCOPE_DEFAULT}
         onPick={(sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } }))} />
 
