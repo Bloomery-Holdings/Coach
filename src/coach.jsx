@@ -3723,7 +3723,12 @@ const msgTimes = (data) => {
 };
 const cachePolicy = (data, F) => {
   const f = F || FORMULA_DEFAULTS;
-  const forced = (data && data.settings && data.settings.cacheMode) || "auto";
+  /* HER REPORT, 15 August: still "not cached" after the default changed. A
+     stored "off" — chosen back when this screen told her off cost nothing
+     extra — outranks any default forever. It is treated as unset now. She can
+     still force it off from Settings; that writes "never", which is honoured. */
+  const stored = (data && data.settings && data.settings.cacheMode) || "auto";
+  const forced = stored === "off" ? "auto" : stored;
   const times = msgTimes(data);
   /* gaps between consecutive messages, in minutes, ignoring overnight breaks
      that no cache could ever span */
@@ -3874,7 +3879,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 156";
+const BUILD = "15 August 2026 · 157";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
