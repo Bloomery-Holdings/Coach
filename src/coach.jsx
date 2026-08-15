@@ -3874,7 +3874,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 155";
+const BUILD = "15 August 2026 · 156";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -19617,6 +19617,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
      It now scrolls only when the conversation actually MOVES: when she sends
      something, or when the coach answers. Opening it leaves her at the top,
      where the things the app is trying to tell her are. */
+  const [showParts, setShowParts] = useState(false);
   const scrolled = useRef(false);
   useEffect(() => {
     if (!scrolled.current) { scrolled.current = true; return; }
@@ -20509,6 +20510,56 @@ Two or three sentences unless she asks for more.`;
                 why={`This is what the app recorded, on your own key, at ${F2.priceIn} per million words read and ${F2.priceOut} per million written back. A word your coach already had in front of it from a moment ago costs a tenth. It is not your Anthropic bill — anything else on that account is not counted here. ${cp.why}`}>
                 <span style={{ fontSize: 12, color: C.muted }}>Where this comes from</span>
               </InfoNote>
+            </div>
+            {/* HER INSTRUCTION, 15 August: "measure why it is 75k words
+                immediately. that is nonsense." She is right, and the app is the
+                only thing that can answer it, because the words are HER data on
+                HER device. So it counts its own payload, section by section,
+                and shows her the biggest ones. No guessing from here. */}
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+              <button onClick={() => setShowParts((v) => !v)} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                {showParts ? "Hide what's in it" : "What's in it, biggest first →"}
+              </button>
+              {showParts && (() => {
+                let built = "";
+                try { built = context(); } catch (e) { built = ""; }
+                if (!built) return (
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
+                    Couldn't measure it just now.
+                  </div>
+                );
+                const wordsOf = (s) => (String(s).trim() ? String(s).trim().split(/\s+/).length : 0);
+                const secs = []; let cur = { name: "the opening", n: 0 };
+                built.split("\n").forEach((l) => {
+                  if (/^-\s+[A-Z]/.test(l)) { secs.push(cur); cur = { name: l.replace(/^-\s+/, "").slice(0, 58), n: 0 }; }
+                  cur.n += wordsOf(l);
+                });
+                secs.push(cur);
+                const total = secs.reduce((a, s) => a + s.n, 0) || 1;
+                return (
+                  <div style={{ marginTop: 9 }}>
+                    <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 8 }}>
+                      {total.toLocaleString()} words go out with every message you send.
+                      {cp.mode !== "off" ? " After the first, they cost a tenth." : ""}
+                    </div>
+                    {secs.filter((s) => s.n > 0).sort((a, b) => b.n - a.n).slice(0, 12).map((s, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between",
+                        gap: 10, padding: "5px 0", borderTop: i ? `1px solid ${C.chalk}` : "none" }}>
+                        <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4,
+                          minWidth: 0, overflow: "hidden" }}>{s.name}</span>
+                        <span className="mono" style={{ fontSize: 11, color: C.ink, flexShrink: 0 }}>
+                          {s.n.toLocaleString()} · {Math.round((s.n / total) * 100)}%
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.45 }}>
+                      Anything here you would rather your coach did not carry, say so and it comes out.
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </Card>
         );
