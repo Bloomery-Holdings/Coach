@@ -3915,7 +3915,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 148";
+const BUILD = "14 August 2026 · 149";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -17470,6 +17470,30 @@ Two or three sentences unless she asks for more.`;
         React.createElement(Eyebrow, { color: C.ochre }, "Talk to your coach"),
         React.createElement("h1", { className: "disp", style: { fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" } }, "Ask me anything"),
         React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 } }, "I can see your battery, the call I made, and every day you logged in the window you set below. Argue with any of it if you think I'm wrong."),
+        (() => {
+            const F2 = formulas(data.settings);
+            const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
+            const today = spendSince(data, coach.t);
+            const all = spendSince(data, null);
+            const cp = cachePolicy(data, F2);
+            const cacheLabel = { "5m": "cached, 5 min", "1h": "cached, 1 hour", off: "not cached" }[cp.mode];
+            const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
+            return (React.createElement(Card, { style: { marginBottom: 14 } },
+                React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 } },
+                    React.createElement(Eyebrow, null, "What this is costing"),
+                    React.createElement("span", { className: "mono", style: { fontSize: 9.5, color: C.muted } }, cacheLabel)),
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10,
+                        textAlign: "center", margin: "11px 0 4px" } }, [["This talk", money(here.cost || 0)], ["Today", money(today.cents)], ["All of it", money(all.cents)]]
+                    .map(([l, v]) => (React.createElement("div", { key: l },
+                    React.createElement("div", { className: "mono disp", style: { fontSize: 19, fontWeight: 800, color: C.ink } }, v),
+                    React.createElement("div", { style: { fontSize: 10.5, color: C.muted, marginTop: 2 } }, l))))),
+                React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 } }, started
+                    ? `${(Number(here.tokensIn) || 0).toLocaleString()} words read, ${(Number(here.tokensOut) || 0).toLocaleString()} written back so far${Number(here.saved) > 0 ? `, ${money(here.saved)} of it saved by not re-reading the same thing twice` : ""}.`
+                    : "Nothing recorded for this conversation yet — the figure appears after your first message."),
+                React.createElement("div", { style: { marginTop: 9 } },
+                    React.createElement(InfoNote, { small: true, inherit: true, why: `This is what the app recorded, on your own key, at ${F2.priceIn} per million words read and ${F2.priceOut} per million written back. A word your coach already had in front of it from a moment ago costs a tenth. It is not your Anthropic bill — anything else on that account is not counted here. ${cp.why}` },
+                        React.createElement("span", { style: { fontSize: 12, color: C.muted } }, "Where this comes from")))));
+        })(),
         React.createElement(ScopePicker, { scope: ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.chatScope) || CHAT_SCOPE_DEFAULT, onPick: (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } })) }),
         earlier.length > 0 && (React.createElement("div", { style: { marginBottom: 14 } },
             React.createElement("button", { onClick: () => setShowOld((v) => !v), className: "tap", style: {
