@@ -108,198 +108,6 @@ const FORMULA_DEFAULTS = {
      than a strength measure does before it means anything. */
   asymmetryPct: 15,   /* mobility battery */
   bilateralPct: 10,   /* strength battery - a 10% gap is worth closing */
-
-  /* ---- EVERYTHING BELOW WAS A LITERAL INSIDE THE ENGINE ------------------
-     Her instruction, 14 August: "nothing should be hardcoded." These are the
-     numbers that decided what the coach SAID — the word on a card, the colour
-     of it, whether something was raised at all. They were unreachable. They
-     are hers now, and every one of them is read from settings rather than
-     from the line of code it used to live on. */
-
-  /* Sleep and recovery, day by day */
-  sleepIdeal: 8,           /* hours that score a full mark in the week's health score */
-  sleepShortDrop: 1.5,     /* hours under her own median that make a night "short"    */
-  sleepShortAbs: 6,        /* ...or, with no median yet, fewer hours than this        */
-  recoveryOkGap: 5,        /* points under baseline still counted as recovered        */
-  recoveryCeilingGap: 10,  /* baseline + this scores a full recovery mark             */
-  recoveryLowGap: 8,       /* points under baseline that count as a low morning       */
-  recoveryHighGap: 8,      /* points over baseline that count as a good one           */
-  rpeQualityMax: 8,        /* last week's effort at or under this reads as sustainable */
-
-  /* ---- THE NUMBER TO BEAT ------------------------------------------------
-     HER DECISION, 15 August: "make it aim 15% higher". It used to be the
-     weekly verdict's own step - 5% up on a good week, 2% on a mixed one, and
-     MINUS 5% on a bad one, which is how a battery came to ask her for less
-     than she had already done. One number now, hers, editable like the rest. */
-  aimStep: 0.15,           /* how far past her last result the battery aims */
-
-  /* ---- THE RETEST CLOCK --------------------------------------------------
-     A pause is not a removal, so every paused measure carries the date it is
-     worth trying again. The waits are the published time-courses for the
-     tissue that has to change, not a guess, and every one of them is hers to
-     move. */
-  retestKneeWeeks: 6,      /* knee pain and function: change appears at 4-6 weeks */
-  retestShoulderWeeks: 6,  /* shoulder: 6 weeks interim, 12 for a verdict */
-  retestStrengthWeeks: 4,  /* strength in a supporting muscle: first real change */
-  retestRomWeeks: 4,       /* range of movement, at 5+ minutes per muscle per week */
-  retestTendonWeeks: 12,   /* tendon lags muscle by about a month */
-  retestMoodWeeks: 4,      /* mood and motivation: same session, 4-weekly trend */
-
-  /* Habit formation */
-  habitDays: 91,           /* the exercise habit-formation figure the score builds to */
-  habitStrong: 75,         /* at or above: close to automatic                         */
-  habitForming: 45,        /* at or above: forming. Under it, still early             */
-  cueStrong: 80,           /* same-time-of-day routine: strong                        */
-  cueLoose: 60,            /* ...loose. Under it, scattered                           */
-
-  /* What a short night is, in minutes of sleep, for the two places that ask */
-  momentumSleepMins: 360,  /* under this counts against the day's momentum            */
-  brakeSleepMins: 390,     /* under this is tested as a brake on training             */
-  asleepLongMins: 420,     /* long enough that light sleep is about quality, not time  */
-
-  /* How big a difference has to be before a pattern is named at all */
-  patternLift: 15,         /* percentage points that make something a motivator       */
-  patternBrake: 20,        /* percentage points that make something a brake           */
-  patternTrend: 20,        /* percentage points of change that make a trend           */
-  patternNeutral: 10,      /* difference small enough to call something "no effect"   */
-
-  /* Illness signals, against her own baseline */
-  illTempRise: 0.4,        /* skin temperature, degrees above baseline                */
-  illRespRise: 1.0,        /* breaths per minute above baseline                       */
-  illSpo2Floor: 95,        /* blood oxygen under this is flagged                      */
-
-  /* Body composition */
-  muscleGainRate: 0.0075,  /* realistic muscle gain, fraction of lean mass per year   */
-
-  /* ---- WHAT IT COSTS TO TALK TO HER COACH -------------------------------
-     Dollars per million tokens on her own API key. Facts, not judgements —
-     but facts that change, so they are hers to correct rather than welded in. */
-  priceIn: 3,              /* what she pays for a million words read           */
-  priceOut: 15,            /* ...and a million written back                    */
-  priceCacheWrite: 3.75,   /* putting a block on the desk: 1.25x               */
-  priceCacheWrite1h: 6,    /* ...and leaving it there an hour: 2x              */
-  priceCacheRead: 0.3,     /* glancing at one already there: 0.1x              */
-
-  /* ---- HOW MUCH ROOM THE COACH'S ANSWER GETS ----------------------------
-     Her decision, 14 August: "make it depend on what you asked." A flat cap
-     paid essay prices for one-line questions. A hard morning always gets the
-     long one — the ladder in rule 4 needs room to walk down. */
-  replyShort: 350,         /* a short question deserves a short answer         */
-  replyNormal: 550,        /* the ordinary case                                */
-  replyThinking: 800,      /* why, explain, should I, compare, plan            */
-  replyLong: 1000,         /* a hard morning, or anything that sounds like one */
-  replyShortChars: 60,     /* what counts as a short question, in characters   */
-
-  /* ---- WHEN CACHING IS WORTH IT, MEASURED RATHER THAN ASSUMED -----------
-     Her correction, 14 August. A cache that is never read back costs MORE
-     than not caching. These decide which mode her own gaps justify. */
-  cacheShortGapMins: 5,    /* gaps this small: the five-minute cache survives  */
-  cacheLongGapMins: 60,    /* ...this small: the hour one does                 */
-  cacheMinGaps: 10,        /* how many gaps before it trusts the measurement   */
-
-  /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
-     Her decision, 14 August. Every class in her library carries a cost from
-     1 to 5. These say which of them today is allowed to reach for. This is
-     the one set that changes what she is ACTUALLY ASKED TO DO rather than
-     what she is told about it, so a wrong number here misfires differently
-     from the rest - it does not mislabel a day, it hands her the wrong class. */
-  classCostRest: 1,        /* most a rest-band day may pick                           */
-  classCostEasy: 3,        /* most an easy day may pick                               */
-  classCostReactive: 4,    /* body work still reactive: nothing at or above this      */
-  classCostFallback: 2,    /* the last-resort pool, when everything else ruled out    */
-  addonCostRest: 1,        /* most an add-on may cost on a rest-band day              */
-  addonCostMax: 2,         /* most an add-on may ever cost                            */
-
-  /* WHOOP drifts */
-  rhrDriftUp: 3,           /* bpm above the month: flagged                            */
-  rhrDriftDown: -2,        /* bpm below the month: a good sign                        */
-  rhrHigh: 60,             /* a resting heart rate worth mentioning on its own        */
-  hrvDriftDown: -10,       /* percent under baseline: flagged                         */
-  hrvDriftUp: 8,           /* percent over baseline: a good sign                      */
-  cardiacDriftGood: -2,    /* bpm lower across the month                              */
-  cardiacDriftBad: 2,      /* bpm higher across the month                             */
-  cardiacDriftStrong: -3,  /* enough of a fall to say out loud                        */
-  adaptGood: 5,            /* percent less recovery cost from hard days               */
-  adaptStrong: 8,          /* ...enough to act on                                     */
-  adaptBad: -5,            /* percent more: flagged                                   */
-
-  /* Sleep quality */
-  timingRegular: 45,       /* minutes of spread that read as very regular             */
-  timingScattered: 75,     /* ...and over this, scattered                             */
-  restorativeStrong: 40,   /* percent deep+REM                                        */
-  restorativeAdequate: 30, /* ...under this, light                                    */
-  debtPaid: 30,            /* minutes of sleep debt that count as paid off            */
-  debtManageable: 90,      /* ...over this, accumulating                              */
-
-  /* Adherence. A window, never a streak. */
-  consistencyHigh: 85,     /* enough to say something about it                        */
-  consistencyStrong: 80,   /* strong                                                  */
-  consistencyGood: 75,     /* good enough to add                                      */
-  consistencyUnder: 70,    /* under this, the week is doing less than it could        */
-  consistencyHolding: 60,  /* holding. Under it, slipping                             */
-
-  /* Coverage and variety */
-  coverWhole: 6,           /* body regions reached: whole body                        */
-  coverNarrow: 4,          /* ...at or under this, narrow                             */
-  varietyWide: 5,          /* different classes in the window: wide                   */
-  varietyOk: 3,            /* ...between the two, reasonable                          */
-  varietyNarrow: 2,        /* ...at or under this, narrow                             */
-  affectOk: 0.5,           /* in-the-room feeling that already reads as positive      */
-  setsMetCount: 5,         /* regions hitting their set target: dose met              */
-  setsBuildingCount: 3,    /* ...building                                             */
-
-  /* Mobility */
-  mobStrong: 75,           /* overall mobility percent: strong                        */
-  mobOk: 50,               /* ...adequate. Under it, needs work                       */
-  mobFlag: 60,             /* under this the coach raises it                          */
-  mobOverdueDays: 10,      /* days since the battery before it is chased              */
-  mobGapFlag: 10,          /* left-right gap, percent, worth naming                   */
-
-  /* Shoulder */
-  shoulderClear: 4,        /* morning score at or above: clear to load                */
-  shoulderLowMax: 3,       /* at or under: a low reading                              */
-  shoulderTrendGood: 4.5,  /* trend worth saying out loud                             */
-  shoulderTrendBad: 3,     /* under this, protect it                                  */
-  shoulderQuietDays: 28,   /* days silent before the record stops guarding            */
-  shoulderRetireDays: 42,  /* ...and before it offers to switch the guard off         */
-
-  /* How it feels, and what it gives back */
-  affectGood: 1,           /* mean in-the-room feeling that reads as good             */
-  affectFlag: -1,          /* ...at or under this, raised                             */
-  givesBackGood: 0.3,      /* leaves her better                                       */
-  givesBackBad: -0.3,      /* costs more than it returns                              */
-  givesBackFlag: -0.5,     /* ...enough to raise                                      */
-  barrierWins: 3,          /* times she trained anyway, before it is named            */
-
-  /* Load */
-  hardDayLoad: 300,        /* minutes x effort that make a day "hard"                 */
-  chronicGrowthSafe: 10,   /* percent a week the base may grow                        */
-  weeksPastDropout: 14,    /* weeks training past the median dropout point            */
-
-  /* Writing, and how a block runs */
-  writingDown: -40,        /* percent fewer words: well down                          */
-  writingUp: 20,           /* percent more: up                                        */
-  writingFlag: -50,        /* ...enough to raise                                      */
-  blockSpreadFlag: 15,     /* percentage-point spread across a block worth naming     */
-  blockSpreadBad: 25,      /* ...enough to redesign around                            */
-
-  /* How much evidence before anything is said at all (rule 16). Lower these
-     and the app will speak sooner and be wrong more often. */
-  minOccurrences: 2,       /* times a thing must recur before it is a pattern         */
-  minEvidence: 3,          /* readings behind a named pattern                         */
-  minDaysForPattern: 10,   /* days in the window before day-of-week patterns are read */
-  minHardDays: 8,          /* hard days before adaptation is calculated               */
-  minBaselineReadings: 5,  /* readings before a recovery or sleep median is trusted   */
-
-  /* How she rates her own confidence, and what that permits */
-  confidenceHigh: 8,       /* at or above: a good week to move a variable             */
-  confidenceSteady: 6,     /* at or above: hold. Under it, simplify                   */
-  healthCoverage: 0.6,     /* share of the week's score present before it is not "partial" */
-
-  /* When the app decides she has moved past restoration */
-  phaseGymDays: 7,         /* days with a new gym before it stops being brand new     */
-  phaseBuildWeeks: 8,      /* weeks of real training, shoulder settled, before building */
-  phaseFamiliariseWeeks: 4,/* ...and before familiarising                             */
 };
 const formulas = (settings) => ({ ...FORMULA_DEFAULTS, ...(settings?.formulas || {}) });
 
@@ -373,7 +181,7 @@ const recoveryBaseline = (morning, t) => {
     const v = Number(morning?.[addDays(t, -i)]?.recovery);
     if (!isNaN(v) && v > 0) vals.push(v);
   }
-  if (vals.length < FORMULA_DEFAULTS.minBaselineReadings) return null;
+  if (vals.length < 5) return null;
   vals.sort((a, b) => a - b);
   return Math.round(vals[Math.floor(vals.length / 2)]);
 };
@@ -387,7 +195,7 @@ const sleepBaseline = (logs, t) => {
     const v = Number(logs?.[addDays(t, -i)]?.sleep);
     if (!isNaN(v) && v > 0) vals.push(v);
   }
-  if (vals.length < FORMULA_DEFAULTS.minBaselineReadings) return null;
+  if (vals.length < 5) return null;
   vals.sort((a, b) => a - b);
   return Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
 };
@@ -399,7 +207,7 @@ const bandByKey = (k) => BAND_OFFSETS.find((b) => b.key === k) || null;
 
 const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
   if (v === null || v === "" || isNaN(Number(v))) return null;
-  const base = baseline || F.recBaselineFallback;
+  const base = baseline || 55;
   const offs = [F.bandGreen, F.bandSteady, F.bandEasy, -999];
   const i = offs.findIndex((o) => Number(v) >= base + o);
   const band = BAND_OFFSETS[i < 0 ? 3 : i];
@@ -407,10 +215,10 @@ const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
 };
 
 /* --- confidence: how she rates herself decides how ambitious to be --------- */
-const confidenceRule = (c, F = FORMULA_DEFAULTS) => {
+const confidenceRule = (c) => {
   if (c === null || isNaN(c)) return null;
-  if (c >= F.confidenceHigh) return { key: "up",   line: "Confidence is high. Good week to move a variable." };
-  if (c >= F.confidenceSteady) return { key: "hold", line: "Confidence is steady. Keep things where they are." };
+  if (c >= 8) return { key: "up",   line: "Confidence is high. Good week to move a variable." };
+  if (c >= 6) return { key: "hold", line: "Confidence is steady. Keep things where they are." };
   return { key: "down", line: "Confidence is low. Simplify — fewer variables, cleaner sessions." };
 };
 
@@ -437,7 +245,7 @@ const HEALTH_WEIGHTS = { completion: 40, recovery: 20, sleep: 15, strength: 10, 
 /* Nothing above is fixed. These are the starting values; Settings → Formulas
    edits them and the engine reads the edited ones from that point on. */
 
-const healthScore = (parts, weights = HEALTH_WEIGHTS, F = FORMULA_DEFAULTS) => {
+const healthScore = (parts, weights = HEALTH_WEIGHTS) => {
   let got = 0, weight = 0;
   Object.entries(weights).forEach(([k, w]) => {
     const v = parts[k];
@@ -447,7 +255,7 @@ const healthScore = (parts, weights = HEALTH_WEIGHTS, F = FORMULA_DEFAULTS) => {
   });
   const total = Object.values(weights).reduce((a, b) => a + b, 0);
   if (!weight) return null;
-  return { score: Math.round((got / weight) * 100), coverage: weight / total, partial: weight / total < F.healthCoverage };
+  return { score: Math.round((got / weight) * 100), coverage: weight / total, partial: weight / total < 0.6 };
 };
 
 /* --- season: winter is for holding on, not for personal bests ------------- */
@@ -1233,23 +1041,23 @@ const RETIRED_MOBILITY = ["sitrise", "hipopen", "kneewall"];
 const SEED_DRILLS = [
   { id: "deepsquat", label: "Deep squat hold", mins: 2, how: "Sink into the lowest squat you can hold, heels down, elbows inside knees gently pushing them out. Hold and breathe. Hold a doorframe if you need to.", targets: "hips, ankles, adductors" },
   { id: "hipopen", label: "90/90 hip switches", mins: 3, how: "Sit with one leg bent in front at ninety degrees and one behind at ninety. Sit tall, lean gently over the front shin, then switch sides without using your hands if you can.", targets: "hip rotation both directions" },
-  { id: "pigeon", side: true, label: "Pigeon or figure-four", mins: 3, how: "One shin across in front, back leg long — or lying on your back, ankle over the opposite knee, pulling the thigh in. Breathe rather than push.", targets: "glutes, deep hip rotators" },
-  { id: "ankle", side: true, label: "Knee-to-wall rocking", mins: 2, how: "Foot flat, toes a few centimetres from a wall, drive the knee forward over the toes without the heel lifting. Rock in and out slowly. Both sides, even if only one is tight.", targets: "ankle dorsiflexion" },
-  { id: "calf", side: true, label: "Calf stretch, both knees", mins: 2, how: "Straight back knee first, then the same position with the knee bent — the two hit different muscles and most people only ever do the first.", targets: "gastrocnemius and soleus" },
-  { id: "hamstring", side: true, label: "Hamstring, one leg at a time", mins: 3, how: "One heel on a low step, hinge from the hip with a long spine rather than rounding to reach. The stretch should sit in the belly of the muscle, not behind the knee.", targets: "hamstrings without loading the lower back" },
+  { id: "pigeon", label: "Pigeon or figure-four", mins: 3, how: "One shin across in front, back leg long — or lying on your back, ankle over the opposite knee, pulling the thigh in. Breathe rather than push.", targets: "glutes, deep hip rotators" },
+  { id: "ankle", label: "Knee-to-wall rocking", mins: 2, how: "Foot flat, toes a few centimetres from a wall, drive the knee forward over the toes without the heel lifting. Rock in and out slowly. Both sides, even if only one is tight.", targets: "ankle dorsiflexion" },
+  { id: "calf", label: "Calf stretch, both knees", mins: 2, how: "Straight back knee first, then the same position with the knee bent — the two hit different muscles and most people only ever do the first.", targets: "gastrocnemius and soleus" },
+  { id: "hamstring", label: "Hamstring, one leg at a time", mins: 3, how: "One heel on a low step, hinge from the hip with a long spine rather than rounding to reach. The stretch should sit in the belly of the muscle, not behind the knee.", targets: "hamstrings without loading the lower back" },
   { id: "catcow", label: "Cat–cow and segmental rolls", mins: 2, how: "On all fours, move the spine one vertebra at a time in both directions. Slow enough that you can feel where it stops moving.", targets: "spinal segmentation" },
   { id: "thoracic", label: "Thoracic extension over a roller", mins: 2, how: "Roller across the mid-back, hands behind the head, extend back over it in three or four positions rather than one.", targets: "mid-back extension" },
-  { id: "openbook", side: true, label: "Open book", mins: 3, how: "Lie on your side, knees bent and stacked, arms together in front. Open the top arm across and follow it with your eyes, keeping the knees down.", targets: "thoracic rotation" },
+  { id: "openbook", label: "Open book", mins: 3, how: "Lie on your side, knees bent and stacked, arms together in front. Open the top arm across and follow it with your eyes, keeping the knees down.", targets: "thoracic rotation" },
   { id: "shoulderpass", label: "Band or towel pass-through", mins: 2, how: "Wide grip on a band or towel, take it from in front of you to behind and back. Narrow the grip only when the wide one is easy. Never force the end range.", targets: "shoulder flexion and rotation" },
-  { id: "sleeper", side: true, label: "Sleeper stretch", mins: 2, how: "On your side, arm out at ninety, gently rotate the forearm toward the floor with the other hand. Very light — this one is easy to overdo.", targets: "shoulder internal rotation" },
+  { id: "sleeper", label: "Sleeper stretch", mins: 2, how: "On your side, arm out at ninety, gently rotate the forearm toward the floor with the other hand. Very light — this one is easy to overdo.", targets: "shoulder internal rotation" },
   { id: "doorway", label: "Doorway chest opener", mins: 2, how: "Forearm on a doorframe, step through gently. Three heights: low, mid, high — they reach different fibres.", targets: "chest and front shoulder" },
-  { id: "latstretch", side: true, label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
+  { id: "latstretch", label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
   { id: "getup", label: "Floor sit-and-rise practice", mins: 3, how: "Practise the movement itself, slowly, using as little support as you need — and notice which point you need it. That point is the thing to work on.", targets: "the whole pattern, and it improves with practice alone" },
   /* added 10 August with the rebuilt mobility battery — every new test has to
      have somewhere to send her, or the score does nothing */
-  { id: "straddlework", side: true, label: "Straddle sit and side reach", mins: 3, how: "Sit with your legs as wide as they go, knees facing the ceiling. Sit tall first — that alone is the work if it is hard. Then reach over one leg, then the other, then straight down the middle, breathing at the end of each rather than bouncing.", targets: "adductors, the inside of the thighs" },
-  { id: "quadstretch", side: true, label: "Quad stretch, hips square", mins: 2, how: "Lying face down with a strap round the ankle, or standing holding the foot. Keep the hip pressed down and the knee under the hip — if the hip lifts or the knee drifts out, the stretch has gone into your lower back instead.", targets: "quadriceps" },
-  { id: "hipflexor", side: true, label: "Half-kneeling hip flexor", mins: 2, how: "Half-kneeling, back knee down. Tuck the pelvis under first, then shift forward only as far as you can hold the tuck. Most of the movement people feel here is their lower back arching, which does nothing.", targets: "hip flexors and the front of the hip" },
+  { id: "straddlework", label: "Straddle sit and side reach", mins: 3, how: "Sit with your legs as wide as they go, knees facing the ceiling. Sit tall first — that alone is the work if it is hard. Then reach over one leg, then the other, then straight down the middle, breathing at the end of each rather than bouncing.", targets: "adductors, the inside of the thighs" },
+  { id: "quadstretch", label: "Quad stretch, hips square", mins: 2, how: "Lying face down with a strap round the ankle, or standing holding the foot. Keep the hip pressed down and the knee under the hip — if the hip lifts or the knee drifts out, the stretch has gone into your lower back instead.", targets: "quadriceps" },
+  { id: "hipflexor", label: "Half-kneeling hip flexor", mins: 2, how: "Half-kneeling, back knee down. Tuck the pelvis under first, then shift forward only as far as you can hold the tuck. Most of the movement people feel here is their lower back arching, which does nothing.", targets: "hip flexors and the front of the hip" },
 ];
 const drillById = (id, list) => (list && list.length ? list : SEED_DRILLS).find((d) => d.id === id) || null;
 
@@ -1436,64 +1244,13 @@ const standInFor = (f, sitting, pool) => {
    put in its place. One function so the card that offers the swap and the
    battery that renders it can never disagree about what is being measured. */
 const sittingKey = (which, key) => which + ":" + key;
-/* ============================================================================
-   ONE PLACE DECIDES WHAT SHE IS ASKED FOR
-   ---------------------------------------------------------------------------
-   HER REPORT, 15 August: "it still has the squat in there."
-
-   The coach can set status:"removed" on a battery measure, tell her it is done
-   and write it into the do-not-prescribe list the monthly read gets - and the
-   battery screen would still ask for it the following week, because not one of
-   the twenty-odd places that read the field lists ever looked at status. Rule
-   33: settle it once, in the view the engine reads, not at every call site.
-
-   AND A PAUSE IS NOT A REMOVAL. Her correction, 14 August: "it was never meant
-   to be forever." A paused measure keeps every reading it has ever taken and
-   its place in every chart; what it also carries is why it stopped, what is
-   being trained instead, and the date it is worth trying again.
-   ==========================================================================*/
-const isLive = (x) => !!x && x.status !== "removed" && x.status !== "paused" && x.status !== "retired";
-const liveFields = (data) => ({
-  weekly: (((data || {}).fields || {}).weekly || []).filter(isLive),
-  monthly: (((data || {}).fields || {}).monthly || []).filter(isLive),
-});
-const allFields = (data) => [
-  ...(((data || {}).fields || {}).weekly || []).map((f) => ({ ...f, which: "weekly" })),
-  ...(((data || {}).fields || {}).monthly || []).map((f) => ({ ...f, which: "monthly" })),
-];
-/* Everything paused, with what stands in for it and when it is next due.
-   Read by the battery screen, by Today and by the coach - one list, one
-   answer, so none of them can disagree with another. */
-const pausedFields = (data) => allFields(data).filter((f) => f.status === "paused");
-/* HER INSTRUCTION, 15 August: "the removed squat should be replaced by another
-   exercise testing the strength of muscles we r working to be able to do the
-   squat" - so a pause names its replacement, and the replacement is a real
-   battery measure with a number, not a drill nobody scores. */
-const standInMeasure = (data, id) => allFields(data)
-  .find((f) => [].concat(f.standsInFor || []).includes(id)) || null;
-const retestDue = (f, t) => !!f && !!f.retestOn && String(f.retestOn) <= String(t);
-/* The wait is derived from what has to change underneath, never invented. */
-const retestWeeksFor = (why, F) => {
-  const s = String(why || "").toLowerCase();
-  if (s.includes("knee")) return Number(F.retestKneeWeeks) || 6;
-  if (s.includes("shoulder")) return Number(F.retestShoulderWeeks) || 6;
-  if (s.includes("tendon")) return Number(F.retestTendonWeeks) || 12;
-  if (s.includes("range") || s.includes("mobility")) return Number(F.retestRomWeeks) || 4;
-  if (s.includes("mood") || s.includes("motivation")) return Number(F.retestMoodWeeks) || 4;
-  return Number(F.retestStrengthWeeks) || 4;
-};
-
 const sittingFields = (data, which, key) => {
   const sk = sittingKey(which, key);
   const out = (data.skips || {})[sk] || [];
   const swapped = Object.values((data.standIns || {})[sk] || {});
-  /* Rule 33, settled in one place: a paused or removed measure is not asked
-     for on any screen that asks her for a number. It stays in the pool below,
-     so it is still visible, still reversible, and still in every chart. */
-  const live = liveFields(data);
   const base = which === "weekly"
-    ? live.weekly.filter((f) => f.inWeekly !== false)
-    : [...live.monthly, ...live.weekly];
+    ? (data.fields?.weekly || []).filter((f) => f.inWeekly !== false)
+    : [...(data.fields?.monthly || []), ...(data.fields?.weekly || [])];
   const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
   const kept = base.filter((f) => !out.includes(f.id));
   const added = swapped
@@ -1921,7 +1678,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = wk[k] || {};
       const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
       return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -1987,7 +1744,7 @@ const reviewPayload = (data, coach, cut) => {
     return keys.map((k) => {
       const e = mo[k] || {};
       const vals = (d.fields?.monthly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
-        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
+        .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${e[f.id + "__machine"] ? ` (on the ${e[f.id + "__machine"]})` : ""}`).join(", ");
       return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
@@ -2255,35 +2012,6 @@ const reviewPayload = (data, coach, cut) => {
      used to be handed every drill she has ever had with nothing marking the
      ones she had removed, and is then asked to write the next month's ten
      minutes. It would have put them straight back. */
-  /* HER CORRECTION, 14-15 August. This section used to be headed DO NOT PUT ANY
-     OF IT BACK, which was the opposite of what she meant: "it was never meant
-     to be forever." A pause now says why it happened, what is being trained in
-     its place, and the date it is due - and the coach's job is to get her back
-     to it, not to forget it. */
-  S("WHAT IS PAUSED, WHAT STANDS IN FOR IT, AND WHEN IT IS DUE AGAIN", rvSafe(() => {
-    const ps = pausedFields(d);
-    if (!ps.length) return "nothing is paused.";
-    const rows = ps.map((f) => {
-      const si = standInMeasure(d, f.id);
-      const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
-      return `  * ${f.label} (${f.which} battery) - paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
-        + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
-        + `${si ? ` Standing in: ${si.label}.` : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : ""}`
-        + ` Due to be tried again ${f.retestOn || "?"}${f.retestWeeks ? ` (${f.retestWeeks} weeks, the time this tissue needs before a change is real)` : ""}.`
-        + `${feels ? ` Her own score on it: ${feels}.` : ""}`;
-    });
-    return "PAUSED IS NOT REMOVED. Every one of these is coming back, and getting her back to it is your job.\n"
-      + "Do not prescribe the paused movement itself, and do not write a near-copy under another name.\n"
-      + "DO train what has to get strong for it to return, watch the stand-in measure, and say plainly when\n"
-      + "the stand-in has moved enough that the paused one is worth trying before its date - you may raise it\n"
-      + "early on the evidence. If a date has passed, offer the retest warmly and accept 'not yet' or 'never'.\n"
-      + "AND HER OWN GOALS GO THROUGH THE SAME GATE (her instruction, 15 August): everything she has said she\n"
-      + "wants to be able to do must still be worked AND tested every week and every month - but reach it by a\n"
-      + "route that avoids every area listed here. Never prescribe or test a goal through a paused area. Where\n"
-      + "the only honest test would load one, say so, and test the supporting capacity instead.\n"
-      + rows.join("\n");
-  }));
-
   S("WHAT SHE HAS TAKEN OFF, AND WHY — DO NOT PUT ANY OF IT BACK", rvSafe(() => {
     const out = [];
     const say = (kind, label, why, when) =>
@@ -2418,15 +2146,6 @@ const parseReview = (text) => {
    and nothing is paid for twice. Anything still open — an issue she has not
    closed — is always sent too, however old it is. */
 const SCOPE_ALL = { kind: "all" };
-/* HER INSTRUCTION, 14 August: "make it see up to the last 6 months and make the
-   number of months editable and it show me how many months it will review
-   before doing it but the default is 6 months." Everything stays available —
-   she asked for it to remain a choice — but it is no longer where this opens. */
-const SCOPE_DEFAULT = { kind: "months", n: 6 };
-/* The daily coach's own window. Separate from the read's, because they are
-   different questions: a read designs a month and wants the arc; a chat
-   answers what she just asked. */
-const CHAT_SCOPE_DEFAULT = { kind: "months", n: 6 };
 const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
   if (!s || s.kind === "all") return "everything";
@@ -2516,7 +2235,7 @@ const runDeepReview = async ({ data, coach, mode, ruleBlock, scope }) => {
   /* what it actually cost, kept on the record so she can watch it over time */
   const spend = {
     tokensIn: usage.in || 0, tokensOut: usage.out || 0,
-    cost: centsFor(usage, formulas(data && data.settings)),
+    cost: Math.round(((usage.in || 0) / 1e6 * PRICE_IN + (usage.out || 0) / 1e6 * PRICE_OUT) * 100),
   };
   /* the four things she asked every read to end with */
   const lines = (x) => (Array.isArray(x) ? x.map((s) => String(s || "").trim()).filter(Boolean) : []);
@@ -2652,7 +2371,7 @@ const whyTag = (kind, id) => whyReason(kind, id)?.tag || "other";
 
 
 
-const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork, domsCaution = null, dislikes = [], measuredCost = {}, F = FORMULA_DEFAULTS }) => {
+const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, shoulderFrozen, shoulderInjury, shoulderSore, block, bodywork, domsCaution = null, dislikes = [], measuredCost = {} }) => {
   /* Her measured class cost outranks my written estimate once it exists
      (review card 28). Everything below reads costOf instead of the raw field. */
   const costOf = (w) => measuredCost[w.name] !== undefined ? measuredCost[w.name] : w.recoveryCost;
@@ -2690,9 +2409,9 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
     if (w.addon) return false;
     if (!inBlock(w)) return false;
     if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high") return false;
-    if (recovery?.key === "rest") return costOf(w) <= F.classCostRest;
-    if (recovery?.key === "easy") return costOf(w) <= F.classCostEasy;
-    if (reactive && costOf(w) >= F.classCostReactive) return false;
+    if (recovery?.key === "rest") return costOf(w) <= 1;
+    if (recovery?.key === "easy") return costOf(w) <= 3;
+    if (reactive && costOf(w) >= 4) return false;
     return true;
   });
   /* Block first; if recovery or the shoulder rules all of it out, step outside
@@ -2703,12 +2422,12 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
     pool = library.filter((w) => {
       if (w.addon) return false;
       if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high") return false;
-      if (recovery?.key === "rest") return costOf(w) <= F.classCostRest;
-      if (recovery?.key === "easy") return costOf(w) <= F.classCostEasy;
+      if (recovery?.key === "rest") return costOf(w) <= 1;
+      if (recovery?.key === "easy") return costOf(w) <= 3;
       return true;
     });
   }
-  if (!pool.length) pool = library.filter((w) => !w.addon && costOf(w) <= F.classCostFallback);
+  if (!pool.length) pool = library.filter((w) => !w.addon && costOf(w) <= 2);
   if (!pool.length) return null;
 
   const score = (w) => {
@@ -2783,8 +2502,8 @@ const prescribe = ({ library, logs, date, recovery, restDay, phase, themeGoal, s
   const addons = library.filter((w) => {
     if (!w.addon) return false;
     if (shoulderInjury && shoulderFrozen && w.shoulderLoad === "high") return false;
-    if (recovery?.key === "rest") return costOf(w) <= F.addonCostRest;
-    return costOf(w) <= F.addonCostMax;
+    if (recovery?.key === "rest") return costOf(w) <= 1;
+    return costOf(w) <= 2;
   });
   let addon = null;
   if (addons.length && (recovery?.key === "green" || recovery?.key === "steady" || !recovery)) {
@@ -2922,18 +2641,18 @@ const PHASES = {
    The gym date still governs when there IS one. Without one, the app watches
    the two things the phase is actually about: whether she has been training at
    all, and whether the shoulder is still the thing talking. */
-const phaseFor = (t, gymDate, evidence, F = FORMULA_DEFAULTS) => {
+const phaseFor = (t, gymDate, evidence) => {
   if (gymDate) {
     const days = Math.floor((parse(t) - parse(gymDate)) / 86400000);
     if (days < 0) return "restoration";
-    if (days < F.phaseGymDays) return "familiarise";
+    if (days < 7) return "familiarise";
     return "building";
   }
   if (!evidence) return "restoration";
   /* eight weeks of real training with a settled shoulder is a building block by
      any reading of it, whether or not she ever typed a date into Settings */
-  if (evidence.weeks >= F.phaseBuildWeeks && evidence.shoulderSettled) return "building";
-  if (evidence.weeks >= F.phaseFamiliariseWeeks) return "familiarise";
+  if (evidence.weeks >= 8 && evidence.shoulderSettled) return "building";
+  if (evidence.weeks >= 4) return "familiarise";
   return "restoration";
 };
 
@@ -3287,27 +3006,6 @@ const SEED_WEEKLY = [
     why: "The loaded version. Once bodyweight squats stop being hard, reps stop measuring strength and start measuring patience — this is where the number goes next." },
 
   /* ---- PUSH ---- */
-  /* ---- WHAT STANDS IN WHILE THE SQUAT IS PAUSED --------------------------
-     HER INSTRUCTION, 15 August: a paused measure is replaced by one that tests
-     the muscles being trained to earn it back - "anything I am working on needs
-     to be tested at weekly and monthly batteries to gauge improvement". Both of
-     these are inWeekly, so they are asked for every week AND every month (the
-     monthly sitting is the monthly list plus the whole weekly one).
-
-     Why these two and not another squat: in patellofemoral pain the work that
-     changes the knee soonest is at the HIP, not the knee - extension and
-     abduction - and both can be loaded hard with the knee near straight, which
-     is where kneecap joint stress is lowest. The hip thrust is the anchor
-     because the lower body needs one for the weekly score to balance, and it
-     is the same unit as the squat it replaces, so the two are comparable. */
-  { id: "hipthrust", mins: 1.5, cap: "lower",    label: "Hip thrust",       role: "anchor",   type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: true,
-    standsInFor: "squat", rungs: [], rung: 0,
-    how: "Shoulders on the edge of a sofa or bench, feet flat and hip-width, weight across your hips - dumbbell, kettlebell, a loaded bag, the SAME thing every time. Drive through your heels until hips, knees and shoulders make a straight line, squeeze hard at the top, lower under control. That is one. Sixty seconds. Your shins stay near vertical and your knees never travel forward, which is what keeps it off your kneecaps. Log the weight and the reps.",
-    why: "The strongest hip-extension test you can do with your knees almost straight. It is the glute strength that has to come back before a deep squat is worth asking for again - and unlike the squat, it does not put your kneecap under load to measure it." },
-  { id: "hipabd", mins: 1.25, cap: "lower",    label: "Hip abduction",    role: "rotating", type: "number", unit: "reps in 30s each side", better: "up", inWeekly: true,
-    standsInFor: "squat", bilateral: true,
-    how: "Lie on your side, hips stacked, bottom knee bent for balance, top leg straight and in line with your body. Lift it about 45 degrees, lead with the heel, toes pointing forward rather than up, lower slowly. Thirty seconds a side, count each side on its own. If it is easy, add an ankle weight or a band above the knees and keep it the same every week.",
-    why: "Weak hip abductors let the knee fall inwards under load, which is the single most repeatable finding in knee pain in women. This is the number that says whether that is changing - and it says it per side, so it also shows which leg is the problem." },
   { id: "pushup", mins: 1.25, cap: "push",     label: "Push-up",          role: "anchor",   type: "number", unit: "reps in 60s", better: "up", inWeekly: true,
     rungs: ["Knee push-up", "Floor push-up"], rung: 0 ,
     how: "Sixty seconds. Hands slightly wider than your shoulders, body in one line from head to heel — or from head to knee if you are on your knees. Lower until your upper arms are parallel to the floor, press up. Log which version you used, and count only full-depth reps.",
@@ -3318,16 +3016,6 @@ const SEED_WEEKLY = [
   { id: "raise", mins: 1.5, cap: "push",     label: "Lateral raise",    role: "rotating", type: "weightreps", unit: "kg x reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Dumbbells at your sides, elbows soft. Lift out to the side to shoulder height, no higher, and lower slowly. Log the weight and the reps in the minute.",
     why: "Isolates the side of the shoulder with far less load on the joint than pressing. It is the safest way to keep building the shoulder while it is still settling." },
-  /* ---- WHAT STANDS IN WHILE THE OVERHEAD WORK IS PAUSED ------------------
-     HER INSTRUCTION, 15 August: "same with shoulder". The shoulder press and
-     the lateral raise are the two that load the joint overhead; they pause,
-     and this takes their place. External rotation strength is the measure that
-     tracks a rehabilitating shoulder in the published trials, and it is done
-     with the elbow at your side, well below the range that hurts. */
-  { id: "exrot", mins: 1.5, cap: "push",     label: "External rotation", role: "rotating", type: "weightreps", unit: "kg x reps in 30s each side", better: "up", inWeekly: true,
-    standsInFor: ["press", "raise"], bilateral: true, rungs: [], rung: 0,
-    how: "Elbow tucked against your side and bent to a right angle, forearm across your stomach, holding a band anchored at elbow height or a light dumbbell while lying on your side. Rotate the forearm outwards, keeping the elbow pinned to your ribs, then back under control. Thirty seconds a side. Roll a towel between elbow and ribs if the elbow drifts. Log the weight or band and the reps for each side.",
-    why: "The rotator cuff is what holds the ball centred in the socket, and its strength - not how much you can press overhead - is what the shoulder trials track while a shoulder is settling. It is also two-sided, so it shows the gap between the rehabilitating side and the good one closing." },
   { id: "dip", mins: 1.25, cap: "push",     label: "Bench dip",        role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: false ,
     how: "Sixty seconds. Hands on the edge of a bench or chair behind you, feet out in front. Bend your elbows to about ninety degrees and press back up.",
     why: "Triceps and the front of the shoulder. Included because it loads the shoulder in a different line to a press, which is how a restriction shows itself." },
@@ -3374,7 +3062,7 @@ const SEED_WEEKLY = [
   { id: "burpees", mins: 1.25, cap: "cardio",   label: "Burpees",          role: "rotating", type: "number", unit: "reps in 60s", better: "up", inWeekly: true ,
     how: "Sixty seconds. Squat, hands down, feet back, chest to floor, feet in, stand and jump. Count full repetitions.",
     why: "The hardest sixty seconds in the battery, and the one that most reflects everything at once. Scale it by stepping the feet back rather than jumping." },
-  { id: "treadmill", mins: 7, cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: true, machine: true ,
+  { id: "treadmill", mins: 7, cap: "cardio",   label: "1 km",             role: "anchor",   type: "time",   unit: "mm:ss", better: "down", inWeekly: false ,
     how: "One kilometre. Walking counts. Same machine, same incline or resistance, every single time — rename this row if you switch, because a kilometre on a treadmill and a kilometre on an elliptical are two different tests and comparing them tells you nothing.",
     why: "Aerobic fitness. Lower is better, and because the settings are fixed the time is a clean read on the heart and lungs." },
 
@@ -3559,46 +3247,6 @@ const insideClaude = () => typeof window !== "undefined" && !!window.storage?.ge
    So the call reports what it actually spent. `usage` is an optional object
    the caller passes in and reads afterwards — nothing else changes. */
 const PRICE_IN = 3, PRICE_OUT = 15;   /* dollars per million tokens */
-/* HER QUESTION, 14 August, holding a bank text: "the data is not that much,
-   why does it cost that much!!!!"
-
-   Because every message re-sent her whole file at full price. Nothing was
-   cached — there was not one cache_control in this file — so the same twelve
-   thousand words were read from scratch, from the beginning, every single time
-   she said anything.
-
-   Her own rule 15 already had the answer: "If cost becomes the reason to trim,
-   the answer is caching, not trimming." Anthropic charges 1.25x to put a block
-   on the desk and 0.1x to glance at it again, and a read refreshes the five
-   minutes — so a back-and-forth stays cached for as long as it lasts. Nothing
-   is removed from what the coach can see. It stops paying full price to have
-   the same thing read to it over and over. */
-const PRICE_CACHE_WRITE = PRICE_IN * 1.25;
-const PRICE_CACHE_READ = PRICE_IN * 0.1;
-/* Every number in this app is hers (rule 12), and a price is a fact that can
-   change under her. The four live in FORMULA_DEFAULTS too, and the cost the
-   app reports reads them from her settings. */
-const centsFor = (u, F) => {
-  const f = F || FORMULA_DEFAULTS;
-  const pin = f.priceIn ?? PRICE_IN, pout = f.priceOut ?? PRICE_OUT;
-  const write = u.cacheTtl === "1h"
-    ? (f.priceCacheWrite1h ?? (f.priceIn ?? PRICE_IN) * 2)
-    : (f.priceCacheWrite ?? PRICE_CACHE_WRITE);
-  return ((
-      (u.in || 0) / 1e6 * pin
-    + (u.out || 0) / 1e6 * pout
-    + (u.cacheWrite || 0) / 1e6 * write
-    + (u.cacheRead || 0) / 1e6 * (f.priceCacheRead ?? PRICE_CACHE_READ)
-  ) * 100);
-};
-/* What the cache SAVED, so the number is visible rather than asserted: what
-   those cached words would have cost at full price, less what they did cost. */
-const centsSaved = (u, F) => {
-  const f = F || FORMULA_DEFAULTS;
-  const pin = f.priceIn ?? PRICE_IN;
-  const read = (u.cacheRead || 0) / 1e6;
-  return (read * pin - read * (f.priceCacheRead ?? PRICE_CACHE_READ)) * 100;
-};
 /* HER QUESTION, 13 August: "Why does the coach have no access to the
    Internet?" Nothing was stopping it — the app simply never asked. Every
    call went out as plain text with no tools, so the model had no way to
@@ -3606,187 +3254,7 @@ const centsSaved = (u, F) => {
    `search: true` attaches the web-search tool. Anthropic runs the search on
    its side and hands back the answer with its sources, so nothing new is
    installed here and her key is still the only thing that pays. */
-/* WHAT SHE HAS ACTUALLY SPENT, from what the app recorded and nothing else.
-   Her question, 14 August: "is this the amount I actually used by the app so
-   far?" The app could not answer, because until build 143 the daily chat
-   recorded nothing at all. It records now — and this only ever adds up what
-   is on the record. A conversation from before build 143 carries no cost, and
-   says so rather than being guessed at (rule 23). */
-const spendSince = (data, from) => {
-  const chats = (data.chats || []).filter((c) => c && (!from || c.date >= from));
-  const reads = (data.reviews || []).filter((r) => r && (!from || r.date >= from));
-  const sumC = chats.reduce((a, c) => a + (Number(c.cost) || 0), 0);
-  const sumR = reads.reduce((a, r) => a + (Number(r.cost) || 0), 0);
-  /* what caching took off the bill, added up from what each conversation
-     recorded — never asserted, and zero until there is something to show */
-  const saved = chats.reduce((a, c) => a + (Number(c.saved) || 0), 0);
-  const unknown = chats.filter((c) => c.cost === undefined).length;
-  return {
-    chatCents: sumC, readCents: sumR, cents: sumC + sumR, saved,
-    chats: chats.length, reads: reads.length, unknown,
-    tokensIn: chats.reduce((a, c) => a + (Number(c.tokensIn) || 0), 0)
-            + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0),
-    tokensOut: chats.reduce((a, c) => a + (Number(c.tokensOut) || 0), 0)
-             + reads.reduce((a, r) => a + (Number(r.tokensOut) || 0), 0),
-  };
-};
-const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
-
-/* WHICH CALCULATIONS THE COACH IS TOLD ABOUT.
-   ---------------------------------------------------------------------------
-   HER INSTRUCTION, 14 August, after the ranked analysis: "cut it down to twenty
-   and drop the unread whoop fields."
-
-   Forty-one went to the coach in every message. Traced through the code, NINE
-   OF THEM DRIVE NOTHING AT ALL — they appear in none of the four places the app
-   decides anything (picking a class, designing a month, flagging, or raising it
-   with her). Two of them read the SAME variable: fitness base and progression
-   rate are one number printed twice. One of them — muscle banked — projects a
-   gain the evidence says may not be available to a post-menopausal woman at all.
-
-   NOTHING IS DELETED (rule 20). Every calculation still runs, still shows on her
-   screen, still keeps its history. This is only what the coach is TOLD. A
-   calculation switched off here can be switched back on, and the list is hers to
-   change (rules 12 and 13). */
-const COACH_METRICS = [
-  /* the fifteen that earn it outright */
-  "consistency",   /* the only one touching all four decisions; rule 26's proxy */
-  "readiness",     /* picks today's class                                       */
-  "goals",         /* drives nothing, outranks everything (rule 9)              */
-  "realchange",    /* the only one separating progress from noise               */
-  "volume",        /* sets per region — the whole point of the app at 51        */
-  "coverage",      /* which regions were reached at all                         */
-  "mobility",      /* six of her goals are mobility goals; picks her drills     */
-  "asymmetry",     /* her shoulder, and her left side                           */
-  "illness",       /* safety. three cheap fields, one clear answer              */
-  "feels",         /* in-the-room affect: the strongest adherence predictor     */
-  "barriers",      /* evidence a bad day need not cost the session              */
-  "habit",         /* rule 26 on a longer clock                                 */
-  "doms",          /* one of only two things besides recovery that PICK         */
-  "classcost",     /* measured from her own mornings, not from my guesses       */
-  "balance",       /* her only injury-risk signal — see the caveat below        */
-  /* and five more that genuinely change what the coach does */
-  "bodywork",      /* reactive tissue changes what tomorrow can be              */
-  "swaps",         /* the only measure of whether she accepts the pick          */
-  "writing",       /* writing less is the earliest sign of a hard stretch       */
-  "variety",       /* the check that her deliberate rotation is rotating        */
-  "survival",      /* weeks past the median dropout point                       */
-];
-/* CAVEAT ON "balance": the acute:chronic workload ratio has been substantially
-   criticised in the sports-science literature. It is kept because it is the only
-   injury-risk signal the app has, not because it is settled. */
-
-/* WHOOP FIELDS THAT NOTHING READS.
-   Every field is imported and kept — her data is permanent (rule 20) and the
-   import is free. These eight simply stop being SENT to the coach, because
-   nothing in the app reads them and since build 142 they went across every
-   message as raw unlabelled figures. Rule 18: a collected-and-unused field is
-   either wired in or dropped. */
-const WHOOP_UNREAD = ["light", "awake", "cycles", "calories", "maxHr", "inBed", "sleepPerf", "sleepEff", "disturbances"];
-
-/* What the coach is told about, resolved: her list if she has set one, plus any
-   headline on her landing page — a number she can see must never be one her
-   coach has not been told about. */
-const coachMetricIds = (settings) => {
-  const hers = settings && Array.isArray(settings.coachMetrics) ? settings.coachMetrics : null;
-  return hers && hers.length ? hers : COACH_METRICS;
-};
-const metricsForCoach = (all, settings) => {
-  const want = coachMetricIds(settings);
-  return (all || []).filter((m) => m && (m.key || want.includes(m.id)));
-};
-
-/* SHOULD THIS MESSAGE BE CACHED AT ALL?
-   ---------------------------------------------------------------------------
-   HER CORRECTION, 14 August: "The cache assumes that I make all my messages
-   within one hour, which is not... never the case."
-
-   She was right, and it was costing her. A cache that is never read back is a
-   STRAIGHT PENALTY — 1.25x to write the five-minute one, 2x to write the
-   hour-long one, against 1.0x for not caching at all. Build 144 cached every
-   message unconditionally, which is a saving for a burst of messages and a
-   20% surcharge for messages spread through a day.
-
-   So the app measures her instead of guessing at her. A cache read refreshes
-   the clock for free, so what matters is not how long a conversation lasts but
-   THE LONGEST GAP INSIDE IT. It times her actual gaps, picks the mode that
-   suits them, and shows her the number it decided on.
-
-   Until there is enough of her to measure, the answer is OFF — because off is
-   never a penalty, and a wrong guess here costs her money. */
-const msgTimes = (data) => {
-  const out = [];
-  ((data && data.chats) || []).forEach((c) => ((c && c.messages) || []).forEach((m) => {
-    if (m && m.role === "user" && Number(m.at) > 0) out.push(Number(m.at));
-  }));
-  return out.sort((a, b) => a - b);
-};
-const cachePolicy = (data, F) => {
-  const f = F || FORMULA_DEFAULTS;
-  /* HER REPORT, 15 August: still "not cached" after the default changed. A
-     stored "off" — chosen back when this screen told her off cost nothing
-     extra — outranks any default forever. It is treated as unset now. She can
-     still force it off from Settings; that writes "never", which is honoured. */
-  const stored = (data && data.settings && data.settings.cacheMode) || "auto";
-  const forced = stored === "off" ? "auto" : stored;
-  const times = msgTimes(data);
-  /* gaps between consecutive messages, in minutes, ignoring overnight breaks
-     that no cache could ever span */
-  const gaps = [];
-  for (let i = 1; i < times.length; i++) {
-    const mins = (times[i] - times[i - 1]) / 60000;
-    if (mins > 0 && mins < 24 * 60) gaps.push(mins);
-  }
-  const sorted = [...gaps].sort((a, b) => a - b);
-  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
-  const enough = gaps.length >= f.cacheMinGaps;
-  const measured = !enough ? "off"
-    : median <= f.cacheShortGapMins ? "5m"
-    : median <= f.cacheLongGapMins ? "1h"
-    : "off";
-  const mode = forced === "auto" ? measured : forced;
-  return {
-    mode, measured, forced, median: median === null ? null : Math.round(median), gaps: gaps.length, enough,
-    why: forced !== "auto"
-      ? `you set this yourself`
-      : !enough
-        ? `not enough measured yet — ${gaps.length} of ${f.cacheMinGaps} gaps. Off costs nothing extra, so it stays off until there is something to go on.`
-        : measured === "5m" ? `your messages are typically ${Math.round(median)} minutes apart, which a five-minute cache survives`
-        : measured === "1h" ? `your messages are typically ${Math.round(median)} minutes apart — too far for the short cache, close enough for the hour one`
-        : `your messages are typically ${Math.round(median)} minutes apart, which no cache lives long enough to help with`,
-  };
-};
-
-/* HOW LONG THE COACH'S ANSWER MAY BE.
-   ---------------------------------------------------------------------------
-   Her decision, 14 August, once the arithmetic was in front of her: after
-   caching, THE REPLIES ARE THE BIGGEST COST IN A CONVERSATION — about 60% of
-   it. A flat 1,000-token cap paid for an essay whether she asked what time her
-   class is or asked it to talk her out of quitting.
-
-   Her instruction: "make it depend on what you asked." So it does. Nothing the
-   coach KNOWS changes — only how much room it has to answer in. And the one
-   rule that matters: a hard morning is never the conversation that gets cut
-   short. Rule 4 says the coach walks down a ladder rung by rung; a ladder needs
-   room. */
-const REPLY_LONG_WORDS = ["why", "explain", "how come", "what do you think", "should i", "compare",
-  "difference", "walk me", "talk me", "plan", "design", "reason", "understand", "worried", "confused"];
-const HARD_MORNING_WORDS = ["can't", "cant", "cannot", "can not", "couldn't", "couldnt",
-  "don't want", "dont want", "exhausted", "tired", "flat",
-  "low", "sad", "hate", "quit", "give up", "pointless", "failing", "hurts", "pain", "scared", "hard"];
-const replyBudget = (text, coach, F) => {
-  const f = F || FORMULA_DEFAULTS;
-  const s = String(text || "").toLowerCase();
-  /* A HARD MORNING GETS THE ROOM, whatever she typed and however short it was.
-     Her mood tap outranks the question, exactly as it does everywhere else. */
-  const mood = coach && coach.moodToday;
-  if ((mood && mood !== "good") || HARD_MORNING_WORDS.some((w) => s.includes(w))) return f.replyLong;
-  if (REPLY_LONG_WORDS.some((w) => s.includes(w))) return f.replyThinking;
-  if (s.length <= f.replyShortChars) return f.replyShort;
-  return f.replyNormal;
-};
-
-const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false, cacheTtl = "5m" }) => {
+const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false }) => {
   const headers = { "Content-Type": "application/json" };
   if (!insideClaude()) {
     if (!apiKey) throw new Error("no-key");
@@ -3794,16 +3262,7 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
     headers["anthropic-version"] = "2023-06-01";
     headers["anthropic-dangerous-direct-browser-access"] = "true";
   }
-  /* CACHED, when the caller says this system prompt will be sent again.
-     Everything she has told the app is in here and none of it changes between
-     one message and the next, which is exactly what a cache is for. A one-shot
-     call (a read, a set of lists) is NOT cached: writing the cache costs 1.25x
-     and nothing would ever read it back. */
-  const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
-    system: cache
-      ? [{ type: "text", text: system,
-           cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } }]
-      : system };
+  const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, system, messages };
   if (search) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers,
@@ -3812,15 +3271,8 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
   if (!res.ok) throw new Error("request-failed");
   const data = await res.json();
   if (usage && data && data.usage) {
-    /* input_tokens EXCLUDES anything served from or written to the cache, so
-       all three are kept separately — otherwise the app would report a cached
-       conversation as nearly free when the first message still paid to build
-       it, or as full price when it did not. */
     usage.in = Number(data.usage.input_tokens) || 0;
     usage.out = Number(data.usage.output_tokens) || 0;
-    usage.cacheWrite = Number(data.usage.cache_creation_input_tokens) || 0;
-    usage.cacheTtl = cacheTtl;
-    usage.cacheRead = Number(data.usage.cache_read_input_tokens) || 0;
   }
   const text = (data.content || []).map((c) => (c.type === "text" ? c.text : "")).join("").trim();
   /* Where it looked, so a claim can always be followed back to its source
@@ -3879,7 +3331,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 158";
+const BUILD = "13 August 2026 · 139";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -3965,10 +3417,7 @@ const RETIRED_WEEKLY = ["reach", "shoulderflex", "overhead", "deepsquat", "ellip
    migration exactly once. The two constants below stay only to record when
    each retirement was introduced.
 ========================================================================== */
-/* 74: bumped 15 August so addNewFields runs once more and returns any seed row
-   the old delete button removed from her list. Her readings were never touched;
-   they simply had no row left to appear under. */
-const SEED_VERSION = 74;
+const SEED_VERSION = 73;
 const BATTERY_TIDY = 56;        /* build that retired the first five rows      */
 const MOBILITY_REBUILD = 62;    /* build that rebuilt mobility by muscle length */
 
@@ -4036,11 +3485,7 @@ const BLANK = {
        Internet so it can get me video links and anything I want." On by
        default because she asked for it; switchable because it costs a
        little more per answer and the choice is hers (rule 12). */
-    /* OFF by default from 15 August. It was on for every message, five
-       searches a message, every page read charged as words and then carried
-       forward and charged again. She turns it on when she wants it, from the
-       switch beside the coach. */
-    webSearch: false,
+    webSearch: true,
     /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
@@ -4119,18 +3564,6 @@ const BLANK = {
      deleted (rule 20) — a read that failed is exactly what you want the next
      time one fails, and a month she did not start is still evidence. */
   reviews: [],
-  /* HER RUNNING HISTORY, held on this device (build 145). Her instruction,
-     14 August: "a summary of my history that keeps updating as we go and saved
-     into the app and the coach can access and keeps updating based on anything
-     we discuss instead of sending everything to anthropic every time."
-
-     "text" is the coach's account of her, folded forward. "hers" is anything
-     she has written or corrected herself, and it OUTRANKS the coach's version
-     wherever they disagree — the same standing her own words already have in
-     the profile. "upto" is the date it has been folded to, so an update only
-     ever has to read what happened since. Every version is kept (rule 20):
-     nothing about her history is overwritten, only added to. */
-  memory: { text: "", hers: "", upto: null, at: null, versions: [] },
 };
 
 /* ---------------------------------------------------------------------------
@@ -4164,72 +3597,6 @@ const BLANK = {
    Tonight it costs nothing: she has not logged a battery yet. Tomorrow it
    would cost her a column.
 ========================================================================== */
-/* ============================================================================
-   A REMOVAL IS A PAUSE - AND A PAUSE NAMES ITS REPLACEMENT
-   ---------------------------------------------------------------------------
-   HER CORRECTION, 14 August: "when I tell the coach to remove any knee hurting
-   exercises, I don't mean that he should remove it forever... it was never
-   meant to be forever." And 15 August: "the removed squat should be replaced by
-   another exercise testing the strength of muscles we r working to be able to
-   do the squat", "same with shoulder", "anything I am working on needs to be
-   tested at weekly and monthly batteries to gauge improvement."
-
-   So this runs once. The squat and the two overhead lifts stop being asked for,
-   each says why and what is being trained instead, each carries the date it is
-   worth trying again - derived from how long the tissue underneath actually
-   takes to change, not a round number - and the hip thrust, hip abduction and
-   external rotation rows take their places in both batteries.
-
-   Nothing is deleted. Every reading any of them has ever had stays, stays in
-   every chart, and comes straight back the day she puts one back.
-   ==========================================================================*/
-const REHAB_PAUSE = 151;
-const pauseRehab = (list, d, t) => {
-  if ((d.settings || {}).rehabPause >= REHAB_PAUSE) return list;
-  const F = formulas(d.settings || {});
-  const wks = (why) => retestWeeksFor(why, F);
-  const P = {
-    squat: { area: "knee", why: "Deep squats hurt your knees",
-      instead: "Hip thrust and hip abduction, which load the same muscles with the knee near straight",
-      note: "Kneecap joint stress climbs the whole way from straight to a right angle, and this test asks for the bottom of that range every week." },
-    press: { area: "shoulder", why: "Your right shoulder is still settling",
-      instead: "External rotation at your side, which is what the shoulder trials actually track",
-      note: "Pressing overhead is the last thing a rehabilitating shoulder gets back, not the first." },
-    raise: { area: "shoulder", why: "Your right shoulder is still settling",
-      instead: "External rotation at your side, which is what the shoulder trials actually track",
-      note: "A lateral raise loads the joint at exactly the angle that is sore." },
-  };
-  return list.map((f) => {
-    const p = P[f.id];
-    if (p && !f.status) return { ...f, status: "paused", area: p.area, pausedOn: t,
-      pausedWhy: p.why, pausedNote: p.note, pausedInstead: p.instead,
-      retestWeeks: wks(p.area), retestOn: addDays(t, 7 * wks(p.area)), feels: [] };
-    return f;
-  });
-};
-
-/* ---- A KILOMETRE IS NOT A KILOMETRE ---------------------------------------
-   HER INSTRUCTION, 12 August: "I did one kilometre on the rowing machine but
-   there was no field to say which machine." And again 15 August: "which machine
-   should have calculations like one kilometre and how many minutes... the rower
-   or any cardio machine should show also intensity."
-
-   So a cardio row carries three things with the number: how far, on what, and
-   at what setting. Without them the time compares to nothing — a kilometre on a
-   rower at level 8 and a kilometre on a treadmill at level 2 are two different
-   tests, and calling the gap between them progress would be a lie (rule 23).
-   These travel with the number everywhere it is shown or sent.
--------------------------------------------------------------------------- */
-const qualifiers = (entry, f) => {
-  if (!entry || !f) return "";
-  const g = (k) => String(entry[f.id + k] ?? "").trim();
-  const bits = [];
-  if (g("__dist")) bits.push(g("__dist") + " km");
-  if (g("__machine")) bits.push("on the " + g("__machine"));
-  if (g("__level")) bits.push("at " + g("__level"));
-  return bits.length ? ` (${bits.join(", ")})` : "";
-};
-
 const fillFromSeed = (list, seed, keys) => {
   if (!Array.isArray(list) || !list.length) return list;
   return list.map((f) => {
@@ -4401,7 +3768,7 @@ async function loadData() {
       return {
         ...BLANK, ...d,
         logs: repairLogs(d),
-        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION, rehabPause: REHAB_PAUSE },
+        settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION },
         /* `label` and `bilateral` are new to this list, and they are the
            reason a correction could never reach her. Split squat said "L/R"
            and gave one box; shoulder press and lateral raise, which are
@@ -4410,13 +3777,13 @@ async function loadData() {
            guarded by their own *Edited flag, so anything she renames or sets
            herself is hers permanently. */
         fields: {
-          weekly: pauseRehab(d.fields?.weekly?.length
+          weekly: d.fields?.weekly?.length
             ? addNewFields(
                 retireFields(
-                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]),
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
                   d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
-            : SEED_WEEKLY, d, today()),
+            : SEED_WEEKLY,
           /* ---- WHERE BODY COMPOSITION WENT ---------------------------
              HER REPORT, 10 August: "Body composition all of a sudden
              disappeared from my monthly measurements. I was going to log it
@@ -4450,11 +3817,6 @@ async function loadData() {
         chats: Array.isArray(d.chats) ? d.chats : [],
         profile: Array.isArray(d.profile) ? d.profile : [],
         reviews: Array.isArray(d.reviews) ? d.reviews : [],
-        memory: (d.memory && typeof d.memory === "object")
-          ? { text: String(d.memory.text || ""), hers: String(d.memory.hers || ""),
-              upto: d.memory.upto || null, at: d.memory.at || null,
-              versions: Array.isArray(d.memory.versions) ? d.memory.versions : [] }
-          : { text: "", hers: "", upto: null, at: null, versions: [] },
         bodywork: Array.isArray(d.bodywork) ? d.bodywork : [],
         bwlog: d.bwlog && typeof d.bwlog === "object" ? d.bwlog : {},
         /* An older file has neither — seed them, never wipe them (rule 20). */
@@ -4468,7 +3830,7 @@ async function loadData() {
               SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
           : SEED_MOBILITY,
         drills: Array.isArray(d.drills) && d.drills.length
-          ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets", "side"]) : SEED_DRILLS,
+          ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
         mobility: d.mobility || {},
         /* One block at a time: anything after the live block was written
            before that rule existed and would pre-empt a design the coach
@@ -5006,12 +4368,7 @@ const saveData = async (d) => {
    ==========================================================================*/
 function useCoach(data, day, clock) {
   return useMemo(() => {
-    const { settings, weekly, monthly } = data;
-    /* Rule 33, and the reason her battery kept asking for the squat: the
-       engine reads the LIVE lists. Anything paused or removed is out of every
-       target, score and count from here down, and nothing downstream has to
-       remember to check. Her stored file is untouched — see liveFields. */
-    const fields = liveFields(data);
+    const { settings, weekly, monthly, fields } = data;
     /* Her instruction, 12 August: a rest day is authoritative. Every question
        below this line — sessions, totals, frequency, minutes, streaks,
        adherence, volume, progression, milestones, and everything the coach is
@@ -5257,9 +4614,9 @@ function useCoach(data, day, clock) {
          said about the shoulder for four weeks. Never mentioned = nothing
          to settle. */
       return { weeks, shoulderSettled: !shoulderGuard
-        || (!shoulderTold.length && (shoulderQuietDays === null || shoulderQuietDays >= FX.shoulderQuietDays)) };
+        || (!shoulderTold.length && (shoulderQuietDays === null || shoulderQuietDays >= 28)) };
     })();
-    const phaseKey = phaseFor(t, settings.gymDate, phaseEvidence, FX);
+    const phaseKey = phaseFor(t, settings.gymDate, phaseEvidence);
     const phase = { key: phaseKey, ...PHASES[phaseKey] };
 
     /* TWO LISTS, AND THE DIFFERENCE MATTERS.
@@ -5336,7 +4693,7 @@ function useCoach(data, day, clock) {
     const sleepValue = Number(loggedToday?.sleep);
     const sleepBase = sleepBaseline(logs, t);
     const sleptHours = !isNaN(sleepValue) && sleepValue > 0 ? Math.round(sleepValue * 10) / 10 : null;
-    const sleepShort = sleptHours !== null && (sleepBase ? sleptHours <= sleepBase - FX.sleepShortDrop : sleptHours < FX.sleepShortAbs);
+    const sleepShort = sleptHours !== null && (sleepBase ? sleptHours <= sleepBase - 1.5 : sleptHours < 6);
     const sleepWhy = !sleepShort ? null
       : sleepBase
         ? `you slept ${sleptHours} hours against your usual ${sleepBase}, so this is a step below what I would otherwise have picked`
@@ -5385,7 +4742,7 @@ function useCoach(data, day, clock) {
     const prevWeek = weekly[weekStart(addDays(t, -14), startOn)] || null;
 
     const confRaw = lastWeek ? Number(lastWeek.confidence) : NaN;
-    const confidence = confidenceRule(isNaN(confRaw) ? null : confRaw, FX);
+    const confidence = confidenceRule(isNaN(confRaw) ? null : confRaw);
 
     /* The daily 1-5 comfort tap is gone (her decision, 12 August), so the
        week's comfort is read off the record instead: a fresh complaint is
@@ -5402,9 +4759,9 @@ function useCoach(data, day, clock) {
       ? weeklyVerdict({
           hitTarget: weekDone >= seasonTarget ? true : (weekDone >= seasonTarget - 1 ? null : false),
           comfortOk,
-          recoveryOk: recAvg === null ? null : recAvg >= recBaseline - FX.recoveryOkGap,
+          recoveryOk: recAvg === null ? null : recAvg >= recBaseline - 5,
           confidence: confidence ? confidence.key === "up" : null,
-          quality: isNaN(qualityRaw) ? null : qualityRaw <= FX.rpeQualityMax,
+          quality: isNaN(qualityRaw) ? null : qualityRaw <= 8,
         })
       : { key: "paused", label: "Progression paused",
           line: season.key === "maintain" ? "Maintenance season. Nothing needs to get harder right now."
@@ -5430,18 +4787,18 @@ function useCoach(data, day, clock) {
         ? weekDone / Math.max(1, seasonTarget * Math.min(1,
             (Math.round((parse(t) - parse(firstSession)) / 86400000) + 1) / 7))
         : null,
-      recovery: recAvg === null ? null : Math.min(1, recAvg / (recBaseline + FX.recoveryCeilingGap)),
-      sleep: sleepVals.length ? Math.min(1, (sleepVals.reduce((a, b) => a + b, 0) / sleepVals.length) / FX.sleepIdeal) : null,
+      recovery: recAvg === null ? null : Math.min(1, recAvg / (recBaseline + 10)),
+      sleep: sleepVals.length ? Math.min(1, (sleepVals.reduce((a, b) => a + b, 0) / sleepVals.length) / 8) : null,
       strength: capBest("push"),
       mobility: capBest("mobility"),
       balance: capBest("balance"),
     }, { completion: F.wCompletion, recovery: F.wRecovery, sleep: F.wSleep,
-         strength: F.wStrength, mobility: F.wMobility, balance: F.wBalance }, FX);
+         strength: F.wStrength, mobility: F.wMobility, balance: F.wBalance });
 
     /* ---- every measure, analysed comparatively ---- */
     const ctx = {
       hitTarget: weekDone >= seasonTarget,
-      recoveryOk: recAvg === null ? true : recAvg >= recBaseline - FX.recoveryOkGap,
+      recoveryOk: recAvg === null ? true : recAvg >= recBaseline - 5,
       shoulderIssue: shoulderSore,
     };
     /* Every number she logs, including the ones with no right direction. The
@@ -6051,7 +5408,7 @@ function useCoach(data, day, clock) {
       /* 91 days is the habit-formation research figure for exercise — how long
          repetition takes to become automatic. It is NOT a plan and nothing is
          scheduled from it; the programme remains one month at a time. */
-      const reps = Math.min(1, (weeksTraining * 7) / FX.habitDays);
+      const reps = Math.min(1, (weeksTraining * 7) / 91);
       const stick = Math.min(1, consistency / 85);
       /* AUDIT ITEM 14 (rule 23): a missing cue reading used to become an
          invented 0.5 that still printed as a percentage. The score now
@@ -6078,7 +5435,7 @@ function useCoach(data, day, clock) {
         const slept = Number(m.asleep) || (Number(logs[d]?.sleep) ? Number(logs[d].sleep) * 60 : 0);
         const gapBefore = !logs[addDays(d, -1)]?.completed && !logs[addDays(d, -2)]?.completed;
         if ((rec > 0 && recBaseline && rec < recBaseline - 8) ||
-            (sh > 0 && sh <= 2) || (slept > 0 && slept < FX.momentumSleepMins) || gapBefore) n++;
+            (sh > 0 && sh <= 2) || (slept > 0 && slept < 360) || gapBefore) n++;
       }
       return n;
     })();
@@ -6184,7 +5541,7 @@ function useCoach(data, day, clock) {
           const r = rateOf(tag.id, sub);
           if (r === null) return;
           const lift = Math.round((r - base) * 100);
-          if (lift >= FX.patternLift) out.push({ kind: "season", tag: tag.id,
+          if (lift >= 15) out.push({ kind: "season", tag: tag.id,
             text: `You mention ${label(tag.id)} noticeably more between ${se.label.toLowerCase()} — ${Math.round(r * 100)}% of what you write then, against ${Math.round(base * 100)}% across the year.`,
             n: sub.length });
         });
@@ -6195,11 +5552,11 @@ function useCoach(data, day, clock) {
         const week = voice.filter((x) => x.dow > 0 && x.dow < 6);
         if (weekend.length >= 6 && week.length >= 6) {
           const rw = rateOf(tag.id, weekend), rd = rateOf(tag.id, week);
-          if (rw !== null && rd !== null && Math.round((rw - rd) * 100) >= FX.patternLift)
+          if (rw !== null && rd !== null && Math.round((rw - rd) * 100) >= 15)
             out.push({ kind: "week", tag: tag.id,
               text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} comes up far more at weekends than on weekdays — ${Math.round(rw * 100)}% against ${Math.round(rd * 100)}%.`,
               n: weekend.length });
-          if (rw !== null && rd !== null && Math.round((rd - rw) * 100) >= FX.patternLift)
+          if (rw !== null && rd !== null && Math.round((rd - rw) * 100) >= 15)
             out.push({ kind: "week", tag: tag.id,
               text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} is a weekday thing for you — ${Math.round(rd * 100)}% against ${Math.round(rw * 100)}% at weekends.`,
               n: week.length });
@@ -6212,9 +5569,9 @@ function useCoach(data, day, clock) {
           const rr = rateOf(tag.id, recent), ro = rateOf(tag.id, older);
           if (rr !== null && ro !== null) {
             const lift = Math.round((rr - ro) * 100);
-            if (lift >= FX.patternTrend) out.push({ kind: "trend", tag: tag.id,
+            if (lift >= 20) out.push({ kind: "trend", tag: tag.id,
               text: `${label(tag.id).charAt(0).toUpperCase() + label(tag.id).slice(1)} has been coming up more this month than it used to — ${Math.round(rr * 100)}% against ${Math.round(ro * 100)}% before.`, n: recent.length });
-            if (lift <= -FX.patternTrend) out.push({ kind: "trend", tag: tag.id,
+            if (lift <= -20) out.push({ kind: "trend", tag: tag.id,
               text: `You mention ${label(tag.id)} less than you used to — ${Math.round(rr * 100)}% this month against ${Math.round(ro * 100)}% before. Worth noticing; those shifts are invisible day to day.`, n: recent.length });
           }
         }
@@ -6248,7 +5605,7 @@ function useCoach(data, day, clock) {
           restPrev: !logs[addDays(d, -1)]?.completed,
         });
       }
-      if (days.length < FX.minDaysForPattern) return out;
+      if (days.length < 10) return out;
       const rate = (f) => {
         const sub = days.filter(f);
         return sub.length >= 3 ? { pct: Math.round((sub.filter((x) => x.done).length / sub.length) * 100), n: sub.length } : null;
@@ -6262,27 +5619,27 @@ function useCoach(data, day, clock) {
       const bestDow = [...byDow].sort((a, b) => b.pct - a.pct)[0];
       const worstDow = [...byDow].sort((a, b) => a.pct - b.pct)[0];
       const DOW = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-      if (bestDow && bestDow.pct - base >= FX.patternLift) out.motivators.push(`${DOW[bestDow.dow]}s are your strongest day — you train on ${bestDow.pct}% of them against ${base}% overall`);
-      if (worstDow && base - worstDow.pct >= FX.patternBrake) out.brakes.push(`${DOW[worstDow.dow]}s are where sessions go missing — ${worstDow.pct}% against ${base}% overall`);
+      if (bestDow && bestDow.pct - base >= 15) out.motivators.push(`${DOW[bestDow.dow]}s are your strongest day — you train on ${bestDow.pct}% of them against ${base}% overall`);
+      if (worstDow && base - worstDow.pct >= 20) out.brakes.push(`${DOW[worstDow.dow]}s are where sessions go missing — ${worstDow.pct}% against ${base}% overall`);
 
       /* recovery: does a low score actually stop her? */
-      const lowRec = rate((x) => x.rec !== null && recBaseline && x.rec < recBaseline - FX.recoveryLowGap);
-      const highRec = rate((x) => x.rec !== null && recBaseline && x.rec > recBaseline + FX.recoveryHighGap);
-      if (lowRec && base - lowRec.pct >= FX.patternBrake) out.brakes.push(`a low recovery score stops you — ${lowRec.pct}% of those days get trained against ${base}% overall`);
-      else if (lowRec && Math.abs(lowRec.pct - base) < FX.patternNeutral) out.motivators.push(`a low recovery score doesn't stop you, which is unusual and worth knowing`);
-      if (highRec && highRec.pct - base >= FX.patternLift) out.motivators.push(`you reliably use a good recovery morning — ${highRec.pct}% of them get trained`);
+      const lowRec = rate((x) => x.rec !== null && recBaseline && x.rec < recBaseline - 8);
+      const highRec = rate((x) => x.rec !== null && recBaseline && x.rec > recBaseline + 8);
+      if (lowRec && base - lowRec.pct >= 20) out.brakes.push(`a low recovery score stops you — ${lowRec.pct}% of those days get trained against ${base}% overall`);
+      else if (lowRec && Math.abs(lowRec.pct - base) < 10) out.motivators.push(`a low recovery score doesn't stop you, which is unusual and worth knowing`);
+      if (highRec && highRec.pct - base >= 15) out.motivators.push(`you reliably use a good recovery morning — ${highRec.pct}% of them get trained`);
 
       /* sleep */
-      const shortSleep = rate((x) => x.slept !== null && x.slept < FX.brakeSleepMins);
-      if (shortSleep && base - shortSleep.pct >= FX.patternBrake) out.brakes.push(`a short night is one of the strongest brakes on you — ${shortSleep.pct}% against ${base}%`);
+      const shortSleep = rate((x) => x.slept !== null && x.slept < 390);
+      if (shortSleep && base - shortSleep.pct >= 20) out.brakes.push(`a short night is one of the strongest brakes on you — ${shortSleep.pct}% against ${base}%`);
 
       /* body work the day before */
       const afterBody = rate((x) => x.bodyPrev);
-      if (afterBody && afterBody.pct - base >= FX.patternLift) out.motivators.push(`the day after body work you almost always train — ${afterBody.pct}%`);
+      if (afterBody && afterBody.pct - base >= 15) out.motivators.push(`the day after body work you almost always train — ${afterBody.pct}%`);
 
       /* coming off a rest day */
       const afterRest = rate((x) => x.restPrev);
-      if (afterRest && base - afterRest.pct >= FX.patternBrake) out.brakes.push(`getting going again after a day off is where it slips — ${afterRest.pct}% against ${base}%`);
+      if (afterRest && base - afterRest.pct >= 20) out.brakes.push(`getting going again after a day off is where it slips — ${afterRest.pct}% against ${base}%`);
 
       /* what feels good */
       if (affectByClass.length >= 2) {
@@ -6371,7 +5728,7 @@ function useCoach(data, day, clock) {
         const l = logs[d];
         if (!l?.completed) continue;
         const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
-        if (ld < FX.hardDayLoad) continue;
+        if (ld < 300) continue;
         const base = Number(morning?.[d]?.recovery) || null;
         if (!base) continue;
         [1, 2].forEach((n) => {
@@ -6379,7 +5736,7 @@ function useCoach(data, day, clock) {
           if (r) hard.push({ lag: n, delta: r - base });
         });
       }
-      if (hard.length < FX.minHardDays) return null;
+      if (hard.length < 8) return null;
       const at = (n) => { const sub2 = hard.filter((h) => h.lag === n);
         return sub2.length >= 4 ? mean(sub2.map((h) => h.delta)) : null; };
       const d1 = at(1), d2 = at(2);
@@ -6387,7 +5744,7 @@ function useCoach(data, day, clock) {
       const worst = d2 < d1 ? 2 : 1;
       /* was there a hard session exactly worst-lag days ago? */
       const back = logs[addDays(t, -worst)];
-      const hardThen = back?.completed && ((Number(back.minutes) || 0) * (Number(back.rpe) || 0)) >= FX.hardDayLoad;
+      const hardThen = back?.completed && ((Number(back.minutes) || 0) * (Number(back.rpe) || 0)) >= 300;
       return hardThen ? { worst } : null;
     })();
     const dislikes = (() => {
@@ -6431,7 +5788,7 @@ function useCoach(data, day, clock) {
       /* An open entry tilts the choice; a fresh one (last 7 days) is what
          makes it a freeze. Nothing is ruled out at open-but-quiet — it is a
          lean, not a bar. All of it from what she told the coach. */
-      shoulderFrozen, shoulderInjury: shoulderGuard, shoulderSore, F: FX,
+      shoulderFrozen, shoulderInjury: shoulderGuard, shoulderSore,
     });
     /* Nothing is offered in the calibration block. Everything downstream that
        asks "what did the coach say today" gets null, and answers honestly. */
@@ -6639,7 +5996,7 @@ function useCoach(data, day, clock) {
       nudges.push({ tone: "warm", text: `${improving.length} measures improved. Whatever you did over the last fortnight, do it again.` });
     if (pbCount > 0 && improving.some((m) => m.isBest))
       nudges.push({ tone: "warm", text: `New personal best in ${improving.filter((m) => m.isBest).map((m) => m.label.toLowerCase()).join(" and ")}. That's the whole point of measuring.` });
-    if (consistency >= FX.consistencyHigh)
+    if (consistency >= 85)
       nudges.push({ tone: "warm", text: `${consistency}% consistency over four weeks. Most people never get near that.` });
     if (recovery?.key === "rest" && !loggedToday)
       nudges.push({ tone: "firm", text: "Recovery is well below your normal. Doing nothing today is the correct training decision, not a missed day." });
@@ -6895,18 +6252,18 @@ function useCoach(data, day, clock) {
         return "These five start working once your sessions carry an effort score — the tap is at the bottom of this card, right after you log. Until then the app is counting attendance, which is the least interesting thing about you.";
       if (acwrBand?.key === "spike")
         parts.push("This week is a long way above your normal, and sudden jumps are where injuries come from — not hard training, sudden training. Take the next one easier.");
-      else if (acwrBand?.key === "under" && consistency < FX.consistencyUnder)
+      else if (acwrBand?.key === "under" && consistency < 70)
         parts.push("You're doing less than your body is prepared for, and missing sessions on top. Neither is a crisis on its own; together they're a drift worth stopping.");
       else if (acwrBand?.key === "under")
         parts.push("You're showing up reliably but the work has got lighter. There's room to push — your body is prepared for more than you're giving it.");
-      else if (acwrBand?.key === "good" && consistency >= FX.consistencyGood)
+      else if (acwrBand?.key === "good" && consistency >= 75)
         parts.push("Consistent, and training at a level your body is ready for. This is exactly the boring middle where progress actually happens.");
       else if (acwrBand?.key === "high")
         parts.push("Heavier than your usual month. Fine for one week — not two in a row.");
       else parts.push("The load is reasonable; the gaps between sessions are the thing to tighten.");
-      if (covered <= FX.coverNarrow && thinnest.length)
+      if (covered <= 4 && thinnest.length)
         parts.push(`${thinnest.slice(0, 2).map((r) => r.label.toLowerCase()).join(" and ")} barely got touched — that's where the next add-on should go.`);
-      if (adaptation !== null && adaptation > FX.adaptStrong)
+      if (adaptation !== null && adaptation > 8)
         parts.push("And the same effort is costing you less recovery than it did a month ago, which is the part no strength number will tell you.");
       return parts.join(" ");
     };
@@ -6931,9 +6288,9 @@ function useCoach(data, day, clock) {
     const respNow = mean(readMorning("respiratory", 3));
     const spo2Now = mean(readMorning("spo2", 3));
     const illnessFlags = [];
-    if (tempBase && tempNow && tempNow - tempBase >= FX.illTempRise) illnessFlags.push("skin temperature up");
-    if (respBase && respNow && respNow - respBase >= FX.illRespRise) illnessFlags.push("breathing rate up");
-    if (spo2Now && spo2Now < FX.illSpo2Floor) illnessFlags.push("blood oxygen below 95%");
+    if (tempBase && tempNow && tempNow - tempBase >= 0.4) illnessFlags.push("skin temperature up");
+    if (respBase && respNow && respNow - respBase >= 1.0) illnessFlags.push("breathing rate up");
+    if (spo2Now && spo2Now < 95) illnessFlags.push("blood oxygen below 95%");
     /* ---- THE SMALLER DOOR ----------------------------------------------
        Rule 4 as amended: the coach never accepts a no and closes the
        conversation. What is available today, hardest first, with the
@@ -7031,7 +6388,7 @@ function useCoach(data, day, clock) {
        difference in percentage points of body composition, which at ~30% muscle
        made the credit about three and a half times too generous. */
     const expectedLoss = (monthsSpan && muscleFirst > 0)
-      ? muscleFirst * (FX.muscleGainRate / 12) * monthsSpan : 0;
+      ? muscleFirst * (0.0075 / 12) * monthsSpan : 0;
     const muscleCredit = (muscleNow > 0 && muscleFirst > 0 && monthsSpan)
       ? Math.round(((muscleNow - muscleFirst) + expectedLoss) * 100) / 100 : null;
 
@@ -7127,7 +6484,7 @@ function useCoach(data, day, clock) {
 
     /* shoulder: what it has actually cost */
     const shoulderDays = Object.keys(logs).filter((d) => Number(logs[d]?.shoulder) > 0);
-    const shoulderLow = shoulderDays.filter((d) => Number(logs[d].shoulder) <= FX.shoulderLowMax).length;
+    const shoulderLow = shoulderDays.filter((d) => Number(logs[d].shoulder) <= 3).length;
     const shoulderCost = shoulderDays.length ? Math.round((shoulderLow / shoulderDays.length) * 100) : null;
     const shoulderRecent = shoulderDays.filter((d) => d >= addDays(t, -28));
     const shoulderTrend = shoulderRecent.length >= 3 && shoulderDays.length > shoulderRecent.length
@@ -7154,7 +6511,7 @@ function useCoach(data, day, clock) {
          of this rule is the comparison, so the comparison goes first. */
       if (pm && am < pm) return { key: "back", color: C.clay,
         text: "A little worse this morning than it was during the session. Not alarming, but it's the signal to hold the load where it is rather than adding to it — the morning reading is the one that decides." };
-      if (am >= FX.shoulderClear) return { key: "clear", color: C.moss,
+      if (am >= 4) return { key: "clear", color: C.moss,
         text: "Back to baseline overnight. That load was right — you can go up a step next time it comes round." };
       if (pm && am >= pm) return { key: "ok", color: C.moss,
         text: "No worse this morning than it was during the session. The shoulder tolerated it. Hold this load rather than adding." };
@@ -7302,7 +6659,7 @@ function useCoach(data, day, clock) {
         const l = logs[d];
         if (!l?.completed) continue;
         const ld = (Number(l.minutes) || 0) * (Number(l.rpe) || 0);
-        if (ld < FX.hardDayLoad) continue;
+        if (ld < 300) continue;
         const rec = (n) => Number(morning?.[addDays(d, n)]?.recovery) || null;
         const base = Number(morning?.[d]?.recovery) || null;
         if (!base) continue;
@@ -7310,7 +6667,7 @@ function useCoach(data, day, clock) {
         if (r1) hard.push({ lag: 1, delta: r1 - base });
         if (r2) hard.push({ lag: 2, delta: r2 - base });
       }
-      if (hard.length < FX.minHardDays) return null;
+      if (hard.length < 8) return null;
       const at = (n) => {
         const sub = hard.filter((h) => h.lag === n);
         return sub.length >= 4 ? Math.round(mean(sub.map((h) => h.delta))) : null;
@@ -7520,8 +6877,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "autonomic", label: "Autonomic", scope: "7 days vs 28",
         display: rhrDrift === null ? "—" : `${rhrDrift > 0 ? "+" : ""}${Math.round(rhrDrift)}`,
         sub: rhrDrift === null ? "needs 28 days of WHOOP"
-          : rhrDrift <= FX.rhrDriftDown ? "settling" : rhrDrift >= FX.rhrDriftUp ? "elevated" : "stable",
-        color: rhrDrift === null ? C.muted : rhrDrift <= FX.rhrDriftDown ? C.moss : rhrDrift >= FX.rhrDriftUp ? C.ochre : C.ink,
+          : rhrDrift <= -2 ? "settling" : rhrDrift >= 3 ? "elevated" : "stable",
+        color: rhrDrift === null ? C.muted : rhrDrift <= -2 ? C.moss : rhrDrift >= 3 ? C.ochre : C.ink,
         plain: "Your resting heart rate this week against your own month, in beats per minute.",
         how: "Mean resting heart rate over 7 days minus the mean over 28 days. Weekly, never daily — single-morning readings are mostly noise.",
         meaning: `${rhr28 !== null || hrv28 !== null
@@ -7533,9 +6890,9 @@ function useCoach(data, day, clock) {
         display: timingSpread === null ? (slpSD === null ? "—" : `${Math.round(slpSD / 60 * 10) / 10}h`)
           : `${Math.round(timingSpread / 6) / 10}h`,
         sub: timingSpread === null ? (slpSD === null ? "needs WHOOP history" : "duration only — reimport for timing")
-          : `${timingSpread < FX.timingRegular ? "very regular" : timingSpread < FX.timingScattered ? "reasonable" : "scattered"} · ${timingBasis}`,
+          : `${timingSpread < 45 ? "very regular" : timingSpread < 75 ? "reasonable" : "scattered"} · ${timingBasis}`,
         color: timingSpread === null ? C.muted
-          : timingSpread < FX.timingRegular ? C.moss : timingSpread < FX.timingScattered ? C.ink : C.ochre,
+          : timingSpread < 45 ? C.moss : timingSpread < 75 ? C.ink : C.ochre,
         plain: "How much the times you sleep and wake drift from night to night.",
         how: "Circular spread across 28 days of whatever real times exist: the wake time you type each morning, and your sleep-onset time when a WHOOP import has one. Circular so that 23:50 and 00:10 count as twenty minutes apart, not twenty-three hours. HER CORRECTION, 13 August: a bedtime is never worked out from your wake time minus your hours slept — those hours are hours ASLEEP, not hours in bed, so that subtraction would invent a time you were never in bed at.",
         meaning: `How long you sleep matters less than whether you sleep it at the same time. Across sixty thousand people, sleep regularity predicted mortality more strongly than sleep duration did, with the most regular groups showing 20–48% lower all-cause risk. ${timingSpread !== null ? `Measured on ${timingBasis}, your timing moves by about ${Math.round(timingSpread / 6) / 10} hours night to night. Pulling that under an hour is worth more than an extra session.` : "Once your WHOOP history is in, this says how much your own timing drifts."}${bedSpread === null ? " Your bed time is deliberately not part of this. HER CORRECTION, 13 August: the hours you log are hours ASLEEP, not hours in bed — so subtracting them from your wake time would invent a bedtime that was never true. Only a WHOOP import carries the real one." : ""}`,
@@ -7571,8 +6928,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "sleepquality", label: "Restorative sleep", scope: "deep + REM share",
         display: restorativePct === null ? "—" : `${restorativePct}%`,
         sub: restorativePct === null ? "needs WHOOP history"
-          : restorativePct >= FX.restorativeStrong ? "strong" : restorativePct >= FX.restorativeAdequate ? "adequate" : "light",
-        color: restorativePct === null ? C.muted : restorativePct >= FX.restorativeStrong ? C.moss : restorativePct >= FX.restorativeAdequate ? C.ink : C.ochre,
+          : restorativePct >= 40 ? "strong" : restorativePct >= 30 ? "adequate" : "light",
+        color: restorativePct === null ? C.muted : restorativePct >= 40 ? C.moss : restorativePct >= 30 ? C.ink : C.ochre,
         plain: "How much of your sleep is deep or REM rather than light.",
         how: "Deep plus REM minutes as a share of total sleep, averaged over 14 nights.",
         meaning: `Nine hours of mostly light sleep does less than seven hours with a good deep and REM share. Deep sleep is when physical repair happens — the part that matters after a strength day — and REM is where the nervous system recovers. Around 40% of the night in the two together is a good share for an adult. ${effNow ? `Your sleep efficiency is ${Math.round(effNow)}%${disturbNow ? `, with about ${Math.round(disturbNow)} disturbances a night` : ""}.` : ""}`,
@@ -7581,8 +6938,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "sleepdebt", label: "Sleep debt", scope: "last 7 nights",
         display: debtNow === null ? "—" : `${Math.round(debtNow / 6) / 10}h`,
         sub: debtNow === null ? "needs WHOOP history"
-          : debtNow < FX.debtPaid ? "paid off" : debtNow < FX.debtManageable ? "manageable" : "accumulating",
-        color: debtNow === null ? C.muted : debtNow < FX.debtPaid ? C.moss : debtNow < FX.debtManageable ? C.ink : C.ochre,
+          : debtNow < 30 ? "paid off" : debtNow < 90 ? "manageable" : "accumulating",
+        color: debtNow === null ? C.muted : debtNow < 30 ? C.moss : debtNow < 90 ? C.ink : C.ochre,
         plain: "How far behind your own sleep need you are running.",
         how: "WHOOP's calculated sleep debt, averaged across seven nights. It compares what your body needed, given recent strain, against what you actually got.",
         meaning: "This is the number that explains a bad recovery score when nothing else does. Debt accumulates quietly across a week and then shows up as a flat, heavy day you can't account for. It is also the most fixable thing on this whole list — an earlier bedtime clears it faster than any training change.",
@@ -7591,8 +6948,8 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "cardiac", label: "Working heart rate", scope: "this month vs last",
         display: avgHrNow === null ? "—" : String(Math.round(avgHrNow)),
         sub: cardiacDrift === null ? "needs two months"
-          : cardiacDrift <= FX.cardiacDriftGood ? `${Math.abs(cardiacDrift)} bpm lower` : cardiacDrift >= FX.cardiacDriftBad ? `${cardiacDrift} bpm higher` : "steady",
-        color: cardiacDrift === null ? C.muted : cardiacDrift <= FX.cardiacDriftGood ? C.moss : cardiacDrift >= FX.cardiacDriftBad ? C.ochre : C.ink,
+          : cardiacDrift <= -2 ? `${Math.abs(cardiacDrift)} bpm lower` : cardiacDrift >= 2 ? `${cardiacDrift} bpm higher` : "steady",
+        color: cardiacDrift === null ? C.muted : cardiacDrift <= -2 ? C.moss : cardiacDrift >= 2 ? C.ochre : C.ink,
         plain: "Your average heart rate across the day, and whether it is falling.",
         how: "Mean of WHOOP's daily average heart rate over 28 days, against the 28 days before. Max heart rate is shown alongside for context.",
         meaning: `Resting heart rate tells you about recovery; this tells you about the work. If your average day costs fewer beats than it did a month ago while you are doing the same or more, your heart has got better at the job. ${maxHrNow ? `Your daily maximum averages ${Math.round(maxHrNow)}, which is the ceiling your hard sessions are reaching.` : ""}`,
@@ -7601,8 +6958,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "habit", label: "Habit strength", scope: "how automatic this has become",
         display: habitStrength === null ? "—" : `${habitStrength}%`,
         sub: habitStrength === null ? "needs a few weeks"
-          : habitStrength >= FX.habitStrong ? "close to automatic" : habitStrength >= FX.habitForming ? "forming" : "early",
-        color: habitStrength === null ? C.muted : habitStrength >= FX.habitStrong ? C.moss : C.ink,
+          : habitStrength >= 75 ? "close to automatic" : habitStrength >= 45 ? "forming" : "early",
+        color: habitStrength === null ? C.muted : habitStrength >= 75 ? C.moss : C.ink,
         plain: "How far training has moved from a decision to a default.",
         how: "Three parts: how long you have been repeating it against the roughly three months exercise takes to become automatic, how consistently you train on the same days, and your 28-day consistency. This is a description of habit formation, not a plan — your programme is still designed one month at a time.",
         meaning: "The research here is unusually specific and unusually reassuring. Habits take a median of 66 days to form and about 91 days for exercise — so if it still feels like effort at week six, that is the normal timeline, not a failure of will. The same work also found that missing one opportunity does not measurably damage the process. What does damage it is missing repeatedly in the same week. This number climbs fastest when you train on the same days rather than fitting sessions in wherever they land.",
@@ -7611,8 +6968,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "cue", label: "Same days", scope: "cue consistency",
         display: cueConsistency === null ? "—" : `${cueConsistency}%`,
         sub: cueConsistency === null ? "needs two weeks"
-          : cueConsistency >= FX.cueStrong ? "strong routine" : cueConsistency >= FX.cueLoose ? "loose routine" : "scattered",
-        color: cueConsistency === null ? C.muted : cueConsistency >= FX.cueStrong ? C.moss : C.ochre,
+          : cueConsistency >= 80 ? "strong routine" : cueConsistency >= 60 ? "loose routine" : "scattered",
+        color: cueConsistency === null ? C.muted : cueConsistency >= 80 ? C.moss : C.ochre,
         plain: "How much of your training lands on the same days each week.",
         how: "The share of your sessions over eight weeks falling on your four most-used weekdays.",
         meaning: "A stable cue is what turns a behaviour automatic — the same days, ideally the same time, attached to something that already happens. Scattered training can still be plenty of training, but it stays a decision every single time, and decisions are what run out on the days you are tired. This is the cheapest change available to you: not more sessions, just more predictable ones.",
@@ -7621,8 +6978,8 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "feels", label: "How it feels", scope: "during, not after",
         display: affectMean === null ? "—" : `${affectMean > 0 ? "+" : ""}${affectMean}`,
         sub: affectMean === null ? "needs three sessions"
-          : affectMean >= FX.affectGood ? "good in the room" : affectMean >= 0 ? "neutral" : "harder than it should be",
-        color: affectMean === null ? C.muted : affectMean >= FX.affectOk ? C.moss : affectMean < 0 ? C.ochre : C.ink,
+          : affectMean >= 1 ? "good in the room" : affectMean >= 0 ? "neutral" : "harder than it should be",
+        color: affectMean === null ? C.muted : affectMean >= 0.5 ? C.moss : affectMean < 0 ? C.ochre : C.ink,
         plain: "How training feels while you are doing it, on a scale of minus two to plus two.",
         how: "Your during-session rating averaged over 28 days, and broken down by class.",
         meaning: `This is the most under-rated number in the app. How exercise feels DURING predicts whether you keep doing it; how it feels afterwards does not. One study found each point of positive in-session feeling was worth about forty extra minutes of training a week a year later. So this is not a comfort metric — it is an adherence metric. ${affectByClass.length ? `Your best so far: ${affectByClass[0].name} at ${affectByClass[0].score > 0 ? "+" : ""}${affectByClass[0].score}.${affectByClass.length > 1 && affectByClass[affectByClass.length - 1].score < 0 ? ` Your hardest: ${affectByClass[affectByClass.length - 1].name}.` : ""}` : ""}`,
@@ -7633,7 +6990,7 @@ function useCoach(data, day, clock) {
         sub: mobScore === null ? "no test logged yet"
           : mobAsym.length ? `${mobAsym[0].label} ${mobAsym[0].gapPct}% apart`
           : mobWeakest.length ? `shortest: ${mobWeakest[0].label}` : "even",
-        color: mobScore === null ? C.muted : mobScore >= FX.mobStrong ? C.moss : mobScore >= FX.mobOk ? C.ink : C.ochre,
+        color: mobScore === null ? C.muted : mobScore >= 75 ? C.moss : mobScore >= 50 ? C.ink : C.ochre,
         plain: "How freely your body moves, across the tests of range rather than strength.",
         how: "Each test is scored against its own range where it has one, and against your own best on that test where it does not — then averaged. Built from whatever is in your mobility battery — a length test per muscle group rather than a general movement screen: the standing and seated forward folds and the straight-leg raise for the hamstrings, legs-apart for the adductors, heel-to-bottom for the quads and hip flexors, overhead and behind-the-back reach for the shoulders, and seated rotation for the mid-back. Five are measured left and right. A gap between sides counts against the score in proportion to its size — and it is also what chooses your drills.",
         meaning: `Strength keeps muscle; range keeps what you can do with it. These are the movements that quietly disappear without anyone noticing, because nothing tests them until the day you need one. ${mobWeakest.length ? `Your shortest right now is ${mobWeakest[0].label.toLowerCase()}, which is why it drives your daily ten minutes.` : ""}${mobAsym.length ? ` Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart side to side — closing that matters more than improving either side alone.` : ""}`,
@@ -7652,8 +7009,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "writing", label: "How much you write", scope: "14 days vs the 14 before",
         display: writing === null ? "—" : String(writing.now),
         sub: writing === null ? "needs history"
-          : writing.drop <= FX.writingDown ? "well down" : writing.drop >= FX.writingUp ? "up" : "steady",
-        color: writing === null ? C.muted : writing.drop <= FX.writingDown ? C.ochre : C.moss,
+          : writing.drop <= -40 ? "well down" : writing.drop >= 20 ? "up" : "steady",
+        color: writing === null ? C.muted : writing.drop <= -40 ? C.ochre : C.moss,
         plain: "How many notes, entries and conversations you've added lately.",
         how: "Session notes, daily notes, journal entries and conversations in the last fortnight, against the fortnight before.",
         meaning: "This is the earliest warning the app has. Engagement drops in the writing before it drops in the training — usually a couple of weeks before. It is not a target and you are not expected to write more; it is simply the thing I watch to know whether to ask how you're doing.",
@@ -7682,7 +7039,7 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "blockcurve", label: "Where you dip", scope: "week within a block",
         display: blockCurve === null ? "—" : `wk ${blockCurve.worst.week}`,
         sub: blockCurve === null ? "needs two blocks" : `${blockCurve.worst.pct}% vs ${blockCurve.best.pct}% at best`,
-        color: blockCurve === null ? C.muted : blockCurve.spread >= FX.blockSpreadBad ? C.ochre : C.ink,
+        color: blockCurve === null ? C.muted : blockCurve.spread >= 25 ? C.ochre : C.ink,
         plain: "Which week of a block your sessions go missing.",
         how: "Completion rate by position within a block, across every block so far.",
         meaning: `Most people have one. ${blockCurve ? `Yours is week ${blockCurve.worst.week}, at ${blockCurve.worst.pct}% against ${blockCurve.best.pct}% in your best week.` : ""} Once it's known it stops being a failure and becomes a design input — the easier week gets built in there deliberately instead of happening anyway.`,
@@ -7772,8 +7129,8 @@ function useCoach(data, day, clock) {
         display: afterMean === null ? "—" : `${afterMean}/5`,
         sub: afterMean === null ? "needs three sessions"
           : givesBack === null ? "how you feel afterwards"
-          : givesBack > FX.givesBackGood ? "leaves you better" : givesBack < FX.givesBackBad ? "costing more than it returns" : "even",
-        color: afterMean === null ? C.muted : givesBack > FX.givesBackGood ? C.moss : givesBack < FX.givesBackBad ? C.ochre : C.ink,
+          : givesBack > 0.3 ? "leaves you better" : givesBack < -0.3 ? "costing more than it returns" : "even",
+        color: afterMean === null ? C.muted : givesBack > 0.3 ? C.moss : givesBack < -0.3 ? C.ochre : C.ink,
         plain: "How you feel after a session, set against how it felt during.",
         how: "Your after-session energy averaged over 28 days, compared with the during-session rating over the same period.",
         meaning: "Training should leave you better than it found you — not every time, but on average. When sessions consistently feel harder during and flatter afterwards, that is the profile that comes before people stop, and it usually means intensity has crept past where it needs to be rather than anything about willingness. This is the pair of numbers that catches it early, while it is still a small adjustment.",
@@ -7782,7 +7139,7 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "barriers", label: "Trained anyway", scope: "last 28 days",
         display: String(barrierWins),
         sub: barrierWins === 0 ? "none yet" : "sessions with something in the way",
-        color: barrierWins >= FX.barrierWins ? C.moss : C.ink,
+        color: barrierWins >= 3 ? C.moss : C.ink,
         plain: "Sessions you completed on days when something was against you.",
         how: "Counts completed sessions on days with low recovery, poor sleep, a sore shoulder, or following a two-day gap.",
         meaning: "Confidence that you can train predicts starting. Confidence that you can train when conditions are bad predicts still being here in a year — that distinction is one of the clearest findings in the adherence literature. Every one of these is evidence that a bad day does not have to cost you the session, and that evidence is what carries you through the weeks that go wrong.",
@@ -7802,8 +7159,8 @@ function useCoach(data, day, clock) {
       M({ group: "week", id: "volume", label: "Weekly sets", scope: "regions at 6+ sets",
         display: setsTotal ? `${setsMet}/${SET_REGIONS.length}` : "—",
         sub: !setsTotal ? "counts only sets you actually counted"
-          : setsMet >= FX.setsMetCount ? "dose met" : setsShort.length ? `${setsShort[0].label.toLowerCase()} lowest` : "building",
-        color: !setsTotal ? C.muted : setsMet >= FX.setsMetCount ? C.moss : setsMet >= FX.setsBuildingCount ? C.ink : C.ochre,
+          : setsMet >= 5 ? "dose met" : setsShort.length ? `${setsShort[0].label.toLowerCase()} lowest` : "building",
+        color: !setsTotal ? C.muted : setsMet >= 5 ? C.moss : setsMet >= 3 ? C.ink : C.ochre,
         plain: "How many body regions are getting the six-plus weekly counted sets that hold muscle. Filmed classes are invisible here, on your instruction — their sets cannot honestly be counted.",
         how: "Only sets you actually counted — benchmarks, coach-designed work, your Body-tab logs — distributed across regions by body map, totalled over seven days. The app no longer asks for a set count after filmed classes, because the choreography decides and counting is not possible.",
         meaning: `This is the measure that speaks most directly to your actual goal. For post-menopausal women the research puts the dose for holding or building muscle above six to eight sets per muscle per week, and ten or more to reliably prevent lean-mass loss. The app holds you to ${FX.setTarget} as the floor, which you can change. It is a volume prescription, not an attendance one — four sessions a week is plenty if the sets are there, and useless if they aren't. ${setsTotal ? `Lowest right now: ${setsShort.slice(0, 2).map((r) => `${r.label.toLowerCase()} at ${sets7[r.id]}`).join(", ")}.` : ""}`,
@@ -7840,8 +7197,8 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "base", label: "Fitness base", scope: "this month vs last",
         display: chronicGrowth === null ? "—" : `${chronicGrowth > 0 ? "+" : ""}${chronicGrowth}%`,
         sub: chronicGrowth === null ? "needs two months of effort scores"
-          : chronicGrowth > 0 ? "expanding" : chronicGrowth < -FX.chronicGrowthSafe ? "contracting" : "level",
-        color: chronicGrowth === null ? C.muted : chronicGrowth > 0 ? C.moss : chronicGrowth < -FX.chronicGrowthSafe ? C.ochre : C.ink,
+          : chronicGrowth > 0 ? "expanding" : chronicGrowth < -10 ? "contracting" : "level",
+        color: chronicGrowth === null ? C.muted : chronicGrowth > 0 ? C.moss : chronicGrowth < -10 ? C.ochre : C.ink,
         plain: "Whether your typical week is getting bigger, or just spikier.",
         how: "Average weekly load over the last 28 days, against the 28 days before that.",
         meaning: "Balance tells you whether this week fits your month. This tells you whether the month itself is growing. Fitness develops when the base rises steadily while individual weeks stay close to it — a flat base with occasional big weeks is the pattern that produces injuries rather than progress.",
@@ -7850,8 +7207,8 @@ function useCoach(data, day, clock) {
       M({ group: "month", id: "variety", label: "Variety", scope: "last 28 days",
         /* no sessions is not "narrow" — it is nothing to count (rule 23) */
         display: variety28 ? String(variety28) : "—",
-        sub: !variety28 ? "no sessions in the window yet" : variety28 >= FX.varietyWide ? "wide" : variety28 >= FX.varietyOk ? "reasonable" : "narrow",
-        color: !variety28 ? C.muted : variety28 >= FX.varietyWide ? C.moss : variety28 >= FX.varietyOk ? C.ink : C.ochre,
+        sub: !variety28 ? "no sessions in the window yet" : variety28 >= 5 ? "wide" : variety28 >= 3 ? "reasonable" : "narrow",
+        color: !variety28 ? C.muted : variety28 >= 5 ? C.moss : variety28 >= 3 ? C.ink : C.ochre,
         plain: "How many different classes you've done this month.",
         how: "Distinct class names across completed sessions in 28 days.",
         meaning: "Not variety for its own sake. In a large cohort of people starting training, greater diversity of equipment and modality was associated with lower dropout — it is an adherence protector, which makes it a genuine training variable rather than a nice-to-have.",
@@ -7860,8 +7217,8 @@ function useCoach(data, day, clock) {
       M({ group: "quarter", id: "progression", label: "Progression rate", scope: "safe ceiling 10%/week",
         display: chronicGrowth === null ? "—" : `${Math.round((chronicGrowth || 0) / 4)}%`,
         sub: chronicGrowth === null ? "needs effort scores"
-          : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? "within the safe rate" : "faster than advised",
-        color: chronicGrowth === null ? C.muted : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? C.moss : C.ochre,
+          : Math.abs(chronicGrowth / 4) <= 10 ? "within the safe rate" : "faster than advised",
+        color: chronicGrowth === null ? C.muted : Math.abs(chronicGrowth / 4) <= 10 ? C.moss : C.ochre,
         plain: "How fast your training load is climbing, per week.",
         how: "Month-over-month change in average weekly load, divided across four weeks.",
         meaning: "The load-management literature is consistent that increases beyond about 10% a week are where trouble starts. This is the number that lets you build for a year without a setback — slower than you'd like, and far more likely to still be going in twelve months.",
@@ -7884,9 +7241,9 @@ function useCoach(data, day, clock) {
            one session too high displayed "—  just started" — the exact
            opposite of the one thing this metric exists to say. */
         display: weekOfTraining ? `${weekOfTraining}w` : "—",
-        sub: weeksTraining >= FX.weeksPastDropout ? "past the median dropout"
+        sub: weeksTraining >= 14 ? "past the median dropout"
           : weeksTraining >= 1 ? "building" : weekOfTraining ? "week one" : "not started",
-        color: weeksTraining >= FX.weeksPastDropout ? C.moss : C.ink,
+        color: weeksTraining >= 14 ? C.moss : C.ink,
         plain: "How many weeks you have been training, against when most people quit.",
         how: "Which week you are in, counted from your first logged session — so the day you start you are in week one. Not weeks that hit a target: still being here is the thing being measured.",
         meaning: "In a large study of people beginning resistance training, the median dropout came at 14 weeks and only 18% were still going at six months. The over-50s were the group most likely to keep going — 24% against 15% for the under-40s. Every week past that mark is the most meaningful thing this app measures, and no other number captures it.",
@@ -7937,9 +7294,9 @@ function useCoach(data, day, clock) {
         value: firstSession ? consistency : null,
         display: firstSession ? `${consistency}%` : "—",
         sub: !firstSession ? "starts with your first session"
-          : consistency >= FX.consistencyStrong ? "strong" : consistency >= FX.consistencyHolding ? "holding" : "slipping",
+          : consistency >= 80 ? "strong" : consistency >= 60 ? "holding" : "slipping",
         color: !firstSession ? C.muted
-          : consistency >= FX.consistencyStrong ? C.moss : consistency >= FX.consistencyHolding ? C.ink : C.ochre,
+          : consistency >= 80 ? C.moss : consistency >= 60 ? C.ink : C.ochre,
         plain: "The share of your scheduled sessions you actually did, over four weeks.",
         meaning: "Of everything measured here, this is the one that predicts whether you are still training a year from now. In a large study of people starting resistance training, consistency over the first 28 days was the strongest single predictor of who was still going months later — stronger than age, sex or experience. It is deliberately a 28-day window and not a streak, because a streak punishes one bad day and this doesn't.",
         need: firstSession ? null : "Starts counting from your first logged session — there is nothing before that to be a share of.",
@@ -7947,8 +7304,8 @@ function useCoach(data, day, clock) {
       {
         id: "coverage", label: "Coverage", scope: "body regions, last 7 days",
         value: covered, display: `${covered}/${REGIONS.length}`,
-        sub: covered >= FX.coverWhole ? "whole body" : covered >= FX.coverNarrow ? `${thinnest.length} thin` : "narrow",
-        color: covered >= FX.coverWhole ? C.moss : covered >= FX.coverNarrow ? C.ink : C.ochre,
+        sub: covered >= 6 ? "whole body" : covered >= 4 ? `${thinnest.length} thin` : "narrow",
+        color: covered >= 6 ? C.moss : covered >= 4 ? C.ink : C.ochre,
         plain: "How many parts of your body took a real share of the week's work.",
         meaning: `Until now this app watched one shoulder and nothing else. It now accounts for legs, back, chest, shoulders, arms, core and heart separately, because the regions that quietly disappear are the ones nobody is counting. ${thinnest.length ? `Thinnest right now: ${thinnest.slice(0, 3).map((r) => r.label.toLowerCase()).join(", ")}.` : "Everything is getting a share."}`,
         need: hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
@@ -7957,8 +7314,8 @@ function useCoach(data, day, clock) {
         id: "adaptation", label: "Adaptation", scope: "this month vs last",
         value: adaptation, display: adaptation === null ? "—" : `${adaptation >= 0 ? "+" : ""}${adaptation}%`,
         sub: adaptation === null ? "needs two months of WHOOP"
-          : adaptation > FX.adaptGood ? "getting easier" : adaptation < FX.adaptBad ? "costing more" : "steady",
-        color: adaptation === null ? C.muted : adaptation > FX.adaptGood ? C.moss : adaptation < FX.adaptBad ? C.ochre : C.ink,
+          : adaptation > 5 ? "getting easier" : adaptation < -5 ? "costing more" : "steady",
+        color: adaptation === null ? C.muted : adaptation > 5 ? C.moss : adaptation < -5 ? C.ochre : C.ink,
         plain: "How much recovery a hard day costs you now, against what it cost a month ago.",
         meaning: "The cleanest evidence of fitness there is, and it needs nothing from you but wearing the WHOOP. When a strain of 12 used to knock eight points off your recovery and now knocks off four, your body has stopped treating that effort as an emergency. Strength numbers move slowly and noisily; this moves every single day. A positive number means the same work is costing you less.",
         need: adaptation === null ? "Needs about eight weeks of WHOOP history, and a stretch of hard days where strain actually cost you recovery — otherwise there is no cost to compare against." : null,
@@ -8063,26 +7420,26 @@ function useCoach(data, day, clock) {
       });
 
       /* WHOOP, all of it */
-      if (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp) out.flags.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.round(rhrDrift)} bpm above the month` });
-      if (rhrDrift !== null && rhrDrift <= FX.rhrDriftDown) out.strong.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.abs(Math.round(rhrDrift))} bpm below the month` });
-      if (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown) out.flags.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.abs(Math.round(hrvDrift))}% under its baseline` });
-      if (hrvDrift !== null && hrvDrift >= FX.hrvDriftUp) out.strong.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.round(hrvDrift)}% above baseline` });
-      if (timingSpread !== null && timingSpread >= FX.timingScattered) out.flags.push({ kind: "whoop", id: "sleep", text: `sleep timing swinging ${Math.round(timingSpread / 6) / 10} hours` });
-      if (adaptation !== null && adaptation > FX.adaptGood) out.strong.push({ kind: "whoop", id: "adapt", text: `hard days costing ${adaptation}% less recovery` });
-      if (adaptation !== null && adaptation < FX.adaptBad) out.flags.push({ kind: "whoop", id: "adapt", text: `hard days costing ${Math.abs(adaptation)}% more recovery` });
+      if (rhrDrift !== null && rhrDrift >= 3) out.flags.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.round(rhrDrift)} bpm above the month` });
+      if (rhrDrift !== null && rhrDrift <= -2) out.strong.push({ kind: "whoop", id: "rhr", text: `resting heart rate ${Math.abs(Math.round(rhrDrift))} bpm below the month` });
+      if (hrvDrift !== null && hrvDrift <= -10) out.flags.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.abs(Math.round(hrvDrift))}% under its baseline` });
+      if (hrvDrift !== null && hrvDrift >= 8) out.strong.push({ kind: "whoop", id: "hrv", text: `HRV ${Math.round(hrvDrift)}% above baseline` });
+      if (timingSpread !== null && timingSpread >= 75) out.flags.push({ kind: "whoop", id: "sleep", text: `sleep timing swinging ${Math.round(timingSpread / 6) / 10} hours` });
+      if (adaptation !== null && adaptation > 5) out.strong.push({ kind: "whoop", id: "adapt", text: `hard days costing ${adaptation}% less recovery` });
+      if (adaptation !== null && adaptation < -5) out.flags.push({ kind: "whoop", id: "adapt", text: `hard days costing ${Math.abs(adaptation)}% more recovery` });
 
       /* body composition and the shoulder */
       if (muscleCredit !== null && muscleCredit > 0) out.strong.push({ kind: "body", id: "muscle", text: `muscle ${muscleCredit} ahead of the expected decline` });
       if (worstGap && worstGap.gap >= FX.bilateralPct) out.weak.push({ kind: "body", id: "asym", text: `${worstGap.gap}% gap between sides on ${worstGap.label.toLowerCase()}` });
-      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= FX.shoulderTrendGood) out.strong.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5` });
-      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < FX.shoulderTrendBad) out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
+      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend >= 4.5) out.strong.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5` });
+      if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < 3) out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
 
       /* adherence and load */
-      if (consistency >= FX.consistencyStrong) out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
-      if (consistency < FX.consistencyHolding) out.flags.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
+      if (consistency >= 80) out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
+      if (consistency < 60) out.flags.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
       if (acwrBand?.key === "spike") out.flags.push({ kind: "load", id: "acwr", text: `load spiking at ${acwr}` });
       if (acwrBand?.key === "under") out.weak.push({ kind: "load", id: "acwr", text: `load running under your base at ${acwr}` });
-      if (variety28 <= FX.varietyNarrow) out.weak.push({ kind: "variety", id: "variety", text: `only ${variety28} different classes` });
+      if (variety28 <= 2) out.weak.push({ kind: "variety", id: "variety", text: `only ${variety28} different classes` });
 
       /* THE MOBILITY BATTERY. Rule 8 names it and the sweep did not read it at
          all — `analysis` is the weekly and monthly batteries only. */
@@ -8092,7 +7449,7 @@ function useCoach(data, day, clock) {
         if (r.gapPct !== null && r.gapPct >= FX.asymmetryPct)
           out.flags.push({ kind: "mobility", id: r.id, text: `${r.label} is ${r.gapPct}% apart left to right` });
       });
-      if (mobScore !== null && mobScore < FX.mobFlag) out.flags.push({ kind: "mobility", id: "mobscore", text: `mobility overall at ${mobScore}%` });
+      if (mobScore !== null && mobScore < 60) out.flags.push({ kind: "mobility", id: "mobscore", text: `mobility overall at ${mobScore}%` });
 
       /* WHAT SHE SAID SHE WANTS TO BE ABLE TO DO. It reached proposeNext and
          never the evidence the month is designed from (rule 9). */
@@ -8110,7 +7467,7 @@ function useCoach(data, day, clock) {
       /* HER DIP WEEK (review card 27): a week of the block that reliably
          costs her sessions is named to the designer, so the next block plans
          that week lighter on purpose instead of discovering it again. */
-      if (blockCurve && blockCurve.spread >= FX.blockSpreadFlag)
+      if (blockCurve && blockCurve.spread >= 15)
         out.flags.push({ kind: "blockcurve", id: "dip",
           text: `week ${blockCurve.worst.week} of a block is reliably her weak one (${blockCurve.worst.pct}% vs ${blockCurve.best.pct}% in week ${blockCurve.best.week}) — plan that week lighter on purpose` });
 
@@ -8181,10 +7538,10 @@ function useCoach(data, day, clock) {
 
       const month = parse(t).getMonth();
       const wintering = month === 11 || month === 0 || month === 1;
-      const deload = (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp) || (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown);
-      const shoulderWorse = shoulderAMTrend !== null && shoulderAMTrend < FX.shoulderTrendBad;
-      const spiking = chronicGrowth !== null && chronicGrowth / 4 > FX.chronicGrowthSafe;
-      const ready = consistency >= FX.consistencyStrong && !deload && !shoulderWorse && !spiking && realDown.length === 0;
+      const deload = (rhrDrift !== null && rhrDrift >= 3) || (hrvDrift !== null && hrvDrift <= -10);
+      const shoulderWorse = shoulderAMTrend !== null && shoulderAMTrend < 3;
+      const spiking = chronicGrowth !== null && chronicGrowth / 4 > 10;
+      const ready = consistency >= 80 && !deload && !shoulderWorse && !spiking && realDown.length === 0;
       /* ---- WHAT SHE SAID, NOT JUST WHAT SHE DID ------------------------
          Rule 8 says the review reads everything she wrote. It never did — it
          counted her notes and emitted a line telling a human to read them.
@@ -8251,7 +7608,7 @@ function useCoach(data, day, clock) {
         if (!swapFirst("strength", "move")) swapFirst("cardio", "move");
       } else if (shoulderWorse) {
         fired.push({ id: "shoulder", note: "Your shoulder was reading below 3 most mornings after training. Same number of strength days, no added overhead load." });
-      } else if (firstSession && addDays(firstSession, 6) <= t && consistency < FX.consistencyHolding) {
+      } else if (firstSession && addDays(firstSession, 6) <= t && consistency < 60) {
         /* AUDIT ITEM 16: with no history at all this fired at 0% and wrote
            "you hit 0%" into the design — judging her on days that never
            carried a plan (rule 24). It needs a real week of evidence now. */
@@ -8268,7 +7625,7 @@ function useCoach(data, day, clock) {
       }
 
       /* what she said she wants comes before what the numbers prefer */
-      if (openGoals.length || mobAsym.length || (mobScore !== null && mobScore < FX.mobFlag)) {
+      if (openGoals.length || mobAsym.length || (mobScore !== null && mobScore < 60)) {
         const bits = [];
         if (openGoals.length) bits.push(`she's working toward "${openGoals[0].text}"`);
         if (mobAsym.length) bits.push(`${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart side to side`);
@@ -8619,13 +7976,13 @@ function useCoach(data, day, clock) {
     /* WEEK */
     if (dormant.length && totalSessions >= 6)
       raise("week", "firm", `Nothing for ${dormant.map(goalLabel).join(" or ")} in a fortnight. That's the part that quietly disappears — put one in this week and it stops being a gap.`);
-    if (rhrDrift !== null && rhrDrift >= FX.rhrDriftUp)
+    if (rhrDrift !== null && rhrDrift >= 3)
       raise("week", "firm", `Your resting heart rate has sat about ${Math.round(rhrDrift)} beats above your month's normal for a week. That's usually sleep, stress or a bug — not training. Go easier until it settles.`);
-    if (rhrDrift !== null && rhrDrift <= FX.rhrDriftDown)
+    if (rhrDrift !== null && rhrDrift <= -2)
       raise("week", "warm", `Resting heart rate is running ${Math.abs(Math.round(rhrDrift))} beats below your own month-long average. That is your heart getting better at its job, and it is the least arguable evidence you have.`);
-    if (rhrDrift !== null && Math.abs(rhrDrift) < Math.abs(FX.rhrDriftDown) && rhr28 !== null && rhr28 >= FX.rhrHigh)
+    if (rhrDrift !== null && Math.abs(rhrDrift) < 2 && rhr28 !== null && rhr28 >= 60)
       raise("month", "push", `Your resting heart rate is holding around ${Math.round(rhr28)}. That's your baseline, and it's the number cardio moves — it is the single clearest return on the cardio days in your block.`);
-    if (hrvDrift !== null && hrvDrift <= FX.hrvDriftDown)
+    if (hrvDrift !== null && hrvDrift <= -10)
       raise("week", "firm", "Your heart rate variability has been about a tenth below normal all week. One low morning is noise; a week of them isn't. Take the easy version of whatever comes next.");
     if (slp7 && slp28 && slp7 < slp28 - 45)
       raise("week", "firm", `You're sleeping roughly ${Math.round((slp28 - slp7) / 60 * 10) / 10} hours less than your usual this week. Fix that before you worry about anything in the gym.`);
@@ -8634,9 +7991,9 @@ function useCoach(data, day, clock) {
 
     if (setsShort.length && setsTotal > 0 && setsShort[0].sets < SET_TARGET)
       raise("week", "firm", `${setsShort[0].label} has had ${setsShort[0].sets} working sets this week against a target of six. That gap is the one that decides whether you hold muscle, and no amount of showing up fixes it — it needs sets.`);
-    if (setsMet >= FX.setsMetCount)
+    if (setsMet >= 5)
       raise("week", "warm", `${setsMet} of seven regions are at the six-set mark. That's the dose the research actually calls for, and most people training four days a week never reach it.`);
-    if (timingSpread !== null && timingSpread >= FX.timingScattered)
+    if (timingSpread !== null && timingSpread >= 75)
       raise("week", "push", `Your sleep timing swings by about ${Math.round(timingSpread / 6) / 10} hours night to night. Regularity predicts more than duration does — and you already have the hours. Pulling bedtime into a narrower window is the cheapest gain available to you.`);
     /* One switch, and it means it. "Track shoulder comfort" off must remove
        the shoulder as a READING everywhere — no comfort score, no morning
@@ -8685,16 +8042,16 @@ function useCoach(data, day, clock) {
        gone. Quiet record for six weeks -> the coach says the constraint has
        stopped earning its place. Nothing is switched off FOR her — the
        restriction already stands down by itself when the record is quiet. */
-    if (settings.shoulderInjury && !shoulderTold.length && shoulderQuietDays !== null && shoulderQuietDays >= FX.shoulderRetireDays)
+    if (settings.shoulderInjury && !shoulderTold.length && shoulderQuietDays !== null && shoulderQuietDays >= 42)
       raise("month", "warm", `Nothing about your shoulder in the record for ${Math.floor(shoulderQuietDays / 7)} weeks. A joint that quiet has stopped being a constraint — I'm not restricting your day-to-day picks any more, and I'll only step back in if you tell me it's talking again.`);
 
     if (illnessFlags.length >= 2)
       raise("day", "firm", `Two of your early-warning signals are moving together — ${illnessFlags.join(" and ")}. That usually shows up a day or two before you feel it. Take the easy version today; resting at the start of something costs less than pushing through it does.`);
-    if (debtNow !== null && debtNow >= FX.debtManageable)
+    if (debtNow !== null && debtNow >= 90)
       raise("week", "push", `You're carrying about ${Math.round(debtNow / 6) / 10} hours of sleep debt. That's the most likely explanation for any flat day this week, and an earlier bedtime clears it faster than any change to your training would.`);
-    if (restorativePct !== null && restorativePct < FX.restorativeAdequate && asleepNow > FX.asleepLongMins)
+    if (restorativePct !== null && restorativePct < 30 && asleepNow > 420)
       raise("week", "push", `You're sleeping plenty — about ${Math.round(asleepNow / 6) / 10} hours — but only ${restorativePct}% of it is deep or REM. Long and light does less repair than shorter and deeper. Worth looking at room temperature, alcohol and screen time before adding any training.`);
-    if (cardiacDrift !== null && cardiacDrift <= FX.cardiacDriftStrong)
+    if (cardiacDrift !== null && cardiacDrift <= -3)
       raise("month", "warm", `Your average daily heart rate is ${Math.abs(cardiacDrift)} beats lower than last month. Same life, fewer beats — that is a heart that has got better at its job, and it is the clearest return your cardio days have produced.`);
 
     if (bodywork.reactive && !loggedToday)
@@ -8705,7 +8062,7 @@ function useCoach(data, day, clock) {
       raise("day", "push", `${bodywork.support.label} yesterday. ${bodywork.support.why} If you were going to push a session this week, today is the day for it.`);
     if (supportResponse !== null && supportResponse >= 4)
       raise("month", "warm", `Your recovery score comes in about ${supportResponse} points higher the morning after restorative body work. That's your own data, not a claim — worth booking those before the weeks you know will be heavy.`);
-    if (reactiveResponse !== null && reactiveResponse <= FX.adaptBad)
+    if (reactiveResponse !== null && reactiveResponse <= -5)
       raise("month", "push", `Deep body work costs you about ${Math.abs(reactiveResponse)} recovery points the next morning. Not a reason to stop — a reason to put it the day before a rest day rather than the day before a hard one.`);
 
     if (!loggedToday && !restDay && prescribed && (prescribed.id === "wod" || prescribed.name === "CrossFit-style WOD"))
@@ -8745,7 +8102,7 @@ function useCoach(data, day, clock) {
     if (!scheduleSet(settings))
       raise("week", "warm", `I am counting your consistency against ${scheduleSummary(schedule)}, because that is the default — not because you told me. How often do you actually want to train, and in what pattern? Settings, then Training. Everything I say about how you are doing is a share of that number, so it is worth two minutes.`);
 
-    if (mobDue && mobDaysAgo !== null && mobDaysAgo >= FX.mobOverdueDays)
+    if (mobDue && mobDaysAgo !== null && mobDaysAgo >= 10)
       raise("week", "push", `${mobDaysAgo} days since your mobility tests. They set what your daily ten minutes should be, so when they go stale the drills stop being aimed at anything.`, true);
     /* ---- WHAT THE BATTERY SAID -------------------------------------
        The half hour she just spent is the biggest single thing she does all
@@ -8761,7 +8118,7 @@ function useCoach(data, day, clock) {
     if (batteryRead) {
       if (batteryRead.first) {
         const bits = [];
-        if (worstGap && worstGap.gap >= FX.mobGapFlag)
+        if (worstGap && worstGap.gap >= 10)
           bits.push(`your ${worstGap.label.toLowerCase()} is ${worstGap.gap}% apart between sides, the ${worstGap.weak} being the shorter`);
         if (mobWeakest.length)
           bits.push(`${mobWeakest[0].label.toLowerCase()} is the shortest thing on the mobility side`);
@@ -8782,7 +8139,7 @@ function useCoach(data, day, clock) {
 
     if (mobAsym.length)
       raise("month", "push", `Your ${mobAsym[0].label.toLowerCase()} is ${mobAsym[0].gapPct}% apart between sides. Asymmetry is worth more attention than either side's absolute number — the tight side is doing less and something else is compensating. Work the restricted side twice for every once on the free side until it closes.`);
-    if (mobWeakest.length && mobScore !== null && mobScore < FX.mobFlag)
+    if (mobWeakest.length && mobScore !== null && mobScore < 60)
       raise("month", "warm", `${mobWeakest[0].label} is the shortest thing you have. ${mobWeakest[0].why} That's what your daily ten minutes is aimed at, and range usually moves faster than strength does — expect something visible inside a month.`);
     goalCheckDue.forEach((g) => {
       if (goalCheckDue.indexOf(g) > 0) return;
@@ -8799,13 +8156,13 @@ function useCoach(data, day, clock) {
         raise("month", "warm", `"${g.text}" has gone from ${sc[0].value} to ${sc.slice(-1)[0].value} out of ten since you started tracking it. That is the kind of change you'd never notice day to day, which is exactly why it's worth writing down.`);
     });
 
-    if (writing !== null && writing.drop <= FX.writingFlag && consistency >= FX.consistencyHolding)
+    if (writing !== null && writing.drop <= -50 && consistency >= 60)
       raise("week", "warm", `You've written a lot less these last two weeks than the fortnight before. Sessions are still happening, so nothing is wrong on paper — but that drop usually comes before the sessions do, so I'd rather ask now. How are you finding it?`);
     if (swaps && swaps.pct < 60 && swaps.avoided)
       raise("month", "push", `You keep my pick about ${swaps.pct}% of the time, and ${swaps.avoided[0]} is what you swap out of most${swaps.chosen ? `, usually for ${swaps.chosen[0]}` : ""}. That's information, not disobedience. Do you want it out of the rotation, or is there a version of it you'd actually do?`);
     if (restarts && restarts.improving && restarts.runs >= 4)
       raise("month", "warm", `Your runs are lasting longer than they used to — averaging ${restarts.lateAvg} sessions now against ${restarts.earlyAvg} earlier on. Everyone stops sometimes; what decides the year is whether each restart holds longer than the last. Yours are.`);
-    if (blockCurve && blockCurve.spread >= FX.blockSpreadBad)
+    if (blockCurve && blockCurve.spread >= 25)
       raise("month", "warm", `Week ${blockCurve.worst.week} of a block is where your sessions go missing — ${blockCurve.worst.pct}% against ${blockCurve.best.pct}% in your best week. That's consistent enough to design around rather than fight: the next block puts the easier week there deliberately.`);
     if (domsLag && domsLag.worst === 2)
       raise("week", "warm", `Hard sessions catch up with you on the second morning, not the first — you drop about ${Math.abs(domsLag.d2)} recovery points on day two against ${Math.abs(domsLag.d1)} on day one. Worth knowing when you're spacing the heavy days; the day after is not the one to protect.`);
@@ -8866,25 +8223,25 @@ function useCoach(data, day, clock) {
     else if (lapseState === "wobble")
       raise("day", "warm", `A couple missed this week. Genuinely fine — the habit research found missing one opportunity does nothing measurable to the process. It's the repeated weeks that count, and this is one week.`, { lead: 2 });
 
-    if (habitStrength !== null && habitStrength < FX.habitForming && weeksTraining >= FX.minEvidence)
+    if (habitStrength !== null && habitStrength < 45 && weeksTraining >= 3)
       raise("week", "warm", `You're ${weeksTraining} weeks in. Exercise takes around three months to stop being a decision — so if it still takes effort to start, that is the normal timeline rather than a sign of anything. Keep the days consistent and it gets cheaper on its own.`);
-    if (cueConsistency !== null && cueConsistency < FX.cueLoose && weeksTraining >= FX.minEvidence)
+    if (cueConsistency !== null && cueConsistency < 60 && weeksTraining >= 3)
       raise("week", "push", `Your sessions are landing on scattered days. That's still training, but it stays a decision every time — and decisions are what run out on the tired days. Same days each week is the cheapest change available to you: not more work, just more predictable work.`);
-    if (barrierWins >= FX.barrierWins)
+    if (barrierWins >= 3)
       raise("month", "warm", `${barrierWins} sessions this month on days when something was against you — low recovery, short sleep, or coming off a gap. That is the specific thing that predicts still training a year from now, more than any number in the strength battery.`);
     if (affectByClass.length >= 2 && affectByClass[0].score >= 1)
       raise("month", "warm", `${affectByClass[0].name} is the one that reliably feels good while you're doing it. That matters more than it sounds — how a session feels during is one of the better predictors of whether you'll do it again. Worth keeping it in the week even when it isn't the obvious training choice.`);
-    if (givesBack !== null && givesBack < FX.givesBackFlag)
+    if (givesBack !== null && givesBack < -0.5)
       raise("month", "push", "Your sessions have been feeling harder in the room than they leave you feeling afterwards. Training should give more back than it takes, on average — when it stops doing that it's usually intensity rather than anything about you. Worth dropping a notch for a fortnight and seeing if it turns around.");
-    if (affectMean !== null && affectMean <= FX.affectFlag)
+    if (affectMean !== null && affectMean <= -1)
       raise("week", "firm", `Your sessions have been feeling hard in the room lately, not just afterwards. That's worth taking seriously rather than pushing through — it's an early dropout signal, and the usual cause is intensity creeping above where it needs to be. Let's drop it a notch and see if the feeling comes back.`);
-    if (weeksTraining >= FX.weeksPastDropout)
+    if (weeksTraining >= 14)
       raise("year", "warm", `${weeksTraining} weeks. Median dropout in beginner cohorts is around fourteen — you're past the point where most people stop, and women over fifty are the age group with the highest sustained-participation rate of all. This is the least arguable evidence in the app.`);
 
     /* MONTH */
-    if (variety28 >= FX.varietyWide)
+    if (variety28 >= 5)
       raise("month", "warm", `${variety28} different classes this month. Variety is one of the few things that reliably predicts still being here next year, so this counts for more than it looks.`);
-    if (variety28 <= FX.varietyNarrow && totalSessions >= 12)
+    if (variety28 <= 2 && totalSessions >= 12)
       raise("month", "push", "You've done the same one or two classes all month. Pick something you haven't touched — novelty is what stops this going stale.");
     if (monthDone >= monthTarget)
       raise("month", "warm", `${monthDone} sessions this month against a target of ${monthTarget}. That's a month you'd have found unimaginable a year ago.`);
@@ -8946,7 +8303,7 @@ function useCoach(data, day, clock) {
     let message;
     if (loggedToday?.completed) message = `Logged. That's ${weekDone} of ${target} this week.`;
     else if (restDay) message = "Rest day. Recovery is part of the plan, not a gap in it.";
-    else if (consistency >= FX.consistencyUnder) message = "You've been reliable this month. Keep the line moving.";
+    else if (consistency >= 70) message = "You've been reliable this month. Keep the line moving.";
     else if (totalSessions === 0) message = "First session is the only hard one. Everything after is maintenance.";
     else message = "One session today puts the week back on track.";
 
@@ -9491,22 +8848,11 @@ const secondsFor = (f) => {
 
 /* Her drills and her prescribed goal work carry MINUTES. The battery carries
    seconds. This is the one place that knows the difference. */
-/* HER INSTRUCTION, 15 August: "when you give me an exercise that I have to do
-   on the left side and on the right side, give me a separate counter for each.
-   Don't give me three minutes hamstring stretch and not separate the one and a
-   half minute for the right and one and a half for the left."
-
-   The two clocks were already here — nothing in the seed had ever been marked
-   two-sided, so no drill ever reached them. And the minutes are the dose for
-   the WHOLE drill, so a three-minute stretch is a minute and a half a side, not
-   three each: two sides at full length is double the work she was prescribed. */
-const drillIsTwoSided = (d) => !!d && (d.side === true || d.bilateral === true);
 const drillSeconds = (d) => {
   if (!d) return null;
   const m = Number(d.mins);
-  const whole = (Number.isFinite(m) && m > 0) ? Math.round(m * 60) : secondsFor(d);
-  if (!whole) return whole;
-  return drillIsTwoSided(d) ? Math.max(15, Math.round(whole / 2)) : whole;
+  if (Number.isFinite(m) && m > 0) return Math.round(m * 60);
+  return secondsFor(d);
 };
 
 /* A RUNNING CLOCK MUST SURVIVE HER LEAVING THE SCREEN.
@@ -10149,27 +9495,10 @@ const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
           machine but there was no field to say which machine." Every cardio
           row takes the machine with the number, because a kilometre on a
           rower and a kilometre on a treadmill are two different tests. */}
-      {/* HER INSTRUCTION, 12 August: "I did one kilometre on the rowing
-          machine but there was no field to say which machine." Extended
-          15 August: how far, and at what setting.
-
-          It used to appear on ANY row whose cap was "cardio" — which put a
-          "which machine" box under BURPEES, where it means nothing, and left
-          the only row it belonged on out of the weekly sitting entirely. It
-          is a flag on the row now, hers to switch on or off like everything
-          else, rather than a guess made from the row's category. */}
-      {f.machine && (
-        <>
-          <Field label="How far" unit="km" type="text"
-            value={form[f.id + "__dist"] || ""}
-            onChange={(v) => set(f.id + "__dist", v)} />
-          <Field label="Which machine" unit="rower, treadmill, bike…" type="text"
-            value={form[f.id + "__machine"] || ""}
-            onChange={(v) => set(f.id + "__machine", v)} />
-          <Field label="At what setting" unit="resistance, level or incline" type="text"
-            value={form[f.id + "__level"] || ""}
-            onChange={(v) => set(f.id + "__level", v)} />
-        </>
+      {f.cap === "cardio" && (
+        <Field label="Which machine" unit="rower, treadmill, bike…" type="text"
+          value={form[f.id + "__machine"] || ""}
+          onChange={(v) => set(f.id + "__machine", v)} />
       )}
       <ExerciseNote value={form[f.id + "__note"]} onChange={(v) => set(f.id + "__note", v)}
         history={history} ask={ask} seeAll={seeAll} />
@@ -10913,8 +10242,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink }}>{d.label}</span>
-            <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>
-              {d.mins}m{drillIsTwoSided(d) ? ` · ${Math.round((Number(d.mins) || 0) * 30) / 60}m a side` : ""}</span>
+            <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>{d.mins}m</span>
           </div>
           {(d.sets || d.reps || d.freq) && (
             <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
@@ -11086,11 +10414,11 @@ function SessionClock({ log, write, coach }) {
    further for the reasoning and the month it drew up. */
 function ReadCard({ data, setData, coach, setSheet }) {
   const last = coach.lastReview;
-  const scope = data.settings?.readScope || SCOPE_DEFAULT;
+  const scope = data.settings?.readScope || SCOPE_ALL;
   const setScope = (s) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: s } }));
   return (
     <Card style={{ background: C.pist }}>
-      <Eyebrow color={C.signal}>Next month's programme</Eyebrow>
+      <Eyebrow color={C.signal}>Read my data</Eyebrow>
       {/* Her instruction, 12 August: "Why do I have all these explanations
           under Read my data. Fold under info tab." */}
       <div style={{ margin: "5px 0 11px" }}>
@@ -11100,11 +10428,8 @@ function ReadCard({ data, setData, coach, setSheet }) {
         </InfoNote>
       </div>
       <ScopePicker scope={scope} onPick={setScope} />
-      {/* Her instruction, 14 August: "it show me how many months it will review
-          before doing it". The window is on the button, so a read can never run
-          over a period she did not see. */}
       <Btn kind="signal" disabled={!scopeReady(scope)} onClick={() => setSheet({ kind: "review" })}>
-        {scopeReady(scope) ? `Design next month from ${scopeLabel(scope)}` : "Type how far back first"}
+        Ask the coach to read everything
       </Btn>
 
       {last && (
@@ -12086,8 +11411,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           Her question, 11 August: "Where do I see the reply?" One line, no
           duplication — it opens the read itself. The whole of it, and every
           earlier one, lives in Progress. */}
-      {/* THE READ LEFT THIS PAGE on 14 August, her instruction. It lives in
-          Settings now. Nothing about it changed except where it is. */}
+      {isToday && <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />}
 
 
       {/* ---- ZONE 2: THE COACH SPEAKS ------------------------------
@@ -13657,7 +12981,7 @@ function Progress({ data, setData, coach, setSheet }) {
           It needs to be visible." So it is a card, not a fold. */}
       <Card style={{ marginBottom: 11 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-          <Eyebrow color={C.signal}>Next month's programme</Eyebrow>
+          <Eyebrow color={C.signal}>The coach's read</Eyebrow>
           <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
             {(coach.reviews || []).length ? `${coach.reviews.length} kept` : "whenever you want"}
           </span>
@@ -13666,11 +12990,10 @@ function Progress({ data, setData, coach, setSheet }) {
           Everything you have logged, read and interpreted — conclusions, advice, where to put the
           work, and the rules worth holding to. As often as you like; never on a schedule.
         </div>
-        {/* The button and its window moved to Settings on 14 August. Every
-            read you have ever had stays here, because this is where history
-            lives. */}
-        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 12 }}>
-          Run it from Settings.
+        <div style={{ marginBottom: 12 }}>
+          <Btn kind="signal" onClick={() => setSheet({ kind: "review" })}>
+            Ask the coach to read everything
+          </Btn>
         </div>
         {!(coach.reviews || []).length ? (
           <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55 }}>
@@ -13960,7 +13283,7 @@ function Progress({ data, setData, coach, setSheet }) {
 }
 
 /* ------------------------------------------------------------ SETTINGS ---- */
-function Settings({ data, setData, coach, setSheet }) {
+function Settings({ data, setData, setSheet }) {
   const s = data.settings;
   const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
 
@@ -14315,108 +13638,6 @@ function Settings({ data, setData, coach, setSheet }) {
         <div style={{ marginTop: 8 }}>
           <Btn kind="ghost" onClick={() => setSheet({ kind: "profile" })}>What the coach believes about you</Btn>
         </div>
-        <div style={{ marginTop: 8 }}>
-          <Btn kind="ghost" onClick={() => setSheet({ kind: "memory" })}>What your coach remembers</Btn>
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <Btn kind="ghost" onClick={() => setSheet({ kind: "coachmetrics" })}>Which numbers your coach carries</Btn>
-        </div>
-        {/* NEXT MONTH'S PROGRAMME. Moved here from Today on 14 August, her
-            instruction, because this is the sheet with the fewest fields. */}
-        <div style={{ marginTop: 14 }}>
-          <ReadCard data={data} setData={setData} coach={coach} setSheet={setSheet} />
-        </div>
-        {/* WHAT IT COSTS. Her question, 14 August, holding a bank text: "is
-            this the amount I actually used by the app so far?" Nothing here is
-            estimated — it adds up what was recorded and says plainly where
-            there is no record. */}
-        <Card style={{ marginTop: 14 }}>
-          <Eyebrow>What your coach has cost</Eyebrow>
-          {(() => {
-            const t = today();
-            const rows = [
-              ["Today", spendSince(data, t)],
-              ["Last 7 days", spendSince(data, addDays(t, -6))],
-              ["Last 30 days", spendSince(data, addDays(t, -29))],
-              ["Everything on the record", spendSince(data, null)],
-            ];
-            const all = rows[3][1];
-            return (
-              <>
-                {rows.map(([label, v]) => (
-                  <div key={label} style={{ display: "flex", justifyContent: "space-between",
-                    alignItems: "baseline", padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
-                    <span style={{ fontSize: 12.5, color: C.muted }}>{label}</span>
-                    <span className="mono" style={{ fontSize: 13, color: C.ink }}>{money(v.cents)}</span>
-                  </div>
-                ))}
-                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 10 }}>
-                  {all.cents === 0 && all.chats === 0 && all.reads === 0
-                    ? "Nothing recorded yet."
-                    : `${money(all.chatCents)} talking across ${all.chats} conversation${all.chats === 1 ? "" : "s"}, ${money(all.readCents)} on ${all.reads} read${all.reads === 1 ? "" : "s"}. ${all.tokensIn.toLocaleString()} in, ${all.tokensOut.toLocaleString()} out.`}
-                </div>
-                {all.saved > 0 && (
-                  <div style={{ fontSize: 11.5, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
-                    {money(all.saved)} of that was saved by not re-reading the same thing to your
-                    coach twice. It sees exactly what it saw before — it just stops paying full
-                    price for the parts that had not changed.
-                  </div>
-                )}
-                {all.unknown > 0 && (
-                  <div style={{ fontSize: 11.5, color: C.ochre, lineHeight: 1.5, marginTop: 8 }}>
-                    {all.unknown} conversation{all.unknown === 1 ? "" : "s"} from before this was
-                    recorded carr{all.unknown === 1 ? "ies" : "y"} no cost. They are not counted above,
-                    and I will not invent a figure for them.
-                  </div>
-                )}
-                {(() => {
-                  /* WHAT THE APP DECIDED ABOUT CACHING, AND WHY (build 147).
-                     Her correction: a cache that is never read back costs more
-                     than none at all. This says which mode her own gaps chose,
-                     what it measured, and lets her overrule it. */
-                  const F2 = formulas(data.settings);
-                  const cp = cachePolicy(data, F2);
-                  const label = { "5m": "on, five minutes", "1h": "on, one hour", off: "off" }[cp.mode];
-                  return (
-                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-                      <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.1em",
-                        textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
-                        not paying twice for the same words
-                      </div>
-                      <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5 }}>
-                        Currently <strong style={{ fontWeight: 600 }}>{label}</strong>.
-                      </div>
-                      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 5 }}>
-                        {cp.why}
-                      </div>
-                      <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                        {[["auto", "Let it decide"], ["off", "Off"], ["5m", "5 min"], ["1h", "1 hour"]].map(([k, l]) => {
-                          const on = (data.settings?.cacheMode || "auto") === k;
-                          return (
-                            <button key={k} className="tap"
-                              onClick={() => setData((d) => ({ ...d, settings: { ...(d.settings || {}), cacheMode: k } }))}
-                              style={{ flex: 1, padding: "9px 4px", borderRadius: 9, cursor: "pointer", fontSize: 11.5,
-                                border: `1.5px solid ${on ? C.ochre : C.line}`,
-                                background: on ? C.pist : "transparent",
-                                color: on ? C.ink : C.muted, fontWeight: on ? 600 : 400, fontFamily: "inherit" }}>
-                              {l}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })()}
-                <div style={{ marginTop: 10 }}>
-                  <InfoNote small inherit
-                    why={`This is what the app itself recorded, at ${PRICE_IN} per million words in and ${PRICE_OUT} per million out. It is not your Anthropic bill — anything else on the same account is not in here. The bill itself is at console.anthropic.com under Usage.`}>
-                    <span style={{ fontSize: 12, color: C.muted }}>Where this number comes from</span>
-                  </InfoNote>
-                </div>
-              </>
-            );
-          })()}
-        </Card>
         <div style={{ marginBottom: 12 }} />
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
           Rename exercises, change units, reorder, or add your own. Renaming keeps the history — the chart just picks up the new name.
@@ -14797,26 +14018,7 @@ function FieldEditor({ which, data, setData, close, focus }) {
       return n;
     });
   };
-  /* ---- WHY HER ROW VANISHED WITH HER NUMBERS IN IT ----------------------
-     HER REPORT, 15 August: "when I tried to change the squats to bridges, it
-     just disappeared. I pushed weekly after I edited, and it just disappeared
-     off the list after I've entered my numbers."
-
-     This × deleted the field OBJECT out of her list. The readings themselves
-     were never touched — they sit in data.weekly under the row's id — but with
-     no row left to render them, they became invisible with no way back, and
-     addNewFields could not return the row because its one-time stamp had
-     already been spent. The line above this screen even promised the opposite:
-     "hides it from the form but leaves past entries untouched."
-
-     It sets aside now, dated, exactly like everything else the app removes
-     (rule 20): out of every sitting, still in the list, still in every chart,
-     and one tap from coming back with its numbers still under it. */
-  const remove = (id) => setFor(id)((l) => l.map((f) => (f.id === id
-    ? { ...f, status: "removed", removedOn: today(), removedWhy: "she set it aside from the field editor" }
-    : f)));
-  const putBackField = (id) => setFor(id)((l) => l.map((f) => (f.id === id
-    ? { ...f, status: "live", unremovedOn: today() } : f)));
+  const remove = (id) => setFor(id)((l) => l.filter((f) => f.id !== id));
   const add = () => {
     const f = { id: newId(), label: "New measure", unit: "reps", type: "number", better: "up",
       cap: "", role: "rotating", inWeekly: !both, rungs: [] };
@@ -14836,8 +14038,7 @@ function FieldEditor({ which, data, setData, close, focus }) {
       <Eyebrow color={C.ochre}>{which === "weekly" ? "Weekly check" : "Monthly benchmark"} fields</Eyebrow>
       <h2 className="disp" style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>What do you want to measure?</h2>
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 16px", lineHeight: 1.45 }}>
-        Tap a row to edit it. Setting one aside takes it out of the form and leaves every number you ever
-        logged against it exactly where it is — put it back and they are all still under it.
+        Tap a row to edit it. Deleting a measure hides it from the form but leaves past entries untouched.
       </p>
 
       <Card style={{ padding: 8 }}>
@@ -14860,8 +14061,6 @@ function FieldEditor({ which, data, setData, close, focus }) {
                   {f.cap ? f.cap + " · " : ""}{f.role === "anchor" ? "anchor" : "rotating"}
                   {f.inWeekly !== false ? " · weekly" : " · monthly only"}
                   {f.rungs?.length > 1 ? ` · ${f.rungs.length} rungs` : ""}
-                  {/* Tapping × has to LOOK like it did something (rule 11). */}
-                  {f.status === "removed" ? " · SET ASIDE" : f.status === "paused" ? " · PAUSED" : ""}
                 </div>
               </button>
               {/* "I can only add or remove — I can't edit an existing one."
@@ -14873,16 +14072,9 @@ function FieldEditor({ which, data, setData, close, focus }) {
                 color: openId === f.id ? C.chalk : C.signal, cursor: "pointer",
                 padding: "5px 10px", fontSize: 11, fontWeight: 600, fontFamily: "inherit",
                 flexShrink: 0 }}>{openId === f.id ? "close" : "edit"}</button>
-              {f.status === "removed" || f.status === "paused" ? (
-                <button onClick={() => putBackField(f.id)} className="tap" style={{
-                  border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
-                  cursor: "pointer", color: C.moss, fontSize: 11, fontWeight: 600,
-                  padding: "5px 9px", fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
-              ) : (
-                <button onClick={() => remove(f.id)} className="tap" style={{
-                  border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
-                }}>×</button>
-              )}
+              <button onClick={() => remove(f.id)} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
+              }}>×</button>
             </div>
 
             {openId === f.id && (
@@ -15055,148 +14247,6 @@ const wakeDay = (row) => {
 /* ---- the read-out: what moved, why, and what to do about it -------------- */
 
 /* ---- every number the engine uses, exposed and editable ------------------ */
-/* WHICH NUMBERS YOUR COACH CARRIES.
-   Rule 12 and rule 13: the list is hers, and it can grow or shrink whenever she
-   likes. Nothing here deletes a calculation — every one still runs, still shows
-   on her screen, still keeps its history. This is only what the coach is told. */
-function CoachMetricsSheet({ data, setData, coach, close }) {
-  const all = coach.allMetrics || [];
-  const chosen = coachMetricIds(data.settings);
-  const on = (id) => chosen.includes(id);
-  const toggle = (id) => setData((d) => {
-    const cur = coachMetricIds(d.settings);
-    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id];
-    return { ...d, settings: { ...(d.settings || {}), coachMetrics: next } };
-  });
-  const reset = () => setData((d) => ({ ...d, settings: { ...(d.settings || {}), coachMetrics: null } }));
-  const groups = ["day", "week", "month", "quarter", "year"];
-  return (
-    <div>
-      <Eyebrow color={C.signal}>What your coach carries</Eyebrow>
-      <h1 className="disp" style={{ fontSize: 25, fontWeight: 400, lineHeight: 1.12, margin: "0 0 8px" }}>
-        {chosen.length} of {all.length} numbers
-      </h1>
-      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 18 }}>
-        Every calculation still runs and still shows on your screen. This is only which of them
-        travel with every message to your coach. Anything on your landing page always travels,
-        whether or not it is ticked — a number you can see should never be one your coach has not
-        been told about.
-      </div>
-      {groups.map((g) => {
-        const rows = all.filter((m) => m.group === g);
-        if (!rows.length) return null;
-        return (
-          <Card key={g} style={{ marginBottom: 12 }}>
-            <Eyebrow>{g}</Eyebrow>
-            {rows.map((m) => (
-              <button key={m.id} onClick={() => toggle(m.id)} className="tap"
-                aria-label={`${on(m.id) || m.key ? "stop carrying" : "carry"} ${m.label}`}
-                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%",
-                  padding: "10px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
-                  background: "transparent", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                <span style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                  border: `1.5px solid ${on(m.id) || m.key ? C.ochre : C.line}`,
-                  background: on(m.id) || m.key ? C.ochre : "transparent" }} />
-                <span style={{ minWidth: 0, flex: 1 }}>
-                  <span style={{ fontSize: 13.5, color: C.ink }}>{m.label}</span>
-                  {m.key && <span style={{ fontSize: 11, color: C.muted }}> · on your landing page, always carried</span>}
-                  <span style={{ display: "block", fontSize: 11.5, color: C.muted, marginTop: 2 }}>
-                    {m.display === "—" ? `no value yet — ${String(m.need || "").slice(0, 70)}` : `${m.display} · ${m.sub}`}
-                  </span>
-                </span>
-              </button>
-            ))}
-          </Card>
-        );
-      })}
-      <Btn kind="quiet" onClick={reset}>Back to the twenty I suggested</Btn>
-      <div style={{ marginTop: 12 }}><Btn kind="quiet" onClick={close}>Back</Btn></div>
-    </div>
-  );
-}
-
-/* ============================================================================
-   WHAT YOUR COACH REMEMBERS
-   ---------------------------------------------------------------------------
-   She can read the whole thing, and she can write into it. What she writes is
-   kept separately from what the coach wrote and OUTRANKS it everywhere — in
-   the prompt, and in every fold from here on. Every earlier version is kept
-   (rule 20), so a fold that drops something is recoverable rather than final.
-========================================================================== */
-function MemorySheet({ data, setData, close }) {
-  const m = data.memory || {};
-  const [showOld, setShowOld] = useState(false);
-  const setHers = (v) => setData((d) => ({ ...d, memory: { ...(d.memory || {}), hers: v } }));
-  const versions = (m.versions || []).slice().reverse();
-  return (
-    <div>
-      <Eyebrow color={C.signal}>What your coach remembers</Eyebrow>
-      <h1 className="disp" style={{ fontSize: 25, fontWeight: 400, lineHeight: 1.12, margin: "0 0 8px" }}>
-        Your history, in its words
-      </h1>
-      <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.muted, marginBottom: 18 }}>
-        Kept on this device and folded forward after everything you say, so your coach carries the
-        shape of everything older without being sent all of it again. Your own numbers are never
-        replaced by this — they still go across exactly as you entered them.
-      </div>
-
-      <Card style={{ marginBottom: 14 }}>
-        <Eyebrow>What you told it yourself</Eyebrow>
-        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, margin: "6px 0 10px" }}>
-          Anything you write here outranks everything the coach worked out on its own, and it is
-          never overwritten by a fold. Correct it, contradict it, or tell it something it has no way
-          of knowing.
-        </div>
-        <Note label="" value={m.hers || ""} onChange={setHers}
-          hint="Whatever you want it to know and never forget." />
-      </Card>
-
-      <Card style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-          <Eyebrow>What it has written</Eyebrow>
-          <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
-            {m.upto ? `up to ${m.upto}` : "nothing yet"}
-          </span>
-        </div>
-        {String(m.text || "").trim() ? (
-          <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, whiteSpace: "pre-wrap", marginTop: 10 }}>
-            {m.text}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginTop: 10 }}>
-            Nothing folded yet. It builds itself from everything you have logged the first time you
-            talk to your coach, and adds only what has changed after that.
-          </div>
-        )}
-      </Card>
-
-      {versions.length > 0 && (
-        <Card style={{ marginBottom: 14 }}>
-          <button onClick={() => setShowOld((v) => !v)} className="tap" style={{
-            border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
-            fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
-            {showOld ? "Hide earlier versions" : `Earlier versions (${versions.length})`}
-          </button>
-          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
-            Nothing here is ever overwritten. If a fold leaves something out, it is still in the
-            version before it.
-          </div>
-          {showOld && versions.map((v, i) => (
-            <div key={i} style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-              <div className="mono" style={{ fontSize: 9.5, color: C.muted, marginBottom: 6 }}>
-                {v.upto ? `up to ${v.upto}` : "undated"}
-              </div>
-              <div style={{ fontSize: 12, lineHeight: 1.55, color: C.muted, whiteSpace: "pre-wrap" }}>{v.text}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      <div style={{ marginTop: 12 }}><Btn kind="quiet" onClick={close}>Back</Btn></div>
-    </div>
-  );
-}
-
 function Formulas({ data, setData, close }) {
   const F = formulas(data.settings);
   const set = (k, v) => setData((d) => ({
@@ -15213,8 +14263,6 @@ function Formulas({ data, setData, close }) {
              ["wStrength", "Strength"], ["wMobility", "Mobility"], ["wBalance", "Balance"]] },
     { title: "Consistency", note: "How far back the consistency percentage looks.",
       rows: [["consistencyWindow", "Days counted"]] },
-    { title: "Recovery baseline", note: "Where the baseline stands until enough of your own scores exist to set it. Once they do, yours replaces this.",
-      rows: [["recBaselineFallback", "Baseline until your own scores can say"]] },
     { title: "Load balance", note: "Acute against chronic workload. Inside the corridor is where training is productive; above the spike line is where injuries come from — not from hard training, but from sudden training.",
       rows: [["acwrLow", "Below this: doing less than you're built for"],
              ["acwrHigh", "Above this: pushing"],
@@ -15229,159 +14277,6 @@ function Formulas({ data, setData, close }) {
              ["mdcBody", "Muscle % and body fat %"],
              ["asymmetryPct", "Left-right gap worth naming (mobility)"],
              ["bilateralPct", "Left-right gap worth naming (strength)"]] },
-
-    /* Her instruction, 14 August: "nothing should be hardcoded." Everything
-       from here down used to be a number typed into the engine, where she
-       could not reach it. */
-    { title: "Sleep and recovery, day to day", note: "What counts as a short night, and how far under your own baseline still counts as recovered. A short night can only ever make a day gentler, never harder.",
-      rows: [["sleepIdeal", "Hours of sleep that score full marks"],
-             ["sleepShortDrop", "Hours under your median that make a night short"],
-             ["sleepShortAbs", "…or, with no median yet, fewer hours than"],
-             ["recoveryOkGap", "Points under baseline still counted as recovered"],
-             ["recoveryCeilingGap", "Baseline + this scores full marks"],
-             ["recoveryLowGap", "Points under baseline that count as a low morning"],
-             ["recoveryHighGap", "Points over baseline that count as a good one"],
-             ["rpeQualityMax", "Last week's effort at or under this reads as sustainable"],
-             ["confidenceHigh", "Confidence at or above this: move a variable"],
-             ["confidenceSteady", "…at or above this: hold"],
-             ["healthCoverage", "Share of the score present before it stops saying partial"]] },
-
-    { title: "The number to beat, and the retest clock", note: "How far past your last result the battery asks you to go, and how long a paused measure waits before it is worth trying again. The waits come from the published time-course of whatever has to change underneath - muscle, tendon, joint or mood - rather than from a round number.",
-      rows: [["aimStep", "How far past your last result the battery aims (0.15 = 15%)"],
-             ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
-             ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
-             ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
-             ["retestRomWeeks", "Weeks before a range-of-movement measure is retested"],
-             ["retestTendonWeeks", "Weeks before a tendon measure is retested"],
-             ["retestMoodWeeks", "Weeks before a mood or motivation trend is read again"]] },
-
-    { title: "Habit", note: "The research figure the habit score builds towards, and where it stops being early. Nothing here is a streak — a missed day costs nothing.",
-      rows: [["habitDays", "Days of practice the score builds to"],
-             ["habitStrong", "Score at or above: close to automatic"],
-             ["habitForming", "…at or above: forming"],
-             ["cueStrong", "Same-time routine at or above: strong"],
-             ["cueLoose", "…at or above: loose"],
-             ["weeksPastDropout", "Weeks trained that pass the median dropout point"]] },
-
-    { title: "Sleep, measured", note: "The WHOOP figures, in the units WHOOP gives them. Spread is minutes; restorative is a percentage of the night; debt is minutes.",
-      rows: [["timingRegular", "Timing spread under this: very regular"],
-             ["timingScattered", "…at or over this: scattered"],
-             ["restorativeStrong", "Deep + REM at or above: strong"],
-             ["restorativeAdequate", "…at or above: adequate"],
-             ["debtPaid", "Sleep debt under this: paid off"],
-             ["debtManageable", "…under this: manageable"],
-             ["asleepLongMins", "Long enough that quality, not length, is the question"],
-             ["momentumSleepMins", "Minutes of sleep under this cost the day momentum"],
-             ["brakeSleepMins", "…and under this it is tested as a brake on training"]] },
-
-    { title: "Heart and adaptation", note: "Drifts against your own month, never against a population.",
-      rows: [["rhrDriftUp", "Resting heart rate this far above the month: flagged"],
-             ["rhrDriftDown", "…this far below: a good sign"],
-             ["rhrHigh", "A resting rate worth mentioning on its own"],
-             ["hrvDriftDown", "HRV this % under baseline: flagged"],
-             ["hrvDriftUp", "…this % over: a good sign"],
-             ["cardiacDriftGood", "Cardiac drift, bpm lower across the month"],
-             ["cardiacDriftBad", "…bpm higher"],
-             ["cardiacDriftStrong", "…enough of a fall to say out loud"],
-             ["adaptGood", "Hard days costing this % less: getting easier"],
-             ["adaptStrong", "…enough to act on"],
-             ["adaptBad", "…this % more: costing you"]] },
-
-    { title: "Illness signals", note: "Against your own baseline. When these are up, the ladder continues but the rungs become mobility and walking, never load.",
-      rows: [["illTempRise", "Skin temperature, degrees above baseline"],
-             ["illRespRise", "Breaths per minute above baseline"],
-             ["illSpo2Floor", "Blood oxygen under this is flagged"]] },
-
-    { title: "Adherence and coverage", note: "Consistency is a window, never a streak. One missed session is invisible.",
-      rows: [["consistencyHigh", "Consistency at or above this is worth saying"],
-             ["consistencyStrong", "…strong"],
-             ["consistencyGood", "…good enough to add"],
-             ["consistencyUnder", "…under this, doing less than you could"],
-             ["consistencyHolding", "…holding. Under it, slipping"],
-             ["coverWhole", "Body regions reached: whole body"],
-             ["coverNarrow", "…at or under this, narrow"],
-             ["varietyWide", "Different classes in the window: wide"],
-             ["varietyOk", "…reasonable"],
-             ["varietyNarrow", "…at or under this, narrow"],
-             ["setsMetCount", "Regions hitting their set target: dose met"],
-             ["setsBuildingCount", "…building"]] },
-
-    { title: "Mobility and the shoulder", note: "Rule 19: nothing follows you forever. The quiet-days numbers are what let the shoulder guard retire.",
-      rows: [["mobStrong", "Overall mobility at or above: strong"],
-             ["mobOk", "…adequate"],
-             ["mobFlag", "…under this, raised with you"],
-             ["mobOverdueDays", "Days since the battery before it is chased"],
-             ["mobGapFlag", "Left-right gap, %, worth naming"],
-             ["shoulderClear", "Morning score at or above: clear to load"],
-             ["shoulderLowMax", "…at or under: a low reading"],
-             ["shoulderTrendGood", "Trend worth saying out loud"],
-             ["shoulderTrendBad", "…under this, protect it"],
-             ["shoulderQuietDays", "Days silent before the record stops guarding"],
-             ["shoulderRetireDays", "…before it offers to switch the guard off"]] },
-
-    { title: "How it feels, and what it gives back", note: "How exercise feels during predicts whether you keep doing it. These decide when that is said out loud.",
-      rows: [["affectGood", "Mean feeling at or above: good in the room"],
-             ["affectOk", "…already reads as positive"],
-             ["affectFlag", "…at or under this, raised"],
-             ["givesBackGood", "Leaves you better above"],
-             ["givesBackBad", "Costs more than it returns below"],
-             ["givesBackFlag", "…enough to raise"],
-             ["barrierWins", "Times you trained anyway before it is named"]] },
-
-    { title: "Load and blocks", note: "What makes a day hard, how fast the base may grow, and how uneven a block can run before it is redesigned.",
-      rows: [["hardDayLoad", "Minutes × effort that make a day hard"],
-             ["chronicGrowthSafe", "% a week the base may safely grow"],
-             ["blockSpreadFlag", "Spread across a block worth naming"],
-             ["blockSpreadBad", "…enough to redesign around"],
-             ["phaseGymDays", "Days with a new gym before it stops being new"],
-             ["phaseBuildWeeks", "Weeks trained, shoulder settled, before building"],
-             ["phaseFamiliariseWeeks", "…before familiarising"]] },
-
-    { title: "What you write", note: "Writing less is one of the earliest signs of a hard stretch, which is why it is watched at all.",
-      rows: [["writingDown", "% fewer words: well down"],
-             ["writingUp", "% more: up"],
-             ["writingFlag", "…enough to ask how you are"]] },
-
-    { title: "How much evidence before anything is said", note: "Rule 16: patterns are computed, never guessed. Lower these and the app will speak sooner and be wrong more often. Raise them and it stays quiet longer.",
-      rows: [["patternLift", "Percentage points that make something a motivator"],
-             ["patternBrake", "…a brake"],
-             ["patternTrend", "…a trend in what you write"],
-             ["patternNeutral", "…small enough to call no effect"],
-             ["minOccurrences", "Times a thing must recur before it is a pattern"],
-             ["minEvidence", "Readings behind a named pattern"],
-             ["minDaysForPattern", "Days in the window before weekday patterns are read"],
-             ["minHardDays", "Hard days before adaptation is calculated"],
-             ["minBaselineReadings", "Readings before a median is trusted"]] },
-
-    { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
-      rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
-
-    { title: "How long your coach's answers may be", note: "After caching, the replies are the biggest single cost in a conversation. A short question gets a short answer; a question you want thought about gets room; and a hard morning always gets the longest, because talking you down a ladder needs room. Measured in tokens — roughly three quarters of a word each.",
-      rows: [["replyShort", "A short question"],
-             ["replyNormal", "The ordinary case"],
-             ["replyThinking", "Why, explain, should I, compare, plan"],
-             ["replyLong", "A hard morning — never cut short"],
-             ["replyShortChars", "What counts as a short question, in characters"]] },
-
-    { title: "When caching is worth it", note: "A cache your coach never looks back at costs MORE than not caching — a quarter more for the five-minute one, double for the hour. So the app times the gaps between your messages and only caches when your own gaps say it would be read back. These are the lines it decides on.",
-      rows: [["cacheShortGapMins", "Gaps under this many minutes: five-minute cache"],
-             ["cacheLongGapMins", "…under this many: the hour one"],
-             ["cacheMinGaps", "How many gaps before it trusts what it measured"]] },
-
-    { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
-      rows: [["priceIn", "A million words read"],
-             ["priceOut", "A million written back"],
-             ["priceCacheWrite", "A million put in front of it"],
-             ["priceCacheWrite1h", "…and left there an hour"],
-             ["priceCacheRead", "A million looked at again"]] },
-
-    { title: "How hard a class today may be", note: "Every class in your library carries a cost from 1 to 5. These decide which of them each recovery band is allowed to reach for. This is the only group that changes what you are actually asked to do rather than what you are told about it — so a wrong number here hands you the wrong class rather than the wrong word.",
-      rows: [["classCostRest", "Most a rest-band day may pick"],
-             ["classCostEasy", "Most an easy day may pick"],
-             ["classCostReactive", "Body work still reactive: nothing at or above"],
-             ["classCostFallback", "The last-resort pool, when everything else is ruled out"],
-             ["addonCostRest", "Most an add-on may cost on a rest-band day"],
-             ["addonCostMax", "Most an add-on may ever cost"]] },
   ];
 
   return (
@@ -16316,46 +15211,6 @@ Avoid anything close to these: ${(Object.values(data.notes || {}).slice(-12).map
    it is dropped; otherwise it is genuinely new and gets appended. That is
    correct on both kinds of browser, which matters because she uses one and
    this was written on the other. */
-/* ---- WHY DICTATION REPEATED ITSELF, OVER AND OVER -------------------------
-   HER REPORT, 15 August, with a screenshot: one sentence about burpees written
-   into the box nine times, each copy with a few more of the words she had just
-   said stuck on the front.
-
-   Two faults, and they compounded each other.
-
-   ONE: a recognition session that had ENDED could still write. Chrome on
-   Android ends the session at every pause and we restart it — but the ended
-   object kept its handlers, so a late result from the session just finished
-   arrived after its text had already been banked, and got banked a second
-   time. The fix is in `onend`: an ended session is disconnected before the
-   next one starts, so only the live session can ever write.
-
-   TWO: the merge could only recognise a repeat at the very start or the very
-   end of what it already had. Android re-sends earlier phrases in the middle
-   of a new session's result list, so a repeat arriving anywhere else was read
-   as new speech and appended. Both are idempotent now: text already present is
-   never added again, and where the end of what we have overlaps the start of
-   what has arrived, the overlap is stitched rather than duplicated.
-
-   The minimum lengths matter. "Yes" said twice is two answers, not one
-   repeated — so a short phrase is still allowed to repeat, and only something
-   long enough to be a genuine re-send is collapsed.
-------------------------------------------------------------------------- */
-const SAID_AGAIN_MIN = 24;   /* chars before a repeat is treated as a re-send */
-/* An overlap of "and my" is six characters and is exactly the shape a re-send
-   takes, so the floor is low — but it must fall on WHOLE WORDS at both ends,
-   or "an apple" and "apple pie" would be stitched into one by five letters
-   that happen to line up. */
-const OVERLAP_MIN = 6;
-const stitch = (a, b, la, lb) => {
-  for (let n = Math.min(la.length, lb.length); n >= OVERLAP_MIN; n--) {
-    if (la.slice(-n) !== lb.slice(0, n)) continue;
-    const startsClean = n === la.length || /\s/.test(la[la.length - n - 1]);
-    const endsClean = n === lb.length || /\s/.test(lb[n]);
-    if (startsClean && endsClean) return (a + b.slice(n)).replace(/\s+/g, " ").trim();
-  }
-  return null;
-};
 const mergeHeard = (soFar, next) => {
   const a = String(soFar || "").trim();
   const b = String(next || "").trim();
@@ -16364,31 +15219,16 @@ const mergeHeard = (soFar, next) => {
   const la = a.toLowerCase(), lb = b.toLowerCase();
   if (lb.startsWith(la)) return b;      /* the same phrase, grown */
   if (la.endsWith(lb)) return a;        /* already have these words */
-  /* the same words arriving again from somewhere in the middle of the list */
-  if (lb.length >= SAID_AGAIN_MIN && la.includes(lb)) return a;
-  const st = stitch(a, b, la, lb);
-  if (st !== null) return st;
   return a + " " + b;
 };
 
 /* Two bursts either side of a pause are two different things she said, not
    one restated — so they are JOINED, never merged. mergeHeard is right within
-   a single burst and wrong across two, because "yes" after "yes" is two.
-   But a burst that arrives holding everything said before it is not a second
-   thing she said, it is the same thing sent twice, and that is what this
-   catches without touching the short repeats that are real. */
+   a single burst and wrong across two, because "yes" after "yes" is two. */
 const joinSpeech = (a, b) => {
   const x = String(a || "").trim(), y = String(b || "").trim();
   if (!x) return y;
   if (!y) return x;
-  const lx = x.toLowerCase(), ly = y.toLowerCase();
-  if (ly.length >= SAID_AGAIN_MIN || lx.length >= SAID_AGAIN_MIN) {
-    if (lx === ly) return x;
-    if (lx.includes(ly)) return x;      /* already banked */
-    if (ly.includes(lx)) return y;      /* the new session re-sent the lot */
-    const st = stitch(x, y, lx, ly);
-    if (st !== null) return st;
-  }
   return x + " " + y;
 };
 
@@ -16466,11 +15306,6 @@ function useDictation(onText) {
         setProblem("Dictation keeps stopping on its own. Type instead for now — the box beside the microphone takes typing.");
         return;
       }
-      /* An ENDED session must never write again. It kept its handlers, so a
-         late result from the session just finished arrived after its text had
-         been banked and was banked a second time — which is what wrote her
-         sentence into the box nine times (15 August). */
-      if (r) { r.onresult = null; r.onend = null; r.onerror = null; r.onstart = null; }
       /* bank the burst that just ended — the next session starts empty */
       carried.current = joinSpeech(carried.current, heardNow.current);
       heardNow.current = "";
@@ -18117,21 +16952,6 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             <>
               <Field label="Minutes" unit="" value={item.mins}
                 onChange={(v) => patchDrill(item.id, { mins: Number(v) || 1 })} />
-              {/* Rule 12: the same toggle the mobility tests have. sideEdited
-                  marks it HERS, so the seed never overrules her again. */}
-              <div style={{ display: "flex", gap: 8, margin: "2px 0 12px" }}>
-                <button onClick={() => patchDrill(item.id, { side: !item.side, sideEdited: true })}
-                  className="tap" style={{
-                  flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
-                  border: `1.5px solid ${item.side ? C.signal : C.line}`,
-                  background: item.side ? C.signal : "transparent",
-                  color: item.side ? C.chalk : C.muted }}>Done left and right{item.side ? " ✓" : ""}</button>
-              </div>
-              {item.side && (
-                <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
-                  The minutes above are the whole drill. It gets a clock each side, running half that.
-                </div>
-              )}
               {/* "Enable me to edit each and every input in that exercise."
                   The row on Today shows sets x reps and how often — so they
                   are editable here, not just visible there (rule 12). */}
@@ -18916,7 +17736,7 @@ function ReadAnswer({ rec }) {
    One of the three, never a form to fill in. What the window leaves out is
    carried by the earlier reads, which always go in full. */
 function ScopePicker({ scope, onPick }) {
-  const s = scope || SCOPE_DEFAULT;
+  const s = scope || SCOPE_ALL;
   const opts = [
     { k: "all", label: "Everything" },
     { k: "days", label: "Days" },
@@ -18996,7 +17816,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   /* Her choice of how far back this read looks — one of them, never all
      three. Kept in her settings so the app opens on whatever she chose last,
      and changeable every single time (rules 12, 13). */
-  const scope = data.settings?.readScope || SCOPE_DEFAULT;
+  const scope = data.settings?.readScope || SCOPE_ALL;
   const setScope = (sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), readScope: sc } }));
 
   /* built here rather than in the engine: it is only wanted on this screen,
@@ -19108,7 +17928,7 @@ function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
     <div>
       <Eyebrow color={C.signal}>{mode === "read" ? "Where you are" : "The month, read properly"}</Eyebrow>
       <h1 className="disp" style={{ fontSize: 27, fontWeight: 400, lineHeight: 1.1, margin: "2px 0 10px" }}>
-        {mode === "read" ? "Read my history and tell me what it shows" : "Read it and design next month's programme"}
+        {mode === "read" ? "Read everything I have so far" : "Read the month, design the next one"}
       </h1>
 
       <div style={{ fontSize: 13.5, lineHeight: 1.6, color: C.muted, marginBottom: 16 }}>
@@ -19616,22 +18436,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
   };
   const endRef = useRef(null);
 
-  /* HER REPORT, 14 August: "where did u put the token and money counter????"
-     It was at the top of this screen. So was the window field from build 143,
-     and the header. None of it was reachable, because this scrolled to the
-     bottom on the way IN — every time — and pushed the whole top of the sheet
-     out of view before she ever saw it. A screen she has to scroll UP to
-     discover is a screen she does not know exists.
-
-     It now scrolls only when the conversation actually MOVES: when she sends
-     something, or when the coach answers. Opening it leaves her at the top,
-     where the things the app is trying to tell her are. */
-  const [showParts, setShowParts] = useState(false);
-  const scrolled = useRef(false);
-  useEffect(() => {
-    if (!scrolled.current) { scrolled.current = true; return; }
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, busy]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, busy]);
 
   const context = () => {
     /* ---- WHY THE COACH KEPT FORGETTING WHAT SHE HAD JUST DONE ----------
@@ -19666,14 +18471,8 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
        first, in the same detail the fortnight used to carry. */
     const loggedDays = Object.keys(data.logs || {});
     const morningDays = Object.keys(data.morning || {});
-    /* HER WINDOW, set by her under "talk to your coach" (build 143). It bounds
-       the DAY-BY-DAY detail and nothing else — every open item in the record,
-       every goal, every paused item, every previous read's conclusions and
-       everything she has written still travel in full whatever she sets. */
-    const chatCut = scopeCutoff(data.settings?.chatScope || CHAT_SCOPE_DEFAULT, coach.t);
     const recentDays = Array.from(new Set([...loggedDays, ...morningDays]))
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t
-        && (chatCut === "all" || d >= chatCut)).sort();
+      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t).sort();
     /* THE SAME SETTLED STATE THE REST OF THE APP READS. This read the raw
        record, so a day carrying both a rest flag and a session was described to
        the coach as a completed session — the one surface where the model forms
@@ -19692,12 +18491,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         wokeAt: "woke at", sleep: "hours slept",
         symptoms: "she said she was feeling" };
       const am = [
-        /* Build 148, her instruction: "drop the unread whoop fields." Nine of
-           them are imported, kept, shown in the WHOOP log — and read by nothing
-           in the app. Three are read by nothing at all. They are still on her
-           device; they simply stop being posted to the coach every message. */
-        ...Object.keys(mg).filter((k) => !WHOOP_UNREAD.includes(k))
-          .filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
+        ...Object.keys(mg).filter((k) => mg[k] !== "" && mg[k] !== undefined && mg[k] !== null)
           .map((k) => `${NICE[k] || k} ${mg[k]}`),
         (l && l.sleep && !mg.sleep) ? `slept ${l.sleep}h — she typed this herself` : null,
         (l && l.voidedSession) ? `she set a session aside on this day when she confirmed it was rest: ${l.voidedSession.type || "session"}${l.voidedSession.minutes ? ` ${l.voidedSession.minutes}min` : ""} — it is kept, not deleted` : null,
@@ -19719,16 +18513,6 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         (() => { const n = Object.values(l.drillsDone || {}).filter(Boolean).length;
           return n ? `${n} ten-minutes drill${n === 1 ? "" : "s"} done` : null; })(),
         l.loads ? `lifted ${l.loads}` : null,
-        /* Build 142, her audit of 14 August. Her mood tap and her body work
-           were computed from and then thrown away — she could see a pattern
-           the coach could not point at. Both go on the day now. */
-        l.mood ? `she said she felt "${l.mood}"` : null,
-        (l.therapy || []).length
-          ? "body work: " + (l.therapy || []).map((x) => {
-              const th = THERAPIES.find((y) => y.id === x.type);
-              return `${th ? th.label : x.type}${x.minutes ? ` ${x.minutes}min` : ""}${x.note ? ` — she wrote: "${x.note}"` : ""}`;
-            }).join(" + ")
-          : null,
       ].filter(Boolean).join(", ");
       const head = l.completed
         ? (l.type || "session") + (l.minutes ? " " + l.minutes + "min" : "") + extras
@@ -19759,36 +18543,10 @@ and follows filmed classes plus a real Pilates instructor who pushes her hard.
 
 Do not quote baseline figures from memory — every number you have is in the list below, computed from
 her own data. If a number is not there, say you don't have it rather than estimating.
-${(() => {
-  /* HER RUNNING HISTORY (build 145). Everything older than the window she set
-     is HERE rather than absent — the arc of her training in your own words,
-     folded forward as you go. It sits at the top because it is what you would
-     want to have read before answering her, and because it barely changes
-     between one message and the next, which is what makes it the cheap part. */
-  const m = data.memory || {};
-  const txt = String(m.text || "").trim();
-  const hers = String(m.hers || "").trim();
-  if (!txt && !hers) return "";
-  return `
-=== HER HISTORY, AS YOU HAVE COME TO UNDERSTAND IT ===
-This is your own running account of her, kept on her device and folded forward after everything she
-says. It carries the SHAPE of everything older than the window below — what moved and when, what each
-class costs her, what her lists were for and whether they worked, what you concluded and what is
-still open. It is not a substitute for her actual numbers: anything inside the window below is given
-to you exactly as she entered it, and where the two disagree, WHAT SHE ENTERED WINS.
-${txt || "(nothing folded yet)"}${hers ? `
-
---- AND THIS PART SHE WROTE HERSELF. IT OUTRANKS EVERYTHING ABOVE, INCLUDING YOU. ---
-${hers}` : ""}
-${m.upto ? `(folded up to ${m.upto}.)` : ""}
-`;
-})()}
 
 Where she is right now:
 - Phase: ${coach.phase.name} — ${coach.phase.line}
-- Week ${coach.pos.week}, month ${coach.pos.month}, quarter ${coach.pos.quarter}.
-  This week's theme: ${coach.themes.week || "none set"}. This month's: ${coach.themes.month || "none set"}.
-  This quarter's: ${coach.themes.quarter || "none set"}. Themes describe emphasis, never a plan past the block.
+- Week ${coach.pos.week}, month ${coach.pos.month}. Theme: ${coach.themes.week}
 - This week: ${coach.weekDone} of ${coach.seasonTarget} sessions. Consistency ${coach.consistency}% of the last 28 days.
 - This week's call: ${coach.verdict.label} — ${coach.verdict.line}
 - Class the app prescribed for today: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min — because ${coach.prescribed.reason}` : "none"}
@@ -19928,18 +18686,6 @@ ${(() => {
   out.push(`  * Her own recovery baseline: ${st.recoveryBaseline ?? "?"}%`);
   if (st.gymDate) out.push(`  * Gym membership dated ${st.gymDate}`);
   out.push(`  * Symptom tracking: ${st.trackSymptoms ? "on" : "off"}`);
-  /* Build 140, her instruction 14 August: "nothing should be hardcoded."
-     Every threshold the app judges her by is hers to move now, so the coach
-     has to know which ones she HAS moved — otherwise it will explain a
-     verdict using a number she has already changed. Only the differences are
-     sent; the defaults are in the code you are already reasoning about. */
-  {
-    const F0 = FORMULA_DEFAULTS, mine = st.formulas || {};
-    const moved = Object.keys(F0).filter((k) => mine[k] !== undefined && Number(mine[k]) !== Number(F0[k]));
-    out.push(moved.length
-      ? `  * THRESHOLDS SHE HAS CHANGED HERSELF — these override the defaults everywhere, and she meant them: ${moved.map((k) => `${k} ${F0[k]} → ${mine[k]}`).join(", ")}`
-      : `  * Thresholds: she has not changed any of them; every number the app judges her by is still at its default.`);
-  }
   return out.join("\n");
 })()}
 - EVERY READ YOU HAVE EVER DONE FOR HER, oldest first — your own earlier conclusions, in your own
@@ -20052,32 +18798,10 @@ ${data.settings?.webSearch !== false ? `- YOU CAN SEARCH THE INTERNET. Her instr
   them hers rather than the app's:
 ${Object.keys(data.notes || {}).sort().filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text)
   .map((k) => `  * ${k}: "${data.notes[k].text}"`).join("\n") || "  none kept"}
-- THE CALCULATIONS SHE HAS ASKED YOU TO WATCH. Explain any of these in plain English on request,
-  never in jargon, and always tie it back to HER training and what she should do next. Read them
-  together rather than one at a time — the interesting answers come from combining three or four.
-${(() => {
-  const shown = metricsForCoach(coach.allMetrics, data.settings);
-  const hidden = (coach.allMetrics || []).length - shown.length;
-  return hidden > 0
-    ? `  (The app runs ${(coach.allMetrics || []).length} calculations. She has chosen ${shown.length} for you to
-  watch — the rest still run and are still on her screen, she has simply not asked you to carry them.
-  If she asks about one that is not here, say plainly that you do not have it in front of you and
-  that she can switch it on in Settings, rather than guessing at it.)`
-    : "";
-})()}
-${metricsForCoach(coach.allMetrics, data.settings).map((v) => {
-  /* HOW EACH ONE IS WORKED OUT used to go in every message — 1,667 tokens of
-     arithmetic lesson, identical every time, which the coach never acts on.
-     That text was written for HER, for the card under the "i". It goes now
-     only for the number she actually tapped to ask about, which is where it
-     was ever needed. Nothing else about the calculation changed: the value,
-     the verdict, what it means for her and what it still needs all stay. */
-  const asked = about && (String(about).toLowerCase().includes(String(v.label || "").toLowerCase())
-    || String(v.label || "").toLowerCase().includes(String(about).toLowerCase()));
-  return `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.label} (${v.scope}): ${v.display} — ${v.sub}. ${v.plain}${asked ? ` HOW: ${v.how || "n/a"}` : ""}${v.need ? ` NOT YET AVAILABLE: ${v.need}` : ""}`;
-}).join("\n")}
-  If she asks how any of these is worked out, say you can show her — the app has the full explanation
-  under the i on that number's card, and tapping the number brings it to you here.
+- EVERY CALCULATION THE APP RUNS. Explain any of these in plain English on request, never in
+  jargon, and always tie it back to HER training and what she should do next. Read them together
+  rather than one at a time — the interesting answers come from combining three or four of them.
+${coach.allMetrics.map((v) => `  * [${v.group}]${v.key ? "(headline)" : ""} ${v.label} (${v.scope}): ${v.display} — ${v.sub}. ${v.plain} HOW: ${v.how || "n/a"}${v.need ? ` NOT YET AVAILABLE: ${v.need}` : ""}`).join("\n")}
 - Read across all five: ${coach.reading}
 - Load by body region this week (share of total work): ${coach.bodyRows.map((r) => `${r.label} ${r.share}%`).join(", ")}
 - BODY WORK she books herself (never prescribed by you, but it changes what the next session can be):
@@ -20133,14 +18857,14 @@ ${(() => {
   const ks = Object.keys(data.weekly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.weekly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.weekly[k][f.id + "__machine"] ? ` (on the ${data.weekly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
 ${(() => {
   const ks = Object.keys(data.monthly || {}).sort();
   if (!ks.length) return "  none yet";
   return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
-    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.monthly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
+    .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${data.monthly[k][f.id + "__machine"] ? ` (on the ${data.monthly[k][f.id + "__machine"]})` : ""}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - Last battery: ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
@@ -20189,72 +18913,6 @@ ${(() => {
     });
     return out.join(" | ") || "none imported yet";
   })()}
-- HER LIBRARY — THE ONLY CLASSES THAT MAY EVER BE NAMED. She follows filmed classes. You may never
-  invent one, never name one that is not on this list, and never replace a class with a written
-  sets-and-reps session. (The one exception is rule 10: where something she has said she wants needs
-  a muscle or a range NOTHING here reaches, you may write her exercises for it — alongside a class,
-  never instead of one, and say plainly what the library could not do.)
-${(() => {
-  const lib = (data.library || []).filter((w) => w && w.status !== "removed");
-  if (!lib.length) return "  her library is empty.";
-  return lib.map((w) => [
-    `  * ${w.name}${w.addon ? " (add-on, never a whole session)" : ""} — ${w.goal || "?"}, ${(w.durations || []).join("/") || "?"} min, intensity ${w.intensity ?? "?"}/5, recovery cost ${w.recoveryCost ?? "?"}, shoulder load ${w.shoulderLoad || "?"}${w.home ? ", can be done at home" : ""}`,
-    w.body ? `      reaches: ${Object.entries(w.body).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}/3`).join(", ")}` : null,
-    w.equipment ? `      needs: ${w.equipment}` : null,
-    w.structure ? `      how it runs: ${w.structure}` : null,
-  ].filter(Boolean).join("\n")).join("\n");
-})()}
-- WHAT IS PAUSED, WHAT STANDS IN FOR IT, AND WHEN IT IS DUE AGAIN: ${(() => {
-    const ps = pausedFields(data);
-    if (!ps.length) return "nothing is paused.";
-    return "PAUSED IS NOT REMOVED. Every one of these is coming back, and getting her back to it is your job.\n"
-      + "  Do not prescribe the paused movement itself and do not write a near-copy under another name. DO train\n"
-      + "  what has to get strong for it to return, watch the stand-in measure, and say plainly when the stand-in\n"
-      + "  has moved enough that the paused one is worth trying before its date — you may raise it early on the\n"
-      + "  evidence. When a date has arrived, offer the retest warmly, and accept 'not yet' or 'never' as answers.\n"
-      + "  HER OWN GOALS GO THROUGH THE SAME GATE (her instruction, 15 August): everything she has said she wants\n"
-      + "  to be able to do must still be worked AND tested every week and every month — but reach it by a route\n"
-      + "  that avoids every area named here. Never prescribe or test a goal through a paused area. Where the only\n"
-      + "  honest test would load one, say so plainly and test the supporting capacity instead.\n"
-      + ps.map((f) => {
-          const si = standInMeasure(data, f.id);
-          const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
-          return `  * ${f.label} (${f.which} battery) — paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
-            + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
-            + `${si ? ` Standing in: ${si.label} — that is the number that earns it back.`
-                   : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : ""}`
-            + ` Due to be tried again ${f.retestOn || "?"}`
-            + `${f.retestWeeks ? ` (${f.retestWeeks} weeks — how long this tissue needs before a change is real)` : ""}.`
-            + `${retestDue(f, coach.t) ? " THAT DATE HAS ARRIVED — offer it today." : ""}`
-            + `${feels ? ` Her own score on it: ${feels}.` : ""}`;
-        }).join("\n");
-  })()}
-- WHAT SHE HAS TAKEN OFF FOR GOOD, AND WHY — DO NOT PUT ANY OF IT BACK, AND DO NOT SUGGEST IT IN CONVERSATION.
-  Never prescribe any of these again, do not write a near-copy under another name, and do not argue
-  for them. If one of them is the only route to something she says she wants, say so plainly once and
-  let her decide. Nothing here is deleted — she can put any of it back herself whenever she likes.
-${(() => {
-  const out = [];
-  const say = (kind, label, why, when) =>
-    out.push(`  * ${kind}: "${label}"${when ? ` — taken off ${when}` : ""}${why ? `. Her reason: ${why}` : ""}`);
-  (data.drills || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("from her ten minutes", x.label, x.removedWhy, x.removedOn));
-  ((data.fields || {}).weekly || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("weekly measure", x.label, x.removedWhy, x.removedOn));
-  ((data.fields || {}).monthly || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("monthly measure", x.label, x.removedWhy, x.removedOn));
-  (data.mobTests || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("mobility test", x.label, x.removedWhy, x.removedOn));
-  (data.library || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("class", x.name, x.removedWhy, x.removedOn));
-  (data.goals || []).filter((x) => x && x.status === "removed")
-    .forEach((x) => say("goal", x.text, x.removedWhy, x.removedOn));
-  (data.bodywork || []).forEach((pg) => [...(pg.lists || []),
-    ...((pg.rounds || []).flatMap((r) => r.lists || []))]
-    .forEach((li) => (li.exercises || []).filter((x) => x && x.status === "removed")
-      .forEach((x) => say(`from her ${pg.area} list ${li.n || ""}`.trim(), x.name, x.removedWhy, x.removedOn))));
-  return out.length ? out.join("\n") : "  nothing has been taken off.";
-})()}
 - Class notes she has written: ${(data.library || []).filter((w) => w.felt).map((w) => `${w.name}: ${w.felt}`).join(" | ") || "none yet"}
 - Loads she has recorded: ${(data.library || []).filter((w) => w.resistance).map((w) => `${w.name}: ${w.resistance}`).join(" | ") || "none yet"}
 - WHAT SHE ACTUALLY LIFTED, most recent first (this is the real record; the line above is only what the class usually calls for): ${(() => {
@@ -20325,20 +18983,10 @@ Two or three sentences unless she asks for more.`;
      before the model is asked as well as after. Rule 15: nothing she says is
      lost. It used to be saved only on success, inside the try — so a failed
      call, a missing key or a thrown prompt took her words with it. */
-  const persist = (all, spent) => setData((d) => {
-    /* Build 143: what this conversation has cost, accumulated across its
-       messages rather than overwritten, so the number on a conversation is
-       the whole conversation and not its last exchange. */
-    const prev = (d.chats || []).find((c) => c.id === sessionId.current) || {};
+  const persist = (all) => setData((d) => {
     const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
-      tokensIn: (prev.tokensIn || 0) + ((spent && spent.in) || 0),
-      tokensOut: (prev.tokensOut || 0) + ((spent && spent.out) || 0),
-      cost: (prev.cost || 0) + (spent ? centsFor(spent, formulas(d.settings)) : 0),
-      cacheWrite: (prev.cacheWrite || 0) + ((spent && spent.cacheWrite) || 0),
-      cacheRead: (prev.cacheRead || 0) + ((spent && spent.cacheRead) || 0),
-      saved: (prev.saved || 0) + (spent ? centsSaved(spent, formulas(d.settings)) : 0),
       messages: all.map((m) => ({ role: m.role, text: m.content,
-        ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) })) };
+        ...(m.image ? { image: m.image } : {}) })) };
     /* Everything said today lives in ONE entry. The other same-day entries
        are already gathered into `all` above, so dropping them here loses no
        word she has ever said — it stops the same exchange being stored twice
@@ -20354,40 +19002,10 @@ Two or three sentences unless she asks for more.`;
     return { ...d, chats };
   });
 
-  /* Folding her history forward. Never blocks her, never throws at her, and
-     never claims a fold that did not happen. */
-  const folding = useRef(false);
-  const foldMemory = async (allMsgs) => {
-    if (folding.current) return;
-    const key = data.settings?.apiKey;
-    if (!key && !insideClaude()) return;
-    folding.current = true;
-    try {
-      /* built from the data as it stands INCLUDING what she just said, which
-         is why this runs after persist rather than beside it */
-      const withChat = { ...data, chats: (() => {
-        const c = [...(data.chats || [])].filter((x) => x.id !== sessionId.current);
-        return [...c, { id: sessionId.current, date: coach.t, about: about || "open chat",
-          messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
-      })() };
-      const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
-      const text = await askModel({
-        apiKey: key, system: MEMORY_SYSTEM, maxTokens: 3000, usage: spent,
-        messages: [{ role: "user", content: memoryInput(withChat, coach) }],
-      });
-      if (!text || !String(text).trim()) return;      /* rule 23: no fold is not an empty fold */
-      setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, coach.t, coach.t, spent) }));
-    } catch (e) {
-      /* silent to her, deliberately: she asked a training question and got an
-         answer. The memory simply stays where it was and catches up next time. */
-    } finally { folding.current = false; }
-  };
   const send = async () => {
     const text = draft.trim();
     if ((!text && !photo) || busy) return;
-    /* TIMED, so the app can measure her instead of assuming her (build 147).
-       Only the moment is kept — no content, nothing new about her. */
-    const next = [...msgs, { role: "user", content: text, at: Date.now(), ...(photo ? { image: photo } : {}) }];
+    const next = [...msgs, { role: "user", content: text, ...(photo ? { image: photo } : {}) }];
     setMsgs(next); setDraft(""); setPhoto(null); setBusy(true);
     setData((d) => ({ ...d, chatDraft: "" }));
     /* Save what SHE said — photo included — before anything can fail. */
@@ -20402,61 +19020,21 @@ Two or three sentences unless she asks for more.`;
               data: String(m.image).split(",")[1] || "" } },
             ...(m.content ? [{ type: "text", text: m.content }] : []) ] }
         : { role: m.role, content: m.content });
-      /* Build 143, her question of 14 August: "is this the amount I actually
-         used by the app so far?" The app could not answer, because this call
-         never asked. It does now, and what it costs is written on the
-         conversation and totalled in Settings. */
-      const cachePlan = cachePolicy(data, formulas(data.settings));
-      const spend = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
       const reply = await askModel({
-        /* the only call worth caching: the same system prompt goes out again
-           with every message of the conversation */
-        /* HER CORRECTION, 14 August: cache only when her own measured gaps say
-           it would actually be read back. Unconditional caching was a
-           surcharge on the way she really uses it. */
-        cache: cachePlan.mode !== "off",
-        cacheTtl: cachePlan.mode === "1h" ? "1h" : "5m",
-        /* her decision, 14 August: the answer's room depends on what she asked */
-        maxTokens: replyBudget(text, coach, formulas(data.settings)),
         apiKey: data.settings?.apiKey,
         system: context(),
         messages: next.map(blockify),
         search: data.settings?.webSearch !== false,
-        usage: spend,
       }) || "I couldn't get a response just then. Try again in a moment.";
       const done = [...next, { role: "assistant", content: reply }];
       setMsgs(done);
-      persist(done, spend);
-      /* AND THEN FOLD IT FORWARD (build 145). Her instruction was that the
-         memory updates "after everything I say".
-
-         THE ARITHMETIC ARGUES WITH HER, so it is said out loud rather than
-         decided behind her: a fold costs about 2.6c, almost all of it the
-         rewritten memory coming back. A cached message costs about 0.4c
-         against 3.5c uncached. Fold after EVERY message and the folding
-         costs more than the caching saves. Fold once when the conversation
-         ends and the memory is identical — it reads everything since the day
-         it was last folded to, so not one word she said is missed either way.
-
-         So: once per conversation by default, and `memoryFold: "message"` in
-         her settings if she wants it after every line. Her call, not mine. */
-      if (data.settings?.memoryFold === "message") foldMemory(done);
+      persist(done);
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
         ? "I need an API key to talk to you outside the Claude app. Settings, then Your data, then paste one in — it stays on this device."
         : "Couldn't reach me just then — check your connection and try again." }]);
     } finally { setBusy(false); }
   };
-
-  /* THE FOLD, WHEN SHE PUTS THE CONVERSATION DOWN. One call, catching
-     everything said in it — and it runs on the way out, so it can never sit
-     between her and an answer. */
-  const msgsRef = useRef(msgs);
-  useEffect(() => { msgsRef.current = msgs; }, [msgs]);
-  useEffect(() => () => {
-    if ((data.settings?.memoryFold || "conversation") !== "message"
-      && (msgsRef.current || []).some((m) => m.role === "user")) foldMemory(msgsRef.current);
-  }, []);
 
   const openers = [
     "Why that call this week?",
@@ -20470,140 +19048,8 @@ Two or three sentences unless she asks for more.`;
       <Eyebrow color={C.ochre}>Talk to your coach</Eyebrow>
       <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>Ask me anything</h1>
       <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 }}>
-        I can see your battery, the call I made, and every day you logged in the window you set below.
-        Argue with any of it if you think I'm wrong.
+        I can see your week, your battery and the call I made. Argue with it if you think I'm wrong.
       </div>
-      {/* HER INSTRUCTION, 14 August: "a year from now doesn't need to be
-          inspected every time I ask the coach something simple." Her field,
-          exactly like the one on the read. It bounds the day-by-day detail
-          only — the record, her goals, what she has written and every earlier
-          read still go in full whatever she sets here. */}
-      {/* WHAT THIS CONVERSATION IS COSTING, WHERE SHE IS SPENDING IT.
-          Her instruction, 14 August: "i need the tokens and cost calculator
-          under talk to my coach so I can see it." It was in Settings, which is
-          not where the spending happens. Rule 11: if the app names something,
-          the means to see it is where it sits. Nothing here is estimated — it
-          adds up what was recorded, and says so plainly when there is nothing
-          recorded yet. */}
-      {(() => {
-        const F2 = formulas(data.settings);
-        const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
-        const today = spendSince(data, coach.t);
-        const all = spendSince(data, null);
-        const cp = cachePolicy(data, F2);
-        const cacheLabel = { "5m": "cached, 5 min", "1h": "cached, 1 hour", off: "not cached" }[cp.mode];
-        const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
-        return (
-          <Card style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-              <Eyebrow>What this is costing</Eyebrow>
-              <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{cacheLabel}</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10,
-              textAlign: "center", margin: "11px 0 4px" }}>
-              {[["This talk", money(here.cost || 0)], ["Today", money(today.cents)], ["All of it", money(all.cents)]]
-                .map(([l, v]) => (
-                <div key={l}>
-                  <div className="mono disp" style={{ fontSize: 19, fontWeight: 800, color: C.ink }}>{v}</div>
-                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>{l}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
-              {started
-                ? `${(Number(here.tokensIn) || 0).toLocaleString()} words read, ${(Number(here.tokensOut) || 0).toLocaleString()} written back so far${Number(here.saved) > 0 ? `, ${money(here.saved)} of it saved by not re-reading the same thing twice` : ""}.`
-                : "Nothing recorded for this conversation yet — the figure appears after your first message."}
-            </div>
-            <div style={{ marginTop: 9 }}>
-              <InfoNote small inherit
-                why={`This is what the app recorded, on your own key, at ${F2.priceIn} per million words read and ${F2.priceOut} per million written back. A word your coach already had in front of it from a moment ago costs a tenth. It is not your Anthropic bill — anything else on that account is not counted here. ${cp.why}`}>
-                <span style={{ fontSize: 12, color: C.muted }}>Where this comes from</span>
-              </InfoNote>
-            </div>
-            {/* HER INSTRUCTION, 15 August: "measure why it is 75k words
-                immediately. that is nonsense." She is right, and the app is the
-                only thing that can answer it, because the words are HER data on
-                HER device. So it counts its own payload, section by section,
-                and shows her the biggest ones. No guessing from here. */}
-            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-              <button onClick={() => setShowParts((v) => !v)} className="tap" style={{
-                border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
-                {showParts ? "Hide what's in it" : "What's in it, biggest first →"}
-              </button>
-              {showParts && (() => {
-                let built = "";
-                try { built = context(); } catch (e) { built = ""; }
-                if (!built) return (
-                  <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
-                    Couldn't measure it just now.
-                  </div>
-                );
-                const wordsOf = (s) => (String(s).trim() ? String(s).trim().split(/\s+/).length : 0);
-                const secs = []; let cur = { name: "the opening", n: 0 };
-                built.split("\n").forEach((l) => {
-                  if (/^-\s+[A-Z]/.test(l)) { secs.push(cur); cur = { name: l.replace(/^-\s+/, "").slice(0, 58), n: 0 }; }
-                  cur.n += wordsOf(l);
-                });
-                secs.push(cur);
-                const total = secs.reduce((a, s) => a + s.n, 0) || 1;
-                return (
-                  <div style={{ marginTop: 9 }}>
-                    <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 8 }}>
-                      {total.toLocaleString()} words go out with every message you send.
-                      {cp.mode !== "off" ? " After the first, they cost a tenth." : ""}
-                    </div>
-                    {secs.filter((s) => s.n > 0).sort((a, b) => b.n - a.n).slice(0, 12).map((s, i) => (
-                      <div key={i} style={{ display: "flex", justifyContent: "space-between",
-                        gap: 10, padding: "5px 0", borderTop: i ? `1px solid ${C.chalk}` : "none" }}>
-                        <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4,
-                          minWidth: 0, overflow: "hidden" }}>{s.name}</span>
-                        <span className="mono" style={{ fontSize: 11, color: C.ink, flexShrink: 0 }}>
-                          {s.n.toLocaleString()} · {Math.round((s.n / total) * 100)}%
-                        </span>
-                      </div>
-                    ))}
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 8, lineHeight: 1.45 }}>
-                      Anything here you would rather your coach did not carry, say so and it comes out.
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </Card>
-        );
-      })()}
-      {/* HER INSTRUCTION, 15 August: "Make access to Internet optional. I
-          toggle that I turn on or off. And I need it next to talk to my coach."
-
-          It lived in Settings and was ON for every message, with up to five
-          searches a message — and every page the coach read came back as words
-          she paid for, uncached, and stayed in the conversation to be paid for
-          again on the next message. It is off unless she turns it on, and the
-          switch is here, where she is about to talk. */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <Eyebrow>The internet</Eyebrow>
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
-              {data.settings?.webSearch
-                ? "On for this conversation. Your coach can look things up — and what it reads, you pay for."
-                : "Off. Your coach answers from your own history only, which is most of what you ask it anyway."}
-            </div>
-          </div>
-          <button onClick={() => setData((d) => ({ ...d,
-            settings: { ...(d.settings || {}), webSearch: !(d.settings || {}).webSearch } }))}
-            className="tap" style={{
-              flexShrink: 0, padding: "9px 16px", borderRadius: 999, cursor: "pointer",
-              fontSize: 12.5, fontWeight: 600, fontFamily: "inherit",
-              border: `1.5px solid ${data.settings?.webSearch ? C.signal : C.line}`,
-              background: data.settings?.webSearch ? C.signal : "transparent",
-              color: data.settings?.webSearch ? C.chalk : C.ink,
-            }}>{data.settings?.webSearch ? "On" : "Off"}</button>
-        </div>
-      </Card>
-      <ScopePicker scope={data.settings?.chatScope || CHAT_SCOPE_DEFAULT}
-        onPick={(sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } }))} />
 
       {/* EVERY CONVERSATION SHE HAS EVER HAD, ONE TAP AWAY. Today's is on the
           page already; the rest are here rather than gone. */}
@@ -20804,39 +19250,15 @@ Two or three sentences unless she asks for more.`;
         <div ref={endRef} />
       </div>
 
-      {/* WHAT IT HAS COST, WHERE SHE CANNOT MISS IT.
-          Her report, 14 August: "where did u put the token and money counter????"
-
-          It was there — at the top of this screen, along with the window field
-          added in build 143 and the header itself. NONE OF IT WAS VISIBLE,
-          because the conversation scrolled itself to the bottom the moment the
-          sheet opened and pushed everything above it off the screen.
-
-          Two fixes. The scroll no longer fires on the way in (below), and the
-          figure now also sits on the composer, which is pinned to the bottom
-          and can never leave — the same reasoning that put Send there after her
-          report of 10 August. */}
+      {/* HER REPORT, 10 August: "there is no send button after I finish my
+          recording." There was — three screens down. A long dictation grew the
+          box until Send was pushed off the bottom of the sheet, which from
+          where she stands is a missing button. The composer is pinned to the
+          bottom of the screen now, the box stops growing at a third of it and
+          scrolls inside itself past that, and Send sits beside the mic where
+          it can never leave. */}
       <div style={{ position: "sticky", bottom: 0, background: C.chalk,
         padding: "10px 0 4px", borderTop: `1px solid ${C.line}` }}>
-        {(() => {
-          const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
-          const all = spendSince(data, null);
-          const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
-          return (
-            <div aria-label="what this is costing"
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
-                width: "100%", padding: "0 2px 8px" }}>
-              <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-                {started
-                  ? `this talk ${money(here.cost || 0)} · ${(Number(here.tokensIn) || 0).toLocaleString()} in, ${(Number(here.tokensOut) || 0).toLocaleString()} out`
-                  : "this talk — nothing spent yet"}
-              </span>
-              <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
-                all of it {money(all.cents)}
-              </span>
-            </div>
-          );
-        })()}
         {photo && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
             <img src={photo} alt="ready to send" style={{ height: 52, borderRadius: 8 }} />
@@ -20890,13 +19312,8 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     /* an open shoulder entry in the record is enough to stop asking for
        more overhead (her rule, 12 August: the record is the source) */
     const sore = overhead && !!coach.shoulderSore;
-    /* HER DECISION, 15 August: "make it aim 15% higher". What was here read
-       the weekly verdict — and a "pull back" verdict made the step NEGATIVE,
-       so the battery asked her to beat a number BELOW what she had just done
-       while printing "that beats what you did" underneath it. One number now,
-       hers, in her formulas. A frozen or sore shoulder still holds. */
-    const FX = formulas((data && data.settings) || {});
-    const step = frozen || sore ? 0 : (Number(FX.aimStep) || 0.15);
+    const step = frozen || sore ? 0
+      : coach.verdict.key === "advance" ? 0.05 : coach.verdict.key === "reduce" ? -0.05 : 0.02;
     let raw = m.better === "down" ? m.now * (1 - step) : m.now * (1 + step);
     /* and never more than half a kilo a week on anything overhead */
     if (overhead && step > 0 && f.type === "weightreps") {
@@ -20945,10 +19362,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       const upW = Math.round((w + stepUp) * 10) / 10;
       const repsAtUpW = Math.max(1, Math.ceil(raw / upW));
       const repsSameW = Math.max(r + 1, Math.ceil(raw / w));
-      /* CARD 2: never say "that beats what you did" unless it does. The line
-         was printed without checking, so a lower aim came with a claim that
-         was arithmetically false. */
-      const worthIt = repsAtUpW >= Math.ceil(r * 0.66) && upW * repsAtUpW > m.now;
+      const worthIt = repsAtUpW >= Math.ceil(r * 0.66);
       const aim = worthIt
         ? `go up to ${upW} ${loadUnit(f)} and get ${say(repsAtUpW)} — that beats what you did`
         : `stay at ${w} ${loadUnit(f)} and get ${say(repsSameW)}`;
@@ -20987,25 +19401,6 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     if (standIns[sk]) { const m = { ...standIns[sk] }; delete m[id]; standIns[sk] = m; }
     return { ...d, skips, standIns };
   });
-  /* A pause is hers to end, to postpone, or to make permanent — from here,
-     where she is standing, rather than a settings screen (rule 11). "Never"
-     is an available answer, chosen by her, never assumed (her instruction). */
-  const mapFields = (fn) => setData((d) => ({ ...d, fields: { ...(d.fields || {}),
-    weekly: ((d.fields || {}).weekly || []).map(fn),
-    monthly: ((d.fields || {}).monthly || []).map(fn) } }));
-  const unpause = (id) => mapFields((f) => (f.id === id
-    ? { ...f, status: "live", unpausedOn: coach.t } : f));
-  const pushOut = (id) => mapFields((f) => (f.id === id
-    ? { ...f, retestOn: addDays(coach.t, 7 * (Number(f.retestWeeks) || 4)),
-        postponed: [...(f.postponed || []), coach.t] } : f));
-  const neverAgain = (id) => mapFields((f) => (f.id === id
-    ? { ...f, status: "removed", removedOn: coach.t, removedWhy: "her answer, asked at the time: never" } : f));
-  const lastFeel = (f) => { const a = f.feels || []; return a.length ? a[a.length - 1].score : null; };
-  const scoreFeel = (id, n) => mapFields((f) => (f.id === id
-    ? { ...f, feels: [...(f.feels || []).filter((x) => x.on !== coach.t), { on: coach.t, score: n }] } : f));
-  const pausedHere = pausedFields(data).filter((f) => (isWeekly ? f.which === "weekly" : true));
-  const pauseBtn = { padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
-    border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink, fontFamily: "inherit" };
   const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
   const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
   /* ============================================================================
@@ -21190,60 +19585,6 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
           fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
         Change what's measured — add, remove, rename, reorder →
       </button>
-
-      {/* HER CORRECTION, 14-15 August: a pause is not a removal. It says why it
-          stopped, what is standing in for it, when it is due - and she can put
-          it back, push it out, or end it for good, from where she is standing. */}
-      {pausedHere.length > 0 && (
-        <Card style={{ marginBottom: 12 }}>
-          <Eyebrow>Paused, and what is standing in</Eyebrow>
-          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 4 }}>
-            Not dropped. Every number you ever logged on these is still here and still in your charts —
-            they are just not being asked for while the work that earns them back is going in.
-          </div>
-          {pausedHere.map((f) => {
-            const si = standInMeasure(data, f.id);
-            const due = retestDue(f, coach.t);
-            return (
-              <div key={f.id} style={{ padding: "11px 0 3px", borderTop: `1px solid ${C.line}` }}>
-                <div className="disp" style={{ fontSize: 14.5, marginBottom: 3 }}>{f.label}</div>
-                <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>
-                  {f.pausedWhy || "Paused"}.{f.pausedNote ? " " + f.pausedNote : ""}
-                </div>
-                {si ? (
-                  <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginTop: 5 }}>
-                    {si.label} is in its place — and it is the number that earns this one back.
-                  </div>
-                ) : f.pausedInstead ? (
-                  <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginTop: 5 }}>
-                    {f.pausedInstead}.
-                  </div>
-                ) : null}
-                <div className="mono" style={{ fontSize: 10, letterSpacing: "0.06em",
-                  color: due ? C.clay : C.muted, marginTop: 7 }}>
-                  {due ? "DUE — WORTH TRYING AGAIN NOW" : `worth trying again ${f.retestOn || "—"}`}
-                  {f.retestWeeks ? ` · ${f.retestWeeks} weeks, which is how long this takes to change` : ""}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 9, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11.5, color: C.muted, marginRight: 3 }}>How does it feel today?</span>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                    <button key={n} onClick={() => scoreFeel(f.id, n)} className="tap" style={{
-                      width: 25, height: 25, borderRadius: 6, cursor: "pointer", fontSize: 11,
-                      border: `1px solid ${C.line}`, fontFamily: "inherit",
-                      background: lastFeel(f) === n ? C.signal : "transparent",
-                      color: lastFeel(f) === n ? C.chalk : C.ink }}>{n}</button>
-                  ))}
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
-                  <button onClick={() => unpause(f.id)} className="tap" style={pauseBtn}>Put it back</button>
-                  <button onClick={() => pushOut(f.id)} className="tap" style={pauseBtn}>Not yet — ask me later</button>
-                  <button onClick={() => neverAgain(f.id)} className="tap" style={pauseBtn}>Never</button>
-                </div>
-              </div>
-            );
-          })}
-        </Card>
-      )}
 
       {/* Rule 12: what she took out is visible and reversible from where she
           is standing, not buried in a settings fold. */}
@@ -21776,7 +20117,7 @@ function CoachApp() {
             {tab === "plan" && <Workouts data={data} setData={setData} coach={coach} />}
             {tab === "body" && <BodyWork data={data} setData={setData} coach={coach} setSheet={setSheet} />}
             {tab === "progress" && <Progress data={data} setData={setData} coach={coach} setSheet={setSheet} />}
-            {tab === "settings" && <Settings data={data} setData={setData} coach={coach} setSheet={setSheet} />}
+            {tab === "settings" && <Settings data={data} setData={setData} setSheet={setSheet} />}
           </>
         )}
 
@@ -21834,10 +20175,6 @@ function CoachApp() {
             /* the goals card is on Today behind a folded row; it needed a door
                of its own so anything that names a goal can open it */
             <GoalsCard data={data} setData={setData} coach={coach} setSheet={setSheet} />
-          ) : sheet.kind === "coachmetrics" ? (
-            <CoachMetricsSheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
-          ) : sheet.kind === "memory" ? (
-            <MemorySheet data={data} setData={setData} close={() => setSheet(null)} />
           ) : sheet.kind === "profile" ? (
             <ProfileSheet data={data} setData={setData} coach={coach} setSheet={setSheet} />
           ) : sheet.kind === "vitals" ? (
@@ -22258,187 +20595,6 @@ do it from the page, not read an essay.`;
    Anything the coach writes in the chat can become a real list on the Body
    page, with every box the Body page gives an exercise. This shapes the
    words it already wrote; it does not invent a different workout. */
-/* ============================================================================
-   HER RUNNING HISTORY
-   ---------------------------------------------------------------------------
-   HER INSTRUCTION, 14 August, after a bank text she did not expect:
-
-     "a summary of my history that keeps updating as we go and saved into the
-      app and the coach can access and keeps updating based on anything we
-      discuss instead of sending everything to anthropic every time"
-
-   And, correcting the first version of this, which sent every number:
-
-     "not each and every number gets into the summary so it does not confuse
-      the coach. it gets uploaded only if there is a change and if there are
-      many changes it could give the highest and when it happens and the lowest
-      and when it happened or any other relevant way for a number to be
-      properly interpreted. it does not have to be the highest and lowest"
-     "instead of inputting numbers input trends where applicable"
-     "the sessions and exercise lists are very important and need to be
-      inputted but can be added to each other rather than input one by one"
-     "the most important is the number linked with my effort load for each and
-      any comments attached"
-     "it should be a summary of the lists and how they went, and which area they
-      cover and why we had this list in the first place... and if it is to
-      improve a specific area should say whether it worked or not"
-
-   THIS IS A LAYER, NEVER A REPLACEMENT. The raw detail still travels with
-   whatever window she set. Rule 34 stands: the coach must never be handed a
-   description of her in place of what she actually entered for the period it
-   is looking at. What this carries is the SHAPE of everything older, so that
-   nine months does not have to be shipped to say what nine months did.
-========================================================================== */
-/* WHAT AN UPDATE IS GIVEN — ONLY WHAT HAPPENED SINCE.
-   The first version of this handed the whole review payload to every fold,
-   which is 23,000 characters whether or not anything changed: it would have
-   COST more than the caching saved, which is the opposite of the point. An
-   update reads the deltas and nothing else. */
-const memoryDelta = (data, from, t) => {
-  const d = data || {};
-  const since = (k) => k > from && k <= t;
-  const L = [];
-  const S = (title, body) => { const b = String(body || "").trim(); if (b) L.push(`\n### ${title}\n${b}`); };
-  const LG = restIsFinal(d.logs || {});
-
-  S("DAYS SINCE THEN", Object.keys(LG).filter(since).sort().map((k) => {
-    const l = LG[k] || {}, m = (d.morning || {})[k] || {};
-    const bits = [
-      l.completed ? `${l.type || "session"}${l.minutes ? ` ${l.minutes}min` : ""}` : (l.rest ? "rest, her choice" : null),
-      l.rpe ? `effort ${l.rpe}/10` : null,
-      l.during ? `felt ${l.during}/5 during` : null,
-      l.energyAfter ? `${l.energyAfter}/5 after` : null,
-      l.mood ? `she said she felt "${l.mood}"` : null,
-      l.sessionNote ? `she wrote: "${l.sessionNote}"` : null,
-      l.did ? `she wrote: "${l.did}"` : null,
-      (l.therapy || []).length ? `body work: ${(l.therapy || []).map((x) => `${x.type}${x.note ? ` — "${x.note}"` : ""}`).join(" + ")}` : null,
-      m.recovery ? `recovery ${m.recovery}` : null,
-      m.asleep ? `${m.asleep} min asleep` : null,
-    ].filter(Boolean);
-    return bits.length ? `  * ${k}: ${bits.join(", ")}` : null;
-  }).filter(Boolean).join("\n"));
-
-  S("MEASUREMENTS TAKEN SINCE THEN", [["weekly", d.weekly], ["monthly", d.monthly], ["mobility", d.mobility]]
-    .map(([which, store]) => Object.keys(store || {}).filter(since).sort()
-      .map((k) => `  * ${which} ${k}: ${JSON.stringify(store[k])}`).join("\n")).filter(Boolean).join("\n"));
-
-  S("WHAT SHE TOLD YOU SINCE THEN", (d.issues || []).filter((i) => i && since(i.date))
-    .map((i) => `  * ${i.date}: "${i.text}"${i.status === "closed" ? " (since closed)" : ""}`).join("\n"));
-
-  S("FOLLOW-UPS SINCE THEN", (d.issues || []).flatMap((i) => (i.tried || [])
-    .filter((tr) => tr && since(tr.date))
-    .map((tr) => `  * ${tr.date}, on "${i.text}": tried ${tr.what}, she scored it ${tr.helped}/5`)).join("\n"));
-
-  S("GOALS SCORED SINCE THEN", (d.goals || []).flatMap((g) => (g.scores || [])
-    .filter((sc) => sc && since(sc.date))
-    .map((sc) => `  * ${sc.date}, "${g.text}": ${sc.value}/10${sc.note ? ` — she wrote: "${sc.note}"` : ""}`)).join("\n"));
-
-  S("BODY-PAGE WORK SINCE THEN", Object.keys(d.bwlog || {}).filter(since).sort()
-    .map((k) => `  * ${k}: ${Object.keys(d.bwlog[k] || {}).length} exercises logged`).join("\n"));
-
-  S("WHAT YOU TALKED ABOUT SINCE THEN", (d.chats || []).filter((c) => c && since(c.date))
-    .map((c) => `  * ${c.date} — ${c.about}:\n${(c.messages || []).map((x) => `      ${x.role === "user" ? "SHE" : "YOU"}: ${x.text || ""}`).join("\n")}`).join("\n"));
-
-  S("READS SINCE THEN", (d.reviews || []).filter((r) => r && since(r.date) && r.ok)
-    .map((r) => `  * ${r.date}: ${(r.conclusions || []).join(" | ") || "no conclusions recorded"}`).join("\n"));
-
-  S("THINGS SHE WROTE SINCE THEN", [
-    ...(d.journal || []).filter((j) => j && since(j.date)).map((j) => `  * journal ${j.date}: "${j.text || ""}"`),
-    ...Object.keys(d.notes || {}).filter(since).map((k) => `  * kept note ${k}: "${(d.notes[k] || {}).text || d.notes[k]}"`),
-  ].join("\n"));
-
-  return L.length ? L.join("\n") : "\n(nothing has happened since then.)";
-};
-
-/* WHAT THE FOLD IS GIVEN. The seed reads everything she has; an update reads
-   only from the day after the memory was last folded to, because everything
-   before that is already in it. `reviewPayload` is the same assembly the read
-   uses — comprehensive, already tested, and already able to take a window. */
-const memoryInput = (data, coach) => {
-  const m = (data && data.memory) || {};
-  const t = (coach && coach.t) || today();
-  const seeding = !String(m.text || "").trim();
-  const cut = seeding ? "all" : (m.upto ? addDays(m.upto, 1) : "all");
-  const payload = seeding ? reviewPayload(data, coach, cut) : memoryDelta(data, m.upto, t);
-  const head = seeding
-    ? "THIS IS THE FIRST TIME. There is no memory yet, so what follows is EVERYTHING she has. Build\nher history from all of it."
-    : `WHAT FOLLOWS IS ONLY WHAT HAS HAPPENED SINCE ${m.upto}. Everything before that is already in\nthe memory below — carry it forward, correct it where this contradicts it, and add what is new.`;
-  const hers = String(m.hers || "").trim();
-  return [
-    head,
-    m.text ? `\n=== THE MEMORY AS IT STANDS ===\n${m.text}` : "",
-    hers ? `\n=== WHAT SHE HERSELF WROTE — THIS OUTRANKS YOU, NEVER CONTRADICT OR DROP IT ===\n${hers}` : "",
-    `\n=== WHAT TO FOLD IN ===${payload}`,
-  ].filter(Boolean).join("\n");
-};
-
-/* Folding is never destructive. The version that was there is pushed onto the
-   list before the new one is written, so a fold that loses something can
-   always be read back (rule 20). Failures are kept too, with their reason —
-   a fold that did not happen must never look like one that did. */
-const foldedMemory = (m, text, upto, at, spend) => {
-  const prev = m || {};
-  const keep = Array.isArray(prev.versions) ? prev.versions : [];
-  return {
-    ...prev,
-    text: String(text || "").trim(),
-    upto, at,
-    versions: [...keep, { text: prev.text || "", upto: prev.upto || null, at: prev.at || null }]
-      .filter((v) => v.text),
-    tokensIn: (prev.tokensIn || 0) + ((spend && spend.in) || 0),
-    tokensOut: (prev.tokensOut || 0) + ((spend && spend.out) || 0),
-    cost: (prev.cost || 0) + (spend ? centsFor(spend) : 0),
-  };
-};
-
-const MEMORY_SYSTEM = `You keep the running history of one person, Nermeen, 51, who trains to hold
-muscle through her fifties. You are her coach. This is your own memory of her — you will be handed
-it back every time you speak to her, so write it for yourself, in plain prose, as the thing you
-would want to have read before answering her.
-
-WHAT GOES IN
-
-1. WHAT SHE HAS SAID AND DECIDED. Anything she told you about herself, her life, her body, what she
-   wants, what she will not do. Her words, kept as her words.
-
-2. NUMBERS — ONLY WHERE THEY MOVED. A measurement that has not changed does not earn a line. Where
-   something changed, WRITE THE TREND RATHER THAN THE FIGURES wherever a trend says more: "her plank
-   has been climbing steadily since June and is at her best" beats a list of seconds. Where a number
-   has moved many times, give it in whatever shape makes it readable — where it started and where it
-   is now, its highest and when, its lowest and when, the direction and the rate. Choose the shape
-   that suits THAT measure and say which shape you used. Do not use one format for everything.
-
-3. SESSIONS, ADDED UP — NEVER ONE LINE PER DAY. Per class: how many times, over what span, and above
-   all THE EFFORT IT COST HER, and EVERY COMMENT SHE ATTACHED, in her own words. Those two are the
-   things she said must not be lost in the adding up.
-
-4. HER BODY-PAGE LISTS, ADDED UP. Per list: how it went, how many times, which area it covers, WHY
-   IT EXISTED IN THE FIRST PLACE, what it did to her performance, and — if it was written to improve
-   something specific — WHETHER IT WORKED. Where the reason it was made was never recorded, work it
-   out from the area, what is in it, her record and her goals, and SAY THAT YOU INFERRED IT. Grade
-   how sure you are the way the app already does: believed, tentative, or noted. If you genuinely
-   cannot tell, say you do not know. Never invent a reason.
-
-5. WHAT YOU HAVE CONCLUDED AND WHAT IS STILL OPEN. What you decided and why, what you are watching,
-   what you got wrong and corrected.
-
-WHAT STAYS OUT
-- Anything that has not changed and was already in the memory.
-- Any number you were not given. Never estimate, never round something into existence.
-- Anything that reads as a score or a streak. She has ruled those out.
-
-HOW TO WRITE IT
-- Prose, in short titled sections, oldest understanding first and newest last.
-- Warm, specific, unsentimental. Write like her coach, not like a database.
-- Dates on anything that has a date.
-- If something in the new material CONTRADICTS what the memory says, correct the memory and say
-  plainly that it changed and when.
-- ANYTHING UNDER "WHAT SHE HERSELF WROTE" OUTRANKS YOU. Never contradict it, never quietly drop it.
-
-Return ONLY the full updated memory as plain text. No preamble, no code fence, nothing before or
-after it. It replaces what came before, so anything still true must be carried forward — but the
-previous version is kept on her device either way, so nothing you leave out is destroyed.`;
-
 const LIST_FROM_CHAT_SYSTEM = `You are turning exercises you have ALREADY written for her, in
 conversation, into one structured list for her app. She is 51 and her right shoulder is
 rehabilitating.
