@@ -1233,23 +1233,23 @@ const RETIRED_MOBILITY = ["sitrise", "hipopen", "kneewall"];
 const SEED_DRILLS = [
   { id: "deepsquat", label: "Deep squat hold", mins: 2, how: "Sink into the lowest squat you can hold, heels down, elbows inside knees gently pushing them out. Hold and breathe. Hold a doorframe if you need to.", targets: "hips, ankles, adductors" },
   { id: "hipopen", label: "90/90 hip switches", mins: 3, how: "Sit with one leg bent in front at ninety degrees and one behind at ninety. Sit tall, lean gently over the front shin, then switch sides without using your hands if you can.", targets: "hip rotation both directions" },
-  { id: "pigeon", label: "Pigeon or figure-four", mins: 3, how: "One shin across in front, back leg long — or lying on your back, ankle over the opposite knee, pulling the thigh in. Breathe rather than push.", targets: "glutes, deep hip rotators" },
-  { id: "ankle", label: "Knee-to-wall rocking", mins: 2, how: "Foot flat, toes a few centimetres from a wall, drive the knee forward over the toes without the heel lifting. Rock in and out slowly. Both sides, even if only one is tight.", targets: "ankle dorsiflexion" },
-  { id: "calf", label: "Calf stretch, both knees", mins: 2, how: "Straight back knee first, then the same position with the knee bent — the two hit different muscles and most people only ever do the first.", targets: "gastrocnemius and soleus" },
-  { id: "hamstring", label: "Hamstring, one leg at a time", mins: 3, how: "One heel on a low step, hinge from the hip with a long spine rather than rounding to reach. The stretch should sit in the belly of the muscle, not behind the knee.", targets: "hamstrings without loading the lower back" },
+  { id: "pigeon", side: true, label: "Pigeon or figure-four", mins: 3, how: "One shin across in front, back leg long — or lying on your back, ankle over the opposite knee, pulling the thigh in. Breathe rather than push.", targets: "glutes, deep hip rotators" },
+  { id: "ankle", side: true, label: "Knee-to-wall rocking", mins: 2, how: "Foot flat, toes a few centimetres from a wall, drive the knee forward over the toes without the heel lifting. Rock in and out slowly. Both sides, even if only one is tight.", targets: "ankle dorsiflexion" },
+  { id: "calf", side: true, label: "Calf stretch, both knees", mins: 2, how: "Straight back knee first, then the same position with the knee bent — the two hit different muscles and most people only ever do the first.", targets: "gastrocnemius and soleus" },
+  { id: "hamstring", side: true, label: "Hamstring, one leg at a time", mins: 3, how: "One heel on a low step, hinge from the hip with a long spine rather than rounding to reach. The stretch should sit in the belly of the muscle, not behind the knee.", targets: "hamstrings without loading the lower back" },
   { id: "catcow", label: "Cat–cow and segmental rolls", mins: 2, how: "On all fours, move the spine one vertebra at a time in both directions. Slow enough that you can feel where it stops moving.", targets: "spinal segmentation" },
   { id: "thoracic", label: "Thoracic extension over a roller", mins: 2, how: "Roller across the mid-back, hands behind the head, extend back over it in three or four positions rather than one.", targets: "mid-back extension" },
-  { id: "openbook", label: "Open book", mins: 3, how: "Lie on your side, knees bent and stacked, arms together in front. Open the top arm across and follow it with your eyes, keeping the knees down.", targets: "thoracic rotation" },
+  { id: "openbook", side: true, label: "Open book", mins: 3, how: "Lie on your side, knees bent and stacked, arms together in front. Open the top arm across and follow it with your eyes, keeping the knees down.", targets: "thoracic rotation" },
   { id: "shoulderpass", label: "Band or towel pass-through", mins: 2, how: "Wide grip on a band or towel, take it from in front of you to behind and back. Narrow the grip only when the wide one is easy. Never force the end range.", targets: "shoulder flexion and rotation" },
-  { id: "sleeper", label: "Sleeper stretch", mins: 2, how: "On your side, arm out at ninety, gently rotate the forearm toward the floor with the other hand. Very light — this one is easy to overdo.", targets: "shoulder internal rotation" },
+  { id: "sleeper", side: true, label: "Sleeper stretch", mins: 2, how: "On your side, arm out at ninety, gently rotate the forearm toward the floor with the other hand. Very light — this one is easy to overdo.", targets: "shoulder internal rotation" },
   { id: "doorway", label: "Doorway chest opener", mins: 2, how: "Forearm on a doorframe, step through gently. Three heights: low, mid, high — they reach different fibres.", targets: "chest and front shoulder" },
-  { id: "latstretch", label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
+  { id: "latstretch", side: true, label: "Lat hang or child's pose reach", mins: 2, how: "Kneeling, hands forward on the floor, sink the chest and walk the hands to one side to bias one lat at a time.", targets: "lats, which limit overhead reach more than shoulders do" },
   { id: "getup", label: "Floor sit-and-rise practice", mins: 3, how: "Practise the movement itself, slowly, using as little support as you need — and notice which point you need it. That point is the thing to work on.", targets: "the whole pattern, and it improves with practice alone" },
   /* added 10 August with the rebuilt mobility battery — every new test has to
      have somewhere to send her, or the score does nothing */
-  { id: "straddlework", label: "Straddle sit and side reach", mins: 3, how: "Sit with your legs as wide as they go, knees facing the ceiling. Sit tall first — that alone is the work if it is hard. Then reach over one leg, then the other, then straight down the middle, breathing at the end of each rather than bouncing.", targets: "adductors, the inside of the thighs" },
-  { id: "quadstretch", label: "Quad stretch, hips square", mins: 2, how: "Lying face down with a strap round the ankle, or standing holding the foot. Keep the hip pressed down and the knee under the hip — if the hip lifts or the knee drifts out, the stretch has gone into your lower back instead.", targets: "quadriceps" },
-  { id: "hipflexor", label: "Half-kneeling hip flexor", mins: 2, how: "Half-kneeling, back knee down. Tuck the pelvis under first, then shift forward only as far as you can hold the tuck. Most of the movement people feel here is their lower back arching, which does nothing.", targets: "hip flexors and the front of the hip" },
+  { id: "straddlework", side: true, label: "Straddle sit and side reach", mins: 3, how: "Sit with your legs as wide as they go, knees facing the ceiling. Sit tall first — that alone is the work if it is hard. Then reach over one leg, then the other, then straight down the middle, breathing at the end of each rather than bouncing.", targets: "adductors, the inside of the thighs" },
+  { id: "quadstretch", side: true, label: "Quad stretch, hips square", mins: 2, how: "Lying face down with a strap round the ankle, or standing holding the foot. Keep the hip pressed down and the knee under the hip — if the hip lifts or the knee drifts out, the stretch has gone into your lower back instead.", targets: "quadriceps" },
+  { id: "hipflexor", side: true, label: "Half-kneeling hip flexor", mins: 2, how: "Half-kneeling, back knee down. Tuck the pelvis under first, then shift forward only as far as you can hold the tuck. Most of the movement people feel here is their lower back arching, which does nothing.", targets: "hip flexors and the front of the hip" },
 ];
 const drillById = (id, list) => (list && list.length ? list : SEED_DRILLS).find((d) => d.id === id) || null;
 
@@ -3874,7 +3874,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 153";
+const BUILD = "15 August 2026 · 154";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4459,7 +4459,7 @@ async function loadData() {
               SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
           : SEED_MOBILITY,
         drills: Array.isArray(d.drills) && d.drills.length
-          ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets"]) : SEED_DRILLS,
+          ? fillFromSeed(d.drills, SEED_DRILLS, ["how", "targets", "side"]) : SEED_DRILLS,
         mobility: d.mobility || {},
         /* One block at a time: anything after the live block was written
            before that rule existed and would pre-empt a design the coach
@@ -9482,11 +9482,22 @@ const secondsFor = (f) => {
 
 /* Her drills and her prescribed goal work carry MINUTES. The battery carries
    seconds. This is the one place that knows the difference. */
+/* HER INSTRUCTION, 15 August: "when you give me an exercise that I have to do
+   on the left side and on the right side, give me a separate counter for each.
+   Don't give me three minutes hamstring stretch and not separate the one and a
+   half minute for the right and one and a half for the left."
+
+   The two clocks were already here — nothing in the seed had ever been marked
+   two-sided, so no drill ever reached them. And the minutes are the dose for
+   the WHOLE drill, so a three-minute stretch is a minute and a half a side, not
+   three each: two sides at full length is double the work she was prescribed. */
+const drillIsTwoSided = (d) => !!d && (d.side === true || d.bilateral === true);
 const drillSeconds = (d) => {
   if (!d) return null;
   const m = Number(d.mins);
-  if (Number.isFinite(m) && m > 0) return Math.round(m * 60);
-  return secondsFor(d);
+  const whole = (Number.isFinite(m) && m > 0) ? Math.round(m * 60) : secondsFor(d);
+  if (!whole) return whole;
+  return drillIsTwoSided(d) ? Math.max(15, Math.round(whole / 2)) : whole;
 };
 
 /* A RUNNING CLOCK MUST SURVIVE HER LEAVING THE SCREEN.
@@ -10893,7 +10904,8 @@ function DrillsCard({ coach, setSheet, data, setData }) {
         <div key={d.id} style={{ padding: "11px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink }}>{d.label}</span>
-            <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>{d.mins}m</span>
+            <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>
+              {d.mins}m{drillIsTwoSided(d) ? ` · ${Math.round((Number(d.mins) || 0) * 30) / 60}m a side` : ""}</span>
           </div>
           {(d.sets || d.reps || d.freq) && (
             <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
@@ -18096,6 +18108,21 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             <>
               <Field label="Minutes" unit="" value={item.mins}
                 onChange={(v) => patchDrill(item.id, { mins: Number(v) || 1 })} />
+              {/* Rule 12: the same toggle the mobility tests have. sideEdited
+                  marks it HERS, so the seed never overrules her again. */}
+              <div style={{ display: "flex", gap: 8, margin: "2px 0 12px" }}>
+                <button onClick={() => patchDrill(item.id, { side: !item.side, sideEdited: true })}
+                  className="tap" style={{
+                  flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
+                  border: `1.5px solid ${item.side ? C.signal : C.line}`,
+                  background: item.side ? C.signal : "transparent",
+                  color: item.side ? C.chalk : C.muted }}>Done left and right{item.side ? " ✓" : ""}</button>
+              </div>
+              {item.side && (
+                <div style={{ fontSize: 11, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
+                  The minutes above are the whole drill. It gets a clock each side, running half that.
+                </div>
+              )}
               {/* "Enable me to edit each and every input in that exercise."
                   The row on Today shows sets x reps and how often — so they
                   are editable here, not just visible there (rule 12). */}
