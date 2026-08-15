@@ -3744,7 +3744,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 August 2026 · 148";
+const BUILD = "14 August 2026 · 149";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -20083,6 +20083,51 @@ Two or three sentences unless she asks for more.`;
           exactly like the one on the read. It bounds the day-by-day detail
           only — the record, her goals, what she has written and every earlier
           read still go in full whatever she sets here. */}
+      {/* WHAT THIS CONVERSATION IS COSTING, WHERE SHE IS SPENDING IT.
+          Her instruction, 14 August: "i need the tokens and cost calculator
+          under talk to my coach so I can see it." It was in Settings, which is
+          not where the spending happens. Rule 11: if the app names something,
+          the means to see it is where it sits. Nothing here is estimated — it
+          adds up what was recorded, and says so plainly when there is nothing
+          recorded yet. */}
+      {(() => {
+        const F2 = formulas(data.settings);
+        const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
+        const today = spendSince(data, coach.t);
+        const all = spendSince(data, null);
+        const cp = cachePolicy(data, F2);
+        const cacheLabel = { "5m": "cached, 5 min", "1h": "cached, 1 hour", off: "not cached" }[cp.mode];
+        const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
+        return (
+          <Card style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <Eyebrow>What this is costing</Eyebrow>
+              <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{cacheLabel}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10,
+              textAlign: "center", margin: "11px 0 4px" }}>
+              {[["This talk", money(here.cost || 0)], ["Today", money(today.cents)], ["All of it", money(all.cents)]]
+                .map(([l, v]) => (
+                <div key={l}>
+                  <div className="mono disp" style={{ fontSize: 19, fontWeight: 800, color: C.ink }}>{v}</div>
+                  <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+              {started
+                ? `${(Number(here.tokensIn) || 0).toLocaleString()} words read, ${(Number(here.tokensOut) || 0).toLocaleString()} written back so far${Number(here.saved) > 0 ? `, ${money(here.saved)} of it saved by not re-reading the same thing twice` : ""}.`
+                : "Nothing recorded for this conversation yet — the figure appears after your first message."}
+            </div>
+            <div style={{ marginTop: 9 }}>
+              <InfoNote small inherit
+                why={`This is what the app recorded, on your own key, at ${F2.priceIn} per million words read and ${F2.priceOut} per million written back. A word your coach already had in front of it from a moment ago costs a tenth. It is not your Anthropic bill — anything else on that account is not counted here. ${cp.why}`}>
+                <span style={{ fontSize: 12, color: C.muted }}>Where this comes from</span>
+              </InfoNote>
+            </div>
+          </Card>
+        );
+      })()}
       <ScopePicker scope={data.settings?.chatScope || CHAT_SCOPE_DEFAULT}
         onPick={(sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } }))} />
 
