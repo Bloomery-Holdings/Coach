@@ -226,6 +226,35 @@ const FORMULA_DEFAULTS = {
        MINUS 5% on a bad one, which is how a battery came to ask her for less
        than she had already done. One number now, hers, editable like the rest. */
     aimStep: 0.15, /* how far past her last result the battery aims */
+    /* ---- WHEN A BATTERY IS THE DAY'S SESSION, AND WHEN IT IS ADMIN ---------
+       HER REPORT, 16 August: "if a battery is a carry on, it cannot be a
+       session for the day. you counted a session because I entered my body fat
+       and muscle."
+  
+       Correct, and the old rule was that the FIRST character typed into any
+       battery row marked the day trained. Standing on the scales is not a
+       session. Typing two numbers into a sitting she started on Saturday is not
+       a Sunday session either.
+  
+       The day now counts from the battery when the WORK she did that day
+       reaches this many minutes. Ten, because ten minutes is already the
+       smallest thing this app lets count as a day not missed (rule 4), so the
+       battery is held to the same bar as everything else rather than a special
+       one. Body composition, written notes and scales are excluded from the sum
+       entirely — however long she spends on them, they are readings, not work.
+       Hers to move like everything else. */
+    batterySessionMins: 10, /* minutes of battery WORK done today before the day counts */
+    /* ---- HOW LONG A LINE STANDS DOWN AFTER IT HAS LED ----------------------
+       HER REPORT, 16 August: "the coach sentence is still the same. nothing
+       changed." Standing a line down for ONE day was not enough — a condition
+       that stays true until she acts on it simply came back the following
+       morning and every other morning after that.
+  
+       A line that has led stands down for this long. Seven days means the
+       loudest thing in the month gets said once a week at most, which is
+       offering rather than asking (rule 4), and every other morning has to find
+       something she has not just been told. */
+    leadCooldown: 7, /* days a line stands down after it has led */
     /* ---- THE RETEST CLOCK --------------------------------------------------
        A pause is not a removal, so every paused measure carries the date it is
        worth trying again. The waits are the published time-courses for the
@@ -4151,7 +4180,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 164";
+const BUILD = "16 August 2026 · 165";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4653,28 +4682,6 @@ const bwHomeOf = (data, exId) => {
     }
     return null;
 };
-/* Is there a real reading against this measure in this sitting. Every shape a
-   measure can take — both sides, weight x reps, a rung, a written note.
-
-   IT ASKS THE CELL, NOT readMeasure. The first version of this asked
-   readMeasure whether the row produced a number, and readMeasure turns an
-   empty timed hold into Number("") — which is 0, which is not NaN. So every
-   timed test in the battery counted as done the moment any other row was
-   typed, and the card would have told her she had taken measurements she had
-   not taken (rule 23). A reading is a cell with something in it. */
-const measureFilled = (entry, f) => {
-    if (!entry || !f)
-        return false;
-    const some = (k) => { var _a; return String((_a = entry[k]) !== null && _a !== void 0 ? _a : "").trim() !== ""; };
-    if (f.rungs && f.rungs.length > 1 && some(f.id + "__rung"))
-        return true;
-    if (f.type === "weightreps") {
-        return some(f.id + "__w") || some(f.id) || some(f.id + "__L") || some(f.id + "__R");
-    }
-    if (f.bilateral)
-        return some(f.id + "__L") || some(f.id + "__R");
-    return some(f.id);
-};
 /* A mobility test is done when either side, or the single score, is entered. */
 const mobFilled = (e) => {
     if (e === undefined || e === null)
@@ -4686,15 +4693,55 @@ const mobFilled = (e) => {
 /* Was this sitting worked on with her hands on this particular date. The
    sitting records every day it was touched (`days`); `started` and `on` are
    read as well so that sittings taken before that was written still answer. */
-const sittingTouched = (sit, date) => !!sit && ((sit.days || []).includes(date) || sit.started === date || sit.on === date);
+const sittingTouched = (sit, date) => !!sit && (Object.values((sit.dayOf || {})).includes(date)
+    || (sit.days || []).includes(date) || sit.started === date || sit.on === date);
 /* How far into a sitting she is. `filled` counts every reading in it,
    including readings against a row that has since been paused — she took that
    measurement and rule 20 does not let it disappear. `asked` is what the
    battery currently asks for. Where the two disagree the denominator goes
    rather than being invented (rule 23). */
-const sittingCount = (filled, asked) => (!filled ? ""
-    : filled > asked ? filled + (filled === 1 ? " measure in" : " measures in")
-        : filled + " of " + asked + " measures in");
+const sittingCount = (p) => (!p || !p.done ? ""
+    : p.done + " of " + p.total + " measures in");
+/* ============================================================================
+   IS A BATTERY ROW WORK, AND WAS TODAY A SESSION
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "if a battery is a carry on, it cannot be a session
+   for the day. you counted a session because I entered my body fat and
+   muscle."
+
+   The old rule marked the day trained on the first character typed into any
+   row of the current sitting. Two things were wrong with it. Standing on the
+   scales is not a session — body composition is a reading taken OF her, not
+   work done BY her. And a sitting she started on Saturday, carried into
+   Sunday to finish two rows, made Sunday a training day when nothing had
+   happened on Sunday.
+
+   Both are answered by asking what WORK she did on THIS day, in minutes,
+   against the same ten-minute bar the rest of the app already uses for the
+   smallest thing that counts (rule 4). Every row carries its own `mins`, so
+   this is arithmetic rather than a guess (rule 23).
+
+   The sitting records the date each row was entered — `dayOf` — which is what
+   makes "on this day" answerable at all. `days` is kept beside it because
+   sittings written before this build have it and rule 20 does not let their
+   history stop working.
+   ==========================================================================*/
+/* A row is work if doing it is a thing she DID. Body composition, written
+   notes and scales are readings, and no amount of them is a session. */
+const rowIsWork = (f) => !!f && f.cap !== "body" && f.type !== "note" && f.type !== "scale";
+/* the field a storage key belongs to — rows are stored as id, id__w, id__L,
+   id__R and id__rung, and all of them are the same measure */
+const fieldForKey = (list, k) => {
+    const base = String(k).replace(/__(w|L|R|rung)$/, "");
+    return (list || []).find((x) => x && x.id === base) || null;
+};
+/* Minutes of real work entered into this sitting on this date. */
+const batteryMinsOn = (sit, list, date) => {
+    const on = (sit || {}).dayOf || {};
+    return (list || []).filter(rowIsWork)
+        .filter((f) => on[f.id] === date)
+        .reduce((a, f) => a + (Number(f.mins) || 0), 0);
+};
 const doneOnDay = (data, date) => {
     var _a, _b;
     if (!data || !date)
@@ -4726,13 +4773,11 @@ const doneOnDay = (data, date) => {
     const ws = weekStart(date, weekStartOn(data.settings));
     const wSit = (data.weekly || {})[ws];
     if (sittingTouched(wSit, date)) {
-        const all = ((data.fields || {}).weekly || []);
-        add("weekly", "Weekly battery", sittingCount(all.filter((f) => measureFilled(wSit, f)).length, all.filter(isLive).length), { kind: "sheet", sheet: { kind: "weekly" } });
+        add("weekly", "Weekly battery", sittingCount(sittingProgress(data, "weekly", ws)), { kind: "sheet", sheet: { kind: "weekly" } });
     }
     const mSit = (data.monthly || {})[monthKey(date)];
     if (sittingTouched(mSit, date)) {
-        const all = ((data.fields || {}).monthly || []);
-        add("monthly", "Monthly benchmark", sittingCount(all.filter((f) => measureFilled(mSit, f)).length, all.filter(isLive).length), { kind: "sheet", sheet: { kind: "monthly" } });
+        add("monthly", "Monthly benchmark", sittingCount(sittingProgress(data, "monthly", monthKey(date))), { kind: "sheet", sheet: { kind: "monthly" } });
     }
     const mobSit = (data.mobility || {})[ws];
     if (sittingTouched(mobSit, date)) {
@@ -5190,10 +5235,80 @@ const briefText = (data, coach, opts) => {
         lines.push(words);
     return lines.join("\n");
 };
+/* Bumping this re-arms the repair below for everyone who has already had it. */
+const BATTERY_STAMP_FIX = 1;
+/* ---- THE SESSIONS THE BATTERY INVENTED ------------------------------------
+   HER REPORT, 16 August: "you counted a session because I entered my body fat
+   and muscle", and separately, "I still see the repeated weekly measurement
+   all over the page. it should only stay on needs you."
+
+   Both are the same stored fact. Until this build the first character typed
+   into any battery row wrote `completed: true, type: "Weekly measurements"`
+   onto the day — so a carried-over sitting she added two body-composition
+   numbers to became a training session, and then drew itself as a session
+   card, as a row in the session list, and in every count that reads the day.
+
+   The writer no longer does that. This clears up what it already wrote.
+
+   It is careful, because rule 20 says her data is permanent. It only touches
+   a day where the ONLY evidence of a session is that stamp: the name is the
+   one the app itself wrote, there is no duration, no effort, no sets, no
+   after-session answer, no second session and no body work. And it only acts
+   where it can SHOW the day was not a session — either the work entered that
+   day falls under her own `batterySessionMins`, or the sitting was started on
+   a different day and there are no per-row dates to check, which is the
+   carry-on she described. Where it cannot tell, it leaves the day alone
+   rather than guessing (rule 23).
+
+   Nothing is deleted. The session moves whole into `voidedSession`, dated,
+   which is the same mechanism a rest-day conflict already uses — so it is
+   still in her record and still recoverable (rule 20). The monthly benchmark
+   is never touched: that battery genuinely IS a session, thirty-odd minutes
+   of real work under load. */
+const clearInventedSessions = (d, logs) => {
+    if ((d.settings || {}).batteryStampFix >= BATTERY_STAMP_FIX)
+        return logs;
+    const F = formulas(d.settings);
+    const bar = Number(F.batterySessionMins) || 10;
+    const list = ((d.fields || {}).weekly) || [];
+    const out = { ...logs };
+    Object.keys(out).forEach((day) => {
+        var _a;
+        const l = out[day];
+        if (!l || !l.completed || l.rest)
+            return;
+        if (String(l.type || "").trim() !== "Weekly measurements")
+            return;
+        if (String((_a = l.minutes) !== null && _a !== void 0 ? _a : "").trim() !== "")
+            return;
+        if (l.rpe !== undefined || l.sets !== undefined || l.during !== undefined
+            || l.when !== undefined || l.energyAfter !== undefined)
+            return;
+        if ((l.extraSessions || []).some((x) => String((x && x.type) || "").trim() !== ""))
+            return;
+        const bw = ((d.bwlog || {})[day]) || {};
+        if (Object.values(bw).some((e) => e && ["w", "reps", "secs"].some((f) => String(e[f] || "").trim() !== "")))
+            return;
+        const sit = ((d.weekly || {})[weekStart(day, weekStartOn(d.settings))]) || null;
+        if (!sit)
+            return;
+        const known = sit.dayOf && Object.keys(sit.dayOf).length;
+        const notASession = known
+            ? batteryMinsOn(sit, list, day) < bar
+            : (!!sit.started && sit.started !== day);
+        if (!notASession)
+            return;
+        const { completed, type, ...keep } = l;
+        out[day] = { ...keep, completed: false,
+            voidedSession: { completed, type, voidedOn: today(),
+                why: "the battery marked this a session before build 165; it was not one" } };
+    });
+    return out;
+};
 const repairLogs = (d) => {
     if (d.sample)
         return d.logs || {};
-    const logs = { ...(d.logs || {}) };
+    const logs = clearInventedSessions(d, { ...(d.logs || {}) });
     /* WHAT MAKES A DAY A DAY SHE TRAINED. Her instruction, 11 August, asked
        directly: "only training. Any notes or questions do not qualify the day
        to be trained. Classes, sessions, measurements, area list, mobility
@@ -5312,7 +5427,8 @@ async function loadData() {
             return {
                 ...BLANK, ...d,
                 logs: repairLogs(d),
-                settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION, rehabPause: REHAB_PAUSE },
+                settings: { ...BLANK.settings, ...(d.settings || {}), batteryTidy: SEED_VERSION,
+                    rehabPause: REHAB_PAUSE, batteryStampFix: BATTERY_STAMP_FIX },
                 /* `label` and `bilateral` are new to this list, and they are the
                    reason a correction could never reach her. Split squat said "L/R"
                    and gave one box; shoulder press and lateral raise, which are
@@ -10032,15 +10148,52 @@ function useCoach(data, day, clock) {
            met with the easiest way back in and no accounting, and repeating the
            accounting daily is closer to nagging than to help. Everything else
            rotates too. */
-        const ledYesterday = (data.led || {})[addDays(t, -1)] || null;
+        /* ONE DAY WAS NOT ENOUGH. Her report, 16 August, on the build that was
+           meant to fix this: "the coach sentence is still the same. nothing
+           changed."
+    
+           Standing a line down for a single day cannot work against a condition
+           that stays true until she acts on it. Hers was the monthly read, which
+           is true every morning until she presses it — so it led, stood down for
+           one day, and led again, for as long as she left it. Half the mornings
+           were the same sentence.
+    
+           A line that has led now stands down for `leadCooldown` days — seven,
+           hers to change. That is the difference between offering something and
+           asking for it repeatedly, which rule 4 draws a hard line under, and it
+           matters most for exactly this line: rule 8 says the monthly read is a
+           tap SHE presses, in the window SHE chooses, and is deliberately not
+           raised in Needs you. A sentence about it holding the top of her landing
+           page every morning is that same asking through a different door.
+    
+           TODAY IS EXCLUDED FROM ITS OWN HISTORY. What led today is written down
+           by the screen that draws it, so counting it here would stand the line
+           down against itself and swap the card under her hands mid-morning.
+    
+           THE EXEMPTION IS STILL RULE 4. A mood tap (lead 1) always keeps the top
+           slot. If she says she is low two days running, the second morning must
+           still start with how she is.
+    
+           AND NOTHING IS SILENCED. A line that stands down drops into "Everything
+           your coach is watching", where a thing that still needs doing belongs. */
+        const ledRecently = {};
+        Object.keys(data.led || {}).forEach((d2) => {
+            if (d2 === t)
+                return;
+            const k = (data.led || {})[d2];
+            if (k && (!ledRecently[k] || d2 > ledRecently[k]))
+                ledRecently[k] = d2;
+        });
+        const cooledOff = (a) => {
+            const k = leadKeyOf(a);
+            const when = k && ledRecently[k];
+            return !when || when < addDays(t, -(Number(FX.leadCooldown) || 7));
+        };
         const exempt = leadingRaw.length && leadingRaw[0].lead === 1;
-        const sameAsYesterday = (a) => !!ledYesterday && leadKeyOf(a) === ledYesterday;
-        const leading = (exempt || !ledYesterday
+        const fresh = leadingRaw.filter(cooledOff);
+        const leading = (exempt || !fresh.length
             ? leadingRaw
-            : (leadingRaw.filter((a) => !sameAsYesterday(a)).length
-                ? [...leadingRaw.filter((a) => !sameAsYesterday(a)),
-                    ...leadingRaw.filter(sameAsYesterday)]
-                : leadingRaw)).slice(0, 3);
+            : [...fresh, ...leadingRaw.filter((a) => !cooledOff(a))]).slice(0, 3);
         /* what today ended up leading with, so tomorrow can stand it down. Written
            by Today when it renders the card — the engine stays pure. */
         const ledToday = leading.length ? leadKeyOf(leading[0]) : null;
@@ -14504,6 +14657,8 @@ function Formulas({ data, setData, close }) {
                 ["healthCoverage", "Share of the score present before it stops saying partial"]] },
         { title: "The number to beat, and the retest clock", note: "How far past your last result the battery asks you to go, and how long a paused measure waits before it is worth trying again. The waits come from the published time-course of whatever has to change underneath - muscle, tendon, joint or mood - rather than from a round number.",
             rows: [["aimStep", "How far past your last result the battery aims (0.15 = 15%)"],
+                ["batterySessionMins", "Minutes of battery work in a day before the day counts as trained"],
+                ["leadCooldown", "Days a line the coach has led stands down before it may lead again"],
                 ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
                 ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
                 ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
@@ -19417,23 +19572,35 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
     const form = data[which][key] || {};
     const set = (k, v) => setData((d) => {
         const prev = (d[which] || {})[key] || {};
-        /* A measurement entered is a test physically done — the day counts from
-           the first one, the same rule body work follows, so the chip fills
-           while she is standing there rather than on the next app open. Only the
-           CURRENT sitting: typing into an old week says nothing about today. */
+        const filled = String(v !== null && v !== void 0 ? v : "").trim() !== "";
+        /* WHICH DAY EACH ROW WAS ENTERED (16 August). `started` was the first day
+           and nothing else, so a battery spread over a Saturday and a Sunday could
+           not be seen on the Sunday — and neither "what you did today" nor the
+           question of whether the day was a session can be answered without it.
+           Dates are added, never removed (rule 20); clearing a box leaves the date
+           it was first entered, because a row she has emptied is not a row she
+           never did. `days` is kept beside it for sittings written before this. */
+        const dayOf = filled ? { ...(prev.dayOf || {}),
+            [String(k).replace(/__(w|L|R|rung)$/, "")]: coach.t } : (prev.dayOf || {});
+        const days = prev.days || (prev.started ? [prev.started] : []);
+        const nextSit = { ...prev, [k]: v, started: prev.started || coach.t,
+            dayOf, days: days.includes(coach.t) ? days : [...days, coach.t] };
+        /* IS THIS DAY A SESSION. Her report of 16 August, in one line: only the
+           work she did TODAY counts, body composition is not work, and a sitting
+           carried over from an earlier day does not make today a training day.
+           The bar is her own `batterySessionMins`. */
         const l = (d.logs || {})[coach.t] || {};
-        const stamp = isCurrent && String(v !== null && v !== void 0 ? v : "").trim() !== "" && !l.completed && !l.rest
+        /* the rows THIS sitting asks for — which includes the monthly rows that
+           opted into the weekly battery (body fat, muscle), so they are excluded
+           here by what they are rather than by not being on the list */
+        const list = sittingFields(d, which, key).fields;
+        const worked = batteryMinsOn(nextSit, list, coach.t);
+        const stamp = isCurrent && filled && !l.completed && !l.rest
+            && worked >= (Number(formulas(d.settings).batterySessionMins) || 10)
             ? { logs: { ...(d.logs || {}), [coach.t]: { ...l, completed: true,
                         type: l.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark") } } }
             : {};
-        /* WHICH DAYS SHE ACTUALLY WORKED ON THIS SITTING (16 August). `started`
-           is the first day and nothing else, so a battery spread over a Saturday
-           and a Sunday could not be seen on the Sunday — and "what you did today"
-           has to be able to see it. Every day is kept; none is ever removed. */
-        const days = prev.days || (prev.started ? [prev.started] : []);
-        return { ...d, ...stamp, [which]: { ...(d[which] || {}),
-                [key]: { ...prev, [k]: v, started: prev.started || coach.t,
-                    days: days.includes(coach.t) ? days : [...days, coach.t] } } };
+        return { ...d, ...stamp, [which]: { ...(d[which] || {}), [key]: nextSit } };
     });
     /* Mobility is the end of this battery, not a separate errand. It keeps its
        own store because every mobility calculation reads that shape — and it
