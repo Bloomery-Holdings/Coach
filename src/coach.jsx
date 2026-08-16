@@ -3979,7 +3979,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 162";
+const BUILD = "16 August 2026 · 163";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5513,6 +5513,14 @@ const saveData = async (d) => {
 /* ============================================================================
    5. THE COACH
    ==========================================================================*/
+/* A stable name for one of the coach's lines, so "did this lead yesterday?"
+   can be asked without storing the whole sentence (16 August). Digits are
+   flattened to # on purpose: "2 more classes to go" and "3 more classes to go"
+   are the same line saying a different number, and standing one down should
+   stand the other down too. */
+const leadKeyOf = (a) => (!a ? null
+  : `${a.scope || ""}|${a.tone || ""}|${String(a.text || "").replace(/\d+/g, "#").slice(0, 80)}`);
+
 function useCoach(data, day, clock) {
   return useMemo(() => {
     const { settings, weekly, monthly } = data;
@@ -9440,14 +9448,54 @@ function useCoach(data, day, clock) {
        urgent lines. Anything less than that leads and then gets out of the
        way. */
     const quieting = leads.length && leads[0].lead <= 2;
-    const leading = (leads.length
+    const leadingRaw = (leads.length
       ? (quieting
           ? [...leads, ...rest.filter((a) => a.tone === "warm")]
           : [...leads, rest.find((a) => a.tone === "firm"), rest.find((a) => a.tone === "push")])
       : [rest.find((a) => a.tone === "firm"),
          rest.find((a) => a.tone === "push"),
          rest.find((a) => a.tone === "warm")]
-    ).filter(Boolean).slice(0, 3);
+    ).filter(Boolean);
+
+    /* ---- NEVER THE SAME LINE TWO DAYS RUNNING -------------------------
+       HER REPORT, 16 August: "the daily line doesn't change. it should give
+       me something useful."
+
+       She was right and the cause was structural rather than cosmetic. Of the
+       eighty-four things the coach can raise, nine may LEAD, and a lead
+       outranks everything else. Hers was `deepDue && !deepReadToday &&
+       calibrating` — a condition that stays true every day until she runs the
+       read. So one message held the top of her landing page indefinitely
+       while seventy-five varying ones queued behind it.
+
+       Her instruction: never repeat the same line two days running. What led
+       yesterday is remembered and stood down today, and the next-best thing
+       speaks instead. It is not silenced — it drops into "Everything your
+       coach is watching", where a thing that still needs doing belongs.
+
+       ONE EXEMPTION, AND IT IS RULE 4, NOT MY PREFERENCE. A mood tap (lead 1)
+       always keeps the top slot. If she says she is low two days running, the
+       second morning must still start with how she is — standing that down to
+       say something fresher is exactly the failure rule 4 exists to prevent.
+
+       A lapse (lead 2) is NOT exempt. Nothing in the rules requires the same
+       break line every morning, and rule 24 argues the other way: a break is
+       met with the easiest way back in and no accounting, and repeating the
+       accounting daily is closer to nagging than to help. Everything else
+       rotates too. */
+    const ledYesterday = (data.led || {})[addDays(t, -1)] || null;
+    const exempt = leadingRaw.length && leadingRaw[0].lead === 1;
+    const sameAsYesterday = (a) => !!ledYesterday && leadKeyOf(a) === ledYesterday;
+    const leading = (exempt || !ledYesterday
+      ? leadingRaw
+      : (leadingRaw.filter((a) => !sameAsYesterday(a)).length
+          ? [...leadingRaw.filter((a) => !sameAsYesterday(a)),
+             ...leadingRaw.filter(sameAsYesterday)]
+          : leadingRaw)
+    ).slice(0, 3);
+    /* what today ended up leading with, so tomorrow can stand it down. Written
+       by Today when it renders the card — the engine stays pure. */
+    const ledToday = leading.length ? leadKeyOf(leading[0]) : null;
 
     /* ---- trends across weeks, never across days ---- */
     const trendFor = (id) => trendOf(wKeys.map((k) => Number(weekly[k][id])));
@@ -9475,7 +9523,7 @@ function useCoach(data, day, clock) {
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
-      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
@@ -11535,12 +11583,14 @@ function SessionClock({ log, write, coach }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         {!running ? (
           <>
+            {/* The paragraph that used to sit here — "Press start when you
+                begin. The clock keeps counting wherever you go, and Done logs
+                the session with the minutes it measured." — is gone at her
+                instruction, 16 August. It explained a button that says Start.
+                Instructions for the obvious are clutter on the one screen she
+                opens every day. */}
             <span style={{ flex: 1, minWidth: 0 }}>
               <Eyebrow>Today's session</Eyebrow>
-              <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 3 }}>
-                Press start when you begin. The clock keeps counting wherever you go,
-                and Done logs the session with the minutes it measured.
-              </div>
             </span>
             <Btn kind="signal" onClick={begin}>Start</Btn>
           </>
@@ -12047,6 +12097,25 @@ function Today({ data, setData, coach, setSheet, goTab }) {
       notesUsed: [...(d.notesUsed || []), i],
     }));
   }, [coach.t]);
+
+  /* REMEMBER WHAT LED TODAY, so tomorrow can say something else (16 August,
+     her instruction: never the same line two days running). The engine works
+     it out and stays pure; writing it down is a side effect, so it happens
+     here, once, on the screen that shows the line. Only the key is kept — a
+     scope, a tone and a flattened first sentence — never the sentence itself,
+     which is already in the record. Old days are dropped after a fortnight;
+     nothing here is history worth carrying (rule 20 is about her data, and
+     this is the app's own scratch). */
+  useEffect(() => {
+    if (!coach.ledToday) return;
+    if ((data.led || {})[coach.t] === coach.ledToday) return;
+    setData((d) => {
+      const keep = {};
+      Object.keys(d.led || {}).filter((k) => k >= addDays(coach.t, -14))
+        .forEach((k) => { keep[k] = d.led[k]; });
+      return { ...d, led: { ...keep, [coach.t]: coach.ledToday } };
+    });
+  }, [coach.t, coach.ledToday]);
 
   const [editLoads, setEditLoads] = useState(false);
   const patchClass = (id, props) => setData((d) => ({
@@ -12884,20 +12953,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
                     fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>details</button>
                 </div>
-                {(() => {
-                  const isMonthly = /benchmark/i.test(String(log.type || ""));
-                  const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
-                  if (!isMonthly && !isWeeklyM) return null;
-                  const pr = isMonthly ? coach.monthlyProgress : coach.weeklyProgress;
-                  const shut = isMonthly ? coach.monthlyDone : coach.weeklyDone;
-                  if (shut || !pr || !pr.total) return null;
-                  return (
-                    <div className="mono" style={{ fontSize: 10.5, color: C.clay, marginTop: 7 }}>
-                      the tick is the session — the {isMonthly ? "benchmark" : "weekly check"} numbers are
-                      {" "}{pr.pct}% in, {pr.left} still to enter
-                    </div>
-                  );
-                })()}
+                {/* The line that used to sit here — "the tick is the session —
+                    the weekly check numbers are X% in, N still to enter" — is
+                    gone at her instruction, 16 August: "remove this. it is
+                    redundant. I have it in needs you."
+
+                    She is right, and it was the same fault twice. An unfinished
+                    battery was being chased in three places on one screen. Needs
+                    you is the card that chases things; the session card says
+                    what the session was. */}
               </div>
             )}
 
@@ -13172,12 +13236,16 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                           "why do I have 2 carry on buttons... I only need the
                           carry on button." The card above already says it and
                           already offers the way in; saying it twice on one
-                          screen is the same fault as saying it nowhere. */}
-                      {openBattery && (
-                        <div className="mono" style={{ fontSize: 10, color: C.clay, marginTop: 6 }}>
-                          numbers not finished — {pr.pct}% in
-                        </div>
-                      )}
+                          screen is the same fault as saying it nowhere.
+
+                          16 August, same pen: "also redundant". The unfinished
+                          battery was being chased in THREE places on one
+                          screen — Needs you, the session card, and here. Needs
+                          you is the one that chases things; that is what it is
+                          for. This row now says what the session was and
+                          nothing else. `openBattery` is left computed above
+                          rather than removed, because the next thing anyone
+                          adds here will want it. */}
                     </div>
                   );
                 })()}
@@ -17506,7 +17574,32 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
     const stand = standInFor(f, fields, pool);
     setData((d) => ({ ...d,
       skips: { ...(d.skips || {}), [sk]: [...(((d.skips || {})[sk]) || []), f.id] } }));
-    setDone({ kind: "out", label: f.label, stand });
+    setDone({ kind: "out", id: f.id, label: f.label, stand });
+  };
+  /* HER REPORT, 16 August: "I keep trying to pause external rotation from my
+     weekly battery because I don't have the machine and it keeps coming back
+     to the list. Make sure that whatever I edit is actually saved."
+
+     Nothing was failing to save. `takeOut` writes into `skips[sittingKey]`,
+     and a sitting key is ONE WEEK — so taking a row out was only ever a
+     one-week answer, and next week's key had never heard of it. The card even
+     said "out of this one", honestly. But her reason is not a this-week
+     reason: she does not own the machine, and she will not own it next
+     Tuesday either. She was being asked the same question every week and her
+     answer was being thrown away every week.
+
+     So the permanent answer lives where she already is (rule 11). It SETS
+     ASIDE rather than deletes — dated, reversible, every reading still under
+     it, still in every chart, and one tap from coming back (rule 20). */
+  const takeOffForGood = (id, label) => {
+    setData((d) => ({ ...d, fields: { ...(d.fields || {}),
+      weekly: ((d.fields || {}).weekly || []).map((f) => (f.id === id
+        ? { ...f, status: "removed", removedOn: coach.t,
+            removedWhy: "she took it off for good from the battery — she does not have what it needs" } : f)),
+      monthly: ((d.fields || {}).monthly || []).map((f) => (f.id === id
+        ? { ...f, status: "removed", removedOn: coach.t,
+            removedWhy: "she took it off for good from the battery — she does not have what it needs" } : f)) } }));
+    setDone((x) => ({ ...x, forGood: label }));
   };
   const putInstead = (out, stand) => {
     setData((d) => ({ ...d,
@@ -17522,10 +17615,28 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
         <div style={{ fontSize: 14, lineHeight: 1.55, color: C.ink }}>
           {done.kind === "moved"
             ? `Fine. It's on ${prettyShort(moveTo)} instead, and nothing about today changes — your class is still your class.`
-            : done.took
-              ? `${done.label} is out and ${done.took} is in its place. Everything else is unchanged.`
-              : `${done.label} is out of this one. Everything else is unchanged, and you can put it back from inside the battery whenever you want.`}
+            : done.forGood
+              ? `${done.forGood} is off your battery for good — this week and every week, until you want it back. Every number you ever logged against it is still there, still in its chart. You can bring it back any time from "Change what's measured", or by searching for it.`
+              : done.took
+                ? `${done.label} is out and ${done.took} is in its place. Everything else is unchanged.`
+                : `${done.label} is out of this one. Everything else is unchanged, and you can put it back from inside the battery whenever you want.`}
         </div>
+
+        {/* THE ANSWER THAT LASTS (16 August, her report). Taking a row out was
+            a one-week answer only, so a permanent reason — not owning the
+            machine — had to be given again every week and was thrown away
+            every week. This is the same decision, made once. */}
+        {done.kind === "out" && !done.forGood && done.id && (
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
+              Is this a this-week thing, or is it always? If you don't have what it needs, take it
+              off properly and stop being asked.
+            </div>
+            <Btn kind="ghost" onClick={() => takeOffForGood(done.id, done.label)}>
+              I never have this — take {done.label} off for good
+            </Btn>
+          </div>
+        )}
         {done.kind === "out" && done.stand && !done.took && (
           <div style={{ marginTop: 12 }}>
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
