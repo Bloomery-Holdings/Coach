@@ -4090,7 +4090,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 172";
+const BUILD = "16 August 2026 · 173";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4191,6 +4191,53 @@ const sittingFinished = (entry) => {
      through carries `started` and no `on`, and is not. */
   if (entry.finished === undefined && entry.on && !entry.started) return true;
   return false;
+};
+
+/* ============================================================================
+   A NEW NAME IS NOT ALWAYS A NEW MOVEMENT — AND SOMETIMES IT IS
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "I changed the label name to a glute bridge because I
+   cannot do squats any more... it went with a new number as if I'm still doing
+   squats."
+
+   Three weeks of squats, renamed, and the trend read "Glute bridge 120 140 168
+   +40%" — forty per cent progress on a movement she has never done. The app
+   asserted a change it had not measured, which is rule 23, and it did it with
+   her own numbers, which is worse.
+
+   The app's own protocol text has been telling her to do this for weeks. The
+   1 km row says: "rename this row if you switch, because a kilometre on a
+   treadmill and a kilometre on an elliptical are two different tests and
+   comparing them tells you nothing." Good advice that the behaviour then
+   contradicted.
+
+   Both things are true and the app cannot tell which without asking:
+     - "Deep squat" to "Squat" is the same test, better named. Keep everything.
+     - "Squat" to "Glute bridge" is a different exercise. The squats she did
+       are still hers and still hers to see, under the name she did them
+       under — and the glute bridge starts with no history, because it has
+       none.
+
+   So it asks (rule 33), and it does not choose for her. Nothing is deleted
+   either way: the old measure is set aside with its readings intact, exactly
+   as rule 35 already treats anything taken off, and it names what replaced it.
+   ==========================================================================*/
+
+/* Splitting a renamed measure in two: the old one keeps its name and its
+   numbers and stands down; the new one starts clean. */
+const splitRenamed = (list, id, newLabel, date) => {
+  const i = (list || []).findIndex((f) => f && f.id === id);
+  if (i < 0) return list;
+  const old = list[i];
+  const wasCalled = old.renamedFrom || old.label;
+  const fresh = { ...old, id: newId(), label: newLabel, labelEdited: true,
+    status: undefined, removedOn: undefined, removedWhy: undefined,
+    renamedFrom: undefined, replaces: old.id };
+  const stood = { ...old, label: wasCalled, labelEdited: true,
+    status: "removed", removedOn: date,
+    removedWhy: `she replaced it with "${newLabel}" — a different exercise, so its numbers start again`,
+    renamedFrom: undefined, replacedBy: fresh.id };
+  return [...list.slice(0, i), stood, fresh, ...list.slice(i + 1)];
 };
 
 const hasReading = (store, id) => {
@@ -5402,7 +5449,24 @@ async function loadData() {
           weekly: pauseRehab(d.fields?.weekly?.length
             ? addNewFields(
                 retireFields(
-                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]),
+                  /* HER REPORT, 16 August: "I changed the label name to a
+                     glute bridge because I cannot do squats any more... it
+                     showed as Squat. It didn't change."
+
+                     A rename made in the field editor carried `labelEdited`
+                     and survived. A rename made ANY OTHER WAY — by the coach,
+                     or by anything added later — did not, and the loader put
+                     the seed's name back on the next app open, silently. A
+                     name that reverts without a word is worse than a name that
+                     cannot be changed.
+
+                     `label` comes out of what the seed refreshes. It was there
+                     for a one-off correction months ago; the cost of keeping
+                     it is that every rename is one forgotten flag away from
+                     being undone behind her. Everything else the seed owns —
+                     the protocol text, the unit, the shape of the row — is
+                     still refreshed. */
+                  fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]),
                   d.weekly, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
                 SEED_WEEKLY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
             : SEED_WEEKLY, d, today()),
@@ -5423,7 +5487,7 @@ async function loadData() {
           monthly: d.fields?.monthly?.length
             ? addNewFields(
                 fillFromSeed(d.fields.monthly, SEED_MONTHLY,
-                  ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
+                  ["how", "why", "unit", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]),
                 SEED_MONTHLY, false)
             : SEED_MONTHLY,
         },
@@ -5451,7 +5515,7 @@ async function loadData() {
           ? addNewFields(
               retireMobTests(
                 fillFromSeed(d.mobTests, SEED_MOBILITY,
-                  ["how", "why", "mins", "inWeekly", "label", "unit", "better", "side", "needs", "drills",
+                  ["how", "why", "mins", "inWeekly", "unit", "better", "side", "needs", "drills",
                    "type", "steps", "max"]),
                 d.mobility, (d.settings?.batteryTidy || 0) >= SEED_VERSION),
               SEED_MOBILITY, (d.settings?.batteryTidy || 0) >= SEED_VERSION)
@@ -16212,6 +16276,9 @@ function FieldEditor({ which, data, setData, close, focus }) {
   const [wk, setWk] = useState(data.fields.weekly);
   const list = both ? [...mo, ...wk] : wk;
   const setFor = (id) => (mo.some((f) => f.id === id) ? setMo : setWk);
+  /* the store a row's readings actually live in — the same test `setFor`
+     makes, so the two can never disagree about which battery a row is in */
+  const storeFor = (id) => (mo.some((f) => f.id === id) ? (data.monthly || {}) : (data.weekly || {}));
   const [openId, setOpenId] = useState(focus || null);
 
   const patch = (id, p) => setFor(id)((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
@@ -16317,11 +16384,51 @@ function FieldEditor({ which, data, setData, close, focus }) {
 
             {openId === f.id && (
               <div style={{ padding: "4px 6px 14px" }}>
-                {/* labelEdited marks the name as HERS. Without it, adding
-                    `label` to what gets refreshed from the seed would silently
-                    undo every rename she has ever made. */}
+                {/* labelEdited marks the name as HERS. The seed no longer
+                    refreshes labels at all (16 August), so this is belt and
+                    braces rather than the only thing holding a rename on. */}
                 <Field label="Name" unit="" type="text" value={f.label}
-                  onChange={(v) => patch(f.id, { label: v, labelEdited: true })} />
+                  onChange={(v) => patch(f.id, { label: v, labelEdited: true,
+                    /* remember what it was called, but only while it has
+                       numbers under it and only the FIRST time — so the
+                       question below is about the movement she started with,
+                       not about the last keystroke she typed */
+                    ...(f.renamedFrom === undefined
+                      && hasReading(storeFor(f.id), f.id)
+                      && String(v).trim() !== String(f.label).trim()
+                      ? { renamedFrom: f.label } : {}) })} />
+
+                {/* HER REPORT, 16 August. Only ever shown for a row that has
+                    readings under it — renaming an empty row is just naming
+                    it, and there is nothing to ask about. */}
+                {f.renamedFrom !== undefined && f.renamedFrom !== f.label && (
+                  <div style={{ background: C.pist, borderRadius: 12, padding: "12px 14px", margin: "0 0 14px" }}>
+                    <div style={{ fontSize: 13, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>
+                      This was <strong>{f.renamedFrom}</strong> and it has numbers under it. Is this the
+                      same test under a better name, or a different exercise?
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => patch(f.id, { renamedFrom: undefined })} className="tap" style={{
+                        flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                        fontWeight: 600, fontFamily: "inherit", border: `1.5px solid ${C.line}`,
+                        background: C.card, color: C.ink }}>
+                        Same test, new name
+                      </button>
+                      <button onClick={() => setFor(f.id)((l) => splitRenamed(l, f.id, f.label, today()))}
+                        className="tap" style={{
+                          flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                          fontWeight: 600, fontFamily: "inherit", border: "none",
+                          background: C.signal, color: C.chalk }}>
+                        A different exercise
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
+                      A different exercise keeps every {f.renamedFrom} reading you have taken, under that
+                      name, set aside where you can always see it — and starts {f.label} with no history,
+                      because it has none. Nothing is deleted either way.
+                    </div>
+                  </div>
+                )}
 
                 {/* "Explain to me each exercise, and maybe a small video link."
                     9 August. Everything the app tells her about a measure is
