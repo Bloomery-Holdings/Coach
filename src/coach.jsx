@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 179";
+const BUILD = "16 August 2026 · 180";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -11209,6 +11209,76 @@ const asksFor = (ex) => {
     : (secondsFor({ how: `${e.dose || ""} ${e.how || ""}` }) || 0);
 
   return { hold: !!wantHold, reps: !!wantReps, lr, secs: secs > 0 ? secs : 0 };
+};
+
+/* READING AN EXERCISE'S OWN PROSE FOR THE VARIABLES IT SHOULD HAVE DECLARED.
+   Returns the fields to fill and a sentence about each, in her language. It
+   NEVER returns a field the exercise already has — filling a blank is a
+   repair, replacing an answer is an opinion. */
+const repairExercise = (ex) => {
+  const e = ex || {};
+  const blank = (v) => v === undefined || v === null || String(v).trim() === "" || Number(v) === 0;
+  const txt = `${e.dose || ""} ${e.how || ""} ${e.tool || ""} ${e.machine || ""}`.toLowerCase();
+  const fix = {}, said = [];
+  const set = (k, v, why) => { fix[k] = v; said.push(why); };
+
+  /* "3 x 15", "3x15", "4 sets of 10" */
+  const sxr = txt.match(/(\d+)\s*(?:x|×)\s*(\d+)/) || txt.match(/(\d+)\s*sets?\s*of\s*(\d+)/);
+  /* "hold 30 seconds", "30 sec hold", "30s" — but never a REST instruction,
+     and never the clock a REP TEST is run against. "Reps in 60s" is twenty
+     repetitions inside a minute, not a minute-long hold, and reading it as
+     one turns a strength test into a stretch (suite 26). */
+  const repWindow = /\breps?\s+in\s+\d+|\d+\s*(?:seconds?|secs?|s)\b[^.;]*\breps?\b|\bin\s+\d+\s*(?:seconds?|secs?|s)\b/.test(txt);
+  const holdTxt = txt.replace(/rest[^.;]*/g, " ");
+  const hold = holdTxt.match(/(\d+)\s*(?:seconds?|secs?|s)\b/) || holdTxt.match(/hold\s*(?:for\s*)?(\d+)/);
+  const mins = txt.match(/(\d+)\s*(?:minutes?|mins?)\b/);
+
+  if (blank(e.sets) && sxr) set("sets", String(sxr[1]), `sets ${sxr[1]}, from "${(e.dose || "").trim()}"`);
+  if (blank(e.reps) && sxr && !/second|sec\b|\bs\b/.test(String(sxr[0])))
+    set("reps", String(sxr[2]), `reps ${sxr[2]}, from "${(e.dose || "").trim()}"`);
+  if (blank(e.hold) && hold && !repWindow) set("hold", String(hold[1]), `hold ${hold[1]} seconds, which it said in words but never in a field`);
+  if (blank(e.mins) && mins && !hold) set("mins", Number(mins[1]), `time ${mins[1]} minutes`);
+
+  /* which way the clock runs */
+  if (blank(e.timer)) {
+    if (repWindow) set("timer", "up", "the clock counts up, because it is a rep test and not a hold");
+    else if (!blank(e.hold) || fix.hold) set("timer", "down", "the clock counts down, because it is a hold");
+  }
+
+  /* both sides, and whether they are logged apart */
+  if (blank(e.sides) && !e.side && /each side|per side|both sides|each leg|each arm/.test(txt))
+    set("sides", "each", "it is done on both sides, which the fields never knew");
+
+  /* WHAT IT IS LOADED WITH — the one thing allowed to overwrite, because she
+     reported it herself: "it gives me that I need a band but the field shows
+     a weight". A band is not a weight and the box was asking for kilograms. */
+  const bandish = /\bband\b|tubing|\bloop\b/.test(txt) && !/\bkg\b|dumbbell|kettlebell|barbell|plate/.test(txt);
+  const weightish = /\bkg\b|dumbbell|kettlebell|barbell|plate/.test(txt);
+  const noneish = /bodyweight|no equipment|nothing\b|mat\b|strap|towel|wall\b|chair\b|floor\b/.test(txt);
+  if (bandish && e.loadKind !== "band") set("loadKind", "band", "it uses a band, so it asks for a band and not for kilograms");
+  else if (weightish && blank(e.loadKind)) set("loadKind", "weight", "it uses a weight, so it asks for kilograms");
+  else if (!bandish && !weightish && noneish && blank(e.loadKind))
+    set("loadKind", "none", "it carries no load, so it stops asking what you lifted");
+
+  return { fix, said };
+};
+
+/* Every exercise in every list, including the rounds already done, because a
+   number logged against a wrongly-shaped exercise is still her number. */
+const repairAllLists = (data) => {
+  const report = [];
+  let n = 0;
+  const doList = (pg, li) => ({ ...li, exercises: (li.exercises || []).map((x) => {
+    const { fix, said } = repairExercise(x);
+    if (!said.length) return x;
+    n += 1;
+    report.push({ area: pg.area, list: li.title || `List ${li.n}`, name: x.name, said });
+    return { ...x, ...fix, dose: String(x.dose || "") || doseFrom({ ...x, ...fix }) };
+  }) });
+  const bodywork = (data.bodywork || []).map((pg) => ({ ...pg,
+    lists: (pg.lists || []).map((li) => doList(pg, li)),
+    rounds: (pg.rounds || []).map((r) => ({ ...r, lists: (r.lists || []).map((li) => doList(pg, li)) })) }));
+  return { bodywork, report, n };
 };
 
 function HowTo({ f }) {
@@ -26411,6 +26481,63 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
   );
 }
 
+/* HER INSTRUCTION, 16 August: "i also want you to go through all the lists
+   and fix the fields." Her lists are on her phone; this is the app doing the
+   going-through, in front of her. */
+function FieldRepair({ data, setData }) {
+  const [before, setBefore] = useState(null);
+  const found = repairAllLists(data);
+  /* Rule 23: no card at all when there is nothing wrong. An app that offers
+     to fix nothing teaches her to ignore it. */
+  if (!found.n && !before) return null;
+
+  if (before) return (
+    <Card style={{ background: C.mint, marginBottom: 14 }}>
+      <Eyebrow color={C.moss}>Fields fixed</Eyebrow>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, margin: "4px 0 12px" }}>
+        Done — {before.n} exercise{before.n === 1 ? "" : "s"} now ask{before.n === 1 ? "s" : ""} for what {before.n === 1 ? "it says" : "they say"} they
+        need. Nothing you have logged was touched: every number you have entered is still
+        under the exercise it belongs to.
+      </div>
+      <Btn kind="quiet" onClick={() => { setData((d) => ({ ...d, bodywork: before.bodywork }));
+        setBefore(null); }}>Put it all back</Btn>
+    </Card>
+  );
+
+  return (
+    <Card style={{ background: C.pist, marginBottom: 14 }}>
+      <Eyebrow color={C.signal}>The fields on your exercises</Eyebrow>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.ink, margin: "4px 0 10px" }}>
+        {found.n} exercise{found.n === 1 ? "" : "s"} {found.n === 1 ? "is" : "are"} asking you for the wrong thing, or not asking at
+        all — the coach wrote what {found.n === 1 ? "it" : "they"} needed in words but never into the fields
+        underneath. Here is exactly what I would change. Nothing you have logged is touched.
+      </div>
+      <div style={{ maxHeight: 320, overflowY: "auto", marginBottom: 12,
+        borderTop: `1px solid ${C.line}` }}>
+        {found.report.map((r, k) => (
+          <div key={k} style={{ padding: "9px 0", borderBottom: `1px solid ${C.line}` }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{r.name}</div>
+            <div className="mono" style={{ fontSize: 9.5, color: C.muted, marginTop: 2,
+              textTransform: "uppercase", letterSpacing: "0.05em" }}>{r.area} · {r.list}</div>
+            {r.said.map((x, j) => (
+              <div key={j} style={{ fontSize: 12, color: C.moss, lineHeight: 1.5, marginTop: 3 }}>· {x}</div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <Btn kind="signal" onClick={() => {
+        const now = repairAllLists(data);
+        setBefore({ bodywork: data.bodywork || [], n: now.n });
+        setData((d) => ({ ...d, bodywork: repairAllLists(d).bodywork }));
+      }}>Fix all {found.n} of them</Btn>
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
+        You can put it back straight afterwards, and every one of them is still yours to edit
+        by hand from inside its own card.
+      </div>
+    </Card>
+  );
+}
+
 function BodyWork({ data, setData, coach, setSheet }) {
   const [area, setArea] = useState("");
   const [mins, setMins] = useState("10");
@@ -26513,6 +26640,8 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
           her ten minutes for what she wants to be able to do, AND today's list
           from each body area, stacked — the goal work stays the same until she
           changes a goal, the body lists move on every training day. */}
+      <FieldRepair data={data} setData={setData} />
+
       {justMade && (
         <Card style={{ background: C.mint, marginBottom: 14 }}>
           <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 4 }}>
