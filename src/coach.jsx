@@ -4090,7 +4090,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 171";
+const BUILD = "16 August 2026 · 172";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10891,6 +10891,34 @@ function ExercisePhoto({ id }) {
    tool, machine, the timer — which is her second instruction the same day and
    the honest way to say it.
    ==========================================================================*/
+/* ============================================================================
+   LEFT AND RIGHT
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "in the exercise variables there has to be an
+   option to have right and left."
+
+   There are three honest answers for a movement and the app only had one and a
+   half of them. It can be done once, straight through. It can be done EACH
+   SIDE — the same number both sides, one reading. Or the two sides are
+   genuinely different and each needs its own number, which is what her
+   mobility battery has always done and what her body-work lists could not.
+
+   The third is the one that matters: her right shoulder is rehabilitating and
+   her left side is the weaker one. A single figure for a movement she does
+   worse on one side hides exactly the thing the app exists to watch — and
+   "Left vs right" is one of the calculations it runs.
+
+   `sides` is the variable. "each" and "lr" both mean both sides get done; only
+   "lr" asks for two numbers. `side: true`, which is what the coach used to
+   return and what older exercises carry, reads as "each" so nothing she has
+   already stops making sense (rule 20). */
+const sidesOf = (ex) => {
+  if (!ex) return "";
+  if (ex.sides === "lr" || ex.sides === "each" || ex.sides === "") return ex.sides;
+  return ex.side ? "each" : "";
+};
+const SIDE_LABEL = { each: "each side", lr: "left and right, logged separately" };
+
 /* Every variable an exercise can carry, written out for reading. Only what is
    actually set appears — a movement with no machine does not get a row saying
    it has no machine (rule 23). */
@@ -10906,7 +10934,8 @@ const exerciseSpec = (f) => {
   put("reps", f.reps);
   put("hold", f.hold, "sec");
   put("time", f.mins, "min");
-  if (f.side || f.bilateral) out.push("each side");
+  if (sidesOf(f)) out.push(SIDE_LABEL[sidesOf(f)]);
+  else if (f.bilateral) out.push("each side");
   put("with", f.tool || f.machine);
   if (f.timer === "up") out.push("timer counts up");
   if (f.timer === "down") out.push("timer counts down");
@@ -24622,7 +24651,7 @@ nothing after the }:
         { "name": "...",
           "sets": 3, "reps": 12, "hold": 0,
           "mins": 2,
-          "side": false,
+          "sides": "empty for straight through, 'each' for the same both sides, 'lr' when the two sides need their own numbers — use 'lr' for anything where her weaker side matters",
           "loadKind": "weight | band | none — WHICH IT ACTUALLY IS. A resistance band is 'band', never 'weight'. Bodyweight is 'none'.",
           "tool": "what she needs for it, or 'nothing'",
           "machine": "the machine it needs, or empty — most need none",
@@ -24875,7 +24904,7 @@ Return ONLY a JSON object, no prose, no code fence:
         { "name": "...",
           "sets": 3, "reps": 12, "hold": 0,
           "mins": 2,
-          "side": false,
+          "sides": "empty for straight through, 'each' for the same both sides, 'lr' when the two sides need their own numbers — use 'lr' for anything where her weaker side matters",
           "loadKind": "weight | band | none — WHICH IT ACTUALLY IS. A resistance band is 'band', never 'weight'. Bodyweight is 'none'.",
           "tool": "what she needs for it, or 'nothing'",
           "machine": "the machine it needs, or empty — most need none",
@@ -25160,7 +25189,7 @@ const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid,
 const doseFrom = (x) => {
   const n = (v) => (v === undefined || v === null || v === "" || Number(v) === 0 ? null : String(v));
   const sets = n(x.sets), reps = n(x.reps), hold = n(x.hold);
-  const side = x.side ? " each side" : "";
+  const side = (x.sides === "each" || x.sides === "lr" || x.side) ? " each side" : "";
   if (sets && reps) return `${sets} x ${reps}${side}`;
   if (sets && hold) return `${sets} x ${hold} seconds${side}`;
   if (hold) return `${hold} seconds${side}`;
@@ -25183,7 +25212,8 @@ const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
     hold: x.hold === undefined || x.hold === null || x.hold === "" || Number(x.hold) === 0 ? "" : String(x.hold),
     machine: String(x.machine || ""),
     timer: x.timer === "up" || x.timer === "down" ? x.timer : "",
-    side: !!x.side,
+    sides: ["", "each", "lr"].includes(x.sides) ? x.sides : (x.side ? "each" : ""),
+    side: x.sides === "each" || x.sides === "lr" || !!x.side,
     loadKind: ["weight", "band", "none"].includes(x.loadKind) ? x.loadKind : undefined,
     dose: String(x.dose || doseFrom(x)),
     mins: Number(x.mins) || 2,
@@ -25397,10 +25427,18 @@ const LOAD_BOX = {
 
 const bwSay = (e, ex) => {
   const box = LOAD_BOX[loadKindOf(ex)];
+  const has = (k) => String((e || {})[k] ?? "").trim() !== "";
+  /* Two sides read as two sides. The GAP between them is the point — it is
+     what "Left vs right" watches — so they are never averaged into one
+     number here (rule 23). */
+  const pair = (l, r, unit) => (has(l) || has(r)
+    ? `L ${has(l) ? e[l] : "·"} / R ${has(r) ? e[r] : "·"}${unit ? " " + unit : ""}` : "");
   return [
-    String(e.w ?? "").trim() ? (box ? box.say(e.w) : `${e.w}`) : "",
-    String(e.reps ?? "").trim() ? `${e.reps} reps` : "",
-    String(e.secs ?? "").trim() ? `${e.secs}s` : "",
+    has("w") ? (box ? box.say(e.w) : `${e.w}`) : "",
+    pair("repsL", "repsR", "reps"),
+    has("reps") ? `${e.reps} reps` : "",
+    pair("secsL", "secsR", "s"),
+    has("secs") ? `${e.secs}s` : "",
   ].filter(Boolean).join(" x ");
 };
 
@@ -25497,15 +25535,36 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
              says now (rule 20). */
           const box = LOAD_BOX[loadKindOf(ex)];
           const showW = !!box || String(did.w ?? "").trim() !== "";
-          const showR = repish || String(did.reps ?? "").trim() !== "";
-          const showS = holdish || String(did.secs ?? "").trim() !== "";
+          const lr = sidesOf(ex) === "lr";
+          const filled = (k) => String(did[k] ?? "").trim() !== "";
+          /* Two boxes when the exercise is logged left and right, one when it
+             is not — and a box she has already written in always stays,
+             whatever the exercise says now (rule 20). */
+          const showR = (repish && !lr) || filled("reps");
+          const showS = (holdish && !lr) || filled("secs");
+          const showRlr = (lr && repish) || filled("repsL") || filled("repsR");
+          const showSlr = (lr && holdish) || filled("secsL") || filled("secsR");
           return (
-            <div style={{ display: "flex", gap: 8 }}>
-              {showW && <span style={{ flex: 1 }}><Field type={box && box.unit === "colour or level" ? "text" : undefined}
-                label={box ? box.label : "Load"} unit={box ? box.unit : ""}
-                value={did.w ?? ""} onChange={(v) => putDid("w", v)} /></span>}
-              {showR && <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={did.reps ?? ""} onChange={(v) => putDid("reps", v)} /></span>}
-              {showS && <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={did.secs ?? ""} onChange={(v) => putDid("secs", v)} /></span>}
+            <div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {showW && <span style={{ flex: 1 }}><Field type={box && box.unit === "colour or level" ? "text" : undefined}
+                  label={box ? box.label : "Load"} unit={box ? box.unit : ""}
+                  value={did.w ?? ""} onChange={(v) => putDid("w", v)} /></span>}
+                {showR && <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={did.reps ?? ""} onChange={(v) => putDid("reps", v)} /></span>}
+                {showS && <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={did.secs ?? ""} onChange={(v) => putDid("secs", v)} /></span>}
+              </div>
+              {showRlr && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <span style={{ flex: 1 }}><Field label="Reps left" unit="each set" value={did.repsL ?? ""} onChange={(v) => putDid("repsL", v)} /></span>
+                  <span style={{ flex: 1 }}><Field label="Reps right" unit="each set" value={did.repsR ?? ""} onChange={(v) => putDid("repsR", v)} /></span>
+                </div>
+              )}
+              {showSlr && (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <span style={{ flex: 1 }}><Field label="Hold left" unit="sec" value={did.secsL ?? ""} onChange={(v) => putDid("secsL", v)} /></span>
+                  <span style={{ flex: 1 }}><Field label="Hold right" unit="sec" value={did.secsR ?? ""} onChange={(v) => putDid("secsR", v)} /></span>
+                </div>
+              )}
             </div>
           );
         })()}
@@ -25565,6 +25624,27 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
           <div style={{ display: "flex", gap: 8 }}>
             <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={ex.hold ?? ""} onChange={(v) => patch({ hold: v })} /></span>
             <span style={{ flex: 1 }}><Field label="Time" unit="min" value={ex.mins ?? ""} onChange={(v) => patch({ mins: v })} /></span>
+          </div>
+          {/* HER INSTRUCTION, 16 August: "there has to be an option to have
+              right and left." Three answers, because there are three: once
+              through, the same both sides, or a number for each side. */}
+          <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 6 }}>Sides</div>
+          <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
+            {[["", "Straight through"], ["each", "Each side"], ["lr", "Left and right"]].map(([k, lbl]) => (
+              <button key={lbl} onClick={() => patch({ sides: k, side: k !== "" })} className="tap mono" style={{
+                flex: 1, padding: "8px 0", borderRadius: 7, cursor: "pointer", fontSize: 10.5,
+                fontWeight: 500, fontFamily: "inherit",
+                border: `1.5px solid ${sidesOf(ex) === k ? C.signal : C.line}`,
+                background: sidesOf(ex) === k ? C.signal : "transparent",
+                color: sidesOf(ex) === k ? C.chalk : C.muted }}>{lbl}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-8px 0 14px" }}>
+            {sidesOf(ex) === "lr"
+              ? "You will get a box for each side. The gap between them is what the app watches — it is never averaged away."
+              : sidesOf(ex) === "each"
+              ? "Done both sides, one number. Switch to left and right if the two sides are different."
+              : "One number, done straight through."}
           </div>
           <Field label="What you need" unit="tool, band, mat" type="text" value={ex.tool} onChange={(v) => patch({ tool: v })} />
           <Field label="Machine" unit="if it needs one" type="text" value={ex.machine ?? ""} onChange={(v) => patch({ machine: v })} />
