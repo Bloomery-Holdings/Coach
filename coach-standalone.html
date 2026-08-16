@@ -4121,7 +4121,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 160";
+const BUILD = "16 August 2026 · 161";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -13505,6 +13505,10 @@ function Settings({ data, setData, coach, setSheet }) {
         }
     };
     return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+        React.createElement(Card, { style: { background: C.mint } },
+            React.createElement(Eyebrow, { color: C.moss }, "What your coach is given"),
+            React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, margin: "6px 0 12px" } }, "Everything your coach knows about you, on one page \u2014 as trends rather than a paragraph a week, which is why it stays the same size however many months you add. You can read every word of it, send your own writing with it or not, and switch back to sending everything whenever you want."),
+            React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "summary" }) }, "See your summary")),
         React.createElement(Fold, { title: "You", note: "name, age, height, goal" },
             React.createElement(Field, { label: "Name", unit: "", type: "text", value: s.name, onChange: (v) => set("name", v) }),
             React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 } },
