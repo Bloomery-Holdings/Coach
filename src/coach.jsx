@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 180";
+const BUILD = "16 August 2026 · 181";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4744,7 +4744,7 @@ const batteryMinsOn = (sit, list, date) => {
     .reduce((a, f) => a + (Number(f.mins) || 0), 0);
 };
 
-const doneOnDay = (data, date) => {
+const doneOnDay = (data, date, onCard) => {
   if (!data || !date) return [];
   const rows = [];
   /* `lines` is what is UNDER a row — the individual movements behind
@@ -4836,9 +4836,27 @@ const doneOnDay = (data, date) => {
       { kind: "tab", tab: "body" }, done);
   });
 
-  /* ---- the ten minutes after a session ---------------------------------- */
-  const drills = Object.values((l && l.drillsDone) || {}).filter(Boolean).length;
-  if (drills) add("drills", "Drills after your session", drills + (drills === 1 ? " drill" : " drills"), null);
+  /* ---- the ten minutes after a session ----------------------------------
+     HER REPORT, 16 August: this said "1 drill" on a day when her ten-minutes
+     card showed none done at all. A tick outlives the list it was made in,
+     because the ten minutes are rebuilt from her goals and her scores — so
+     the count was for a drill that had left the card.
+
+     Her tick stays in her file (rule 20). What stops is claiming it: a tick
+     counts only if the app can find the drill, it has not been set aside,
+     and — where the caller knows what was actually on the card, which it does
+     for today — it is a drill she could see. And it says WHICH, so the row
+     opens like every other row here rather than asserting a bare number. */
+  const ticked = Object.keys((l && l.drillsDone) || {}).filter((k) => (l.drillsDone || {})[k]);
+  const roster = (data.drills && data.drills.length ? data.drills : SEED_DRILLS);
+  const realDrills = ticked
+    .map((id) => (roster || []).find((x) => x && x.id === id))
+    .filter((d) => d && isLive(d))
+    .filter((d) => !onCard || onCard.includes(d.id));
+  if (realDrills.length) add("drills", "Drills after your session",
+    realDrills.length + (realDrills.length === 1 ? " drill" : " drills"), null,
+    realDrills.map((d) => ({ what: d.label || "a drill",
+      detail: d.mins ? d.mins + " min" : "" })));
 
   /* ---- work done ON her, which is still work done ------------------------ */
   (l && l.therapy || []).forEach((x, i) => {
@@ -13441,7 +13459,11 @@ function Today({ data, setData, coach, setSheet, goTab }) {
 
   /* Everything this day actually held, from the stores rather than from this
      screen's own state, so it says the same thing the coach is told. */
-  const didRows = doneOnDay(data, logDate);
+  /* Only for the day she is actually looking at, because that is the only day
+     whose ten minutes the app can still see. An earlier day's ticks stand as
+     recorded — they were true when she made them. */
+  const didRows = doneOnDay(data, logDate,
+    logDate === coach.t ? (coach.dailyDrills?.list || []).map((x) => x.id) : undefined);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
