@@ -307,6 +307,7 @@ const FORMULA_DEFAULTS = {
   mobFlag: 60,             /* under this the coach raises it                          */
   mobEvery: 7,             /* days between mobility batteries — hers to move           */
   chatTail: 6,             /* messages of today's talk left open; the rest folds       */
+  callSecs: 120,           /* seconds a call to the coach may hang before it gives up  */
   mobOverdueDays: 10,      /* days since the battery before it is chased              */
   mobGapFlag: 10,          /* left-right gap, percent, worth naming                   */
 
@@ -3988,7 +3989,17 @@ const replyBudget = (text, coach, F) => {
   return f.replyNormal;
 };
 
-const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false, cacheTtl = "5m" }) => {
+/* NOTHING WAITS FOREVER.
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "the change my lists button doesn't work" — it said
+   "changing your lists…" and stopped. There was no timeout on any call in the
+   app, so a stalled request left every button that waits on one stuck in its
+   busy state with nothing on screen and no way out.
+
+   `secs` comes from her settings where the caller can reach them and falls
+   back to the default otherwise; a call that runs out throws "timed-out",
+   which every caller turns into words she can read. */
+const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, search = false, cache = false, cacheTtl = "5m", secs }) => {
   const headers = { "Content-Type": "application/json" };
   if (!insideClaude()) {
     if (!apiKey) throw new Error("no-key");
@@ -4018,10 +4029,37 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
          ...(live ? [{ type: "text", text: live }] : [])]
       : stable + (live ? "\n" + live : "") };
   if (search) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST", headers,
-    body: JSON.stringify(body),
+  const limit = Math.max(15, Number(secs) || Number(FORMULA_DEFAULTS.callSecs) || 120);
+  const stop = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let rang = false, bell = null;
+  /* The clock rejects on its OWN account. Aborting is only how the network
+     work is stopped — it is not how the waiting ends, because a fetch that
+     ignores its signal is precisely the case that stuck her button. */
+  const ring = new Promise((_, rej) => {
+    bell = setTimeout(() => {
+      rang = true;
+      try { stop && stop.abort(); } catch (e) {}
+      rej(new Error("timed-out"));
+    }, limit * 1000);
   });
+  let res;
+  try {
+    res = await Promise.race([
+      fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers,
+        body: JSON.stringify(body),
+        ...(stop ? { signal: stop.signal } : {}),
+      }),
+      ring,
+    ]);
+  } catch (e) {
+    /* running out of time and never getting there are different things to
+       her, and she should be told which (rule 23) */
+    throw new Error(rang || String((e && e.message) || "") === "timed-out"
+      ? "timed-out" : "no-connection");
+  } finally {
+    clearTimeout(bell);
+  }
   if (!res.ok) throw new Error("request-failed");
   const data = await res.json();
   if (usage && data && data.usage) {
@@ -4092,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 177";
+const BUILD = "16 August 2026 · 178";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -16968,6 +17006,7 @@ function Formulas({ data, setData, close }) {
              ["leadCooldown", "Days a line the coach has led stands down before it may lead again"],
              ["briefBodyDays", "Days of your own movements the coach is told about"],
              ["chatTail", "Messages of today's conversation left open before the rest folds"],
+             ["callSecs", "Seconds a call to your coach may hang before it gives up"],
              ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
              ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
              ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
@@ -22140,11 +22179,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         messages: [{ role: "user", content:
           `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\nWHAT YOU JUST TOLD HER YOU WOULD CHANGE:\n${String(msgs[i]?.content || "")}` }],
         maxTokens: 3000,
+        secs: formulas(data.settings).callSecs,
       });
       const out = parseReview(raw);
       if (!out || !Array.isArray(out.changes) || !out.changes.length) {
         setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
-        setEditingLists(null); return;
+        return;
       }
       const before = JSON.parse(JSON.stringify({ bodywork: data.bodywork || [],
         drills: data.drills || [], goals: data.goals || [], mobTests: data.mobTests || [],
@@ -22157,8 +22197,13 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         registry, coach.t);
       done.push(...after.done);
       if (!done.length) {
-        setEditsMade({ error: "Nothing matched — the exercises I meant are not on your lists any more. Nothing has changed." });
-        setEditingLists(null); return;
+        /* HER REPORT, 16 August, and proved against the engine the same day:
+           anything aimed at a whole AREA or a whole LIST applies nothing —
+           only single exercises and single battery, mobility, class or goal
+           rows can be reached. Saying "nothing matched" and stopping left her
+           to guess which of those it was. */
+        setEditsMade({ error: "Nothing changed. I can take off, swap or add an individual exercise, drill, measure, mobility test or class — but not a whole list or a whole body area. Those two you have to do yourself, from the Body page. Nothing has been touched." });
+        return;
       }
       setData((d) => ({ ...d, bodywork,
         drills: after.data.drills, goals: after.data.goals, mobTests: after.data.mobTests,
@@ -22168,11 +22213,21 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       const why = String((e && e.message) || e || "unknown");
       setEditsMade({ error: why === "no-key"
         ? "This one needs your Anthropic key, which lives in Settings."
+        : why === "timed-out"
+        ? "That took too long and I stopped waiting, so nothing has changed. It is usually the connection or a very large set of lists. Tap it again — and you can give it longer under the formulas in Settings if this keeps happening."
+        : why === "no-connection"
+        ? "I couldn't reach your coach at all — that is the connection, not your lists. Nothing has changed. Tap it again when you have signal."
         : `I could not apply that. Nothing has changed. What came back: "${why}"` });
+    } finally {
+      /* HER REPORT, 16 August: it said "changing your lists…" and stopped.
+         This used to sit outside the try, so a promise that never settled —
+         and there was no timeout anywhere in the app — left the button in a
+         state it could not leave. Rule 11: a control must be able to come
+         back. */
+      /* recorded whether it worked or not — a failed call still cost her */
+      noteSpend(setData, "edit", editSpend, coach.t);
+      setEditingLists(null);
     }
-    /* recorded whether it worked or not — a failed call still cost her */
-    noteSpend(setData, "edit", editSpend, coach.t);
-    setEditingLists(null);
   };
   const [listing, setListing] = useState(null);   /* index being turned into a list */
   const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
@@ -22188,11 +22243,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         maxTokens: 3000,
         usage: listSpend,
         search: data.settings?.webSearch === true,
+        secs: formulas(data.settings).callSecs,
       });
       const out = parseReview(raw);
       if (!out || !Array.isArray(out.exercises) || !out.exercises.length) {
         setListMade({ error: "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
-        setListing(null); return;
+        return;
       }
       const area = String(out.area || "the coach's list").trim();
       setData((d) => {
@@ -22224,10 +22280,15 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       const why = String((e && e.message) || e || "unknown");
       setListMade({ error: why === "no-key"
         ? "This one needs your Anthropic key, which lives in Settings."
+        : why === "timed-out"
+        ? "That took too long and I stopped waiting. Nothing has changed — tap it again."
+        : why === "no-connection"
+        ? "I couldn't reach your coach at all. That is the connection, not your lists. Nothing has changed."
         : `I could not shape that into a list. Nothing has changed. What came back: "${why}"` });
+    } finally {
+      noteSpend(setData, "list", listSpend, coach.t);
+      setListing(null);
     }
-    noteSpend(setData, "list", listSpend, coach.t);
-    setListing(null);
   };
   const endRef = useRef(null);
 
@@ -23099,6 +23160,7 @@ Two or three sentences unless she asks for more.`;
         messages: next.map(blockify),
         search: data.settings?.webSearch === true,
         usage: spend,
+        secs: formulas(data.settings).callSecs,
       }) || "I couldn't get a response just then. Try again in a moment.";
       const done = [...next, { role: "assistant", content: reply }];
       setMsgs(done);
@@ -23120,6 +23182,10 @@ Two or three sentences unless she asks for more.`;
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
         ? "I need an API key to talk to you outside the Claude app. Settings, then Your data, then paste one in — it stays on this device."
+        : e.message === "timed-out"
+        ? "That took too long and I stopped waiting rather than leave you looking at nothing. Say it again — and if it keeps happening, the window you send me may be large enough to be slow, which you can change under \"how far back\" above."
+        : e.message === "no-connection"
+        ? "I couldn't reach you at all just then — that's the connection rather than anything you said. Everything you wrote is saved. Try again when you have signal."
         : "Couldn't reach me just then — check your connection and try again." }]);
     } finally { setBusy(false); }
   };
