@@ -3979,7 +3979,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 163";
+const BUILD = "16 August 2026 · 164";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4403,6 +4403,201 @@ const restIsFinal = (logs) => {
     } else out[k] = l;
   });
   return out;
+};
+
+/* ============================================================================
+   WHAT SHE ACTUALLY DID ON A DAY
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "on my landing page, I need a card that says
+   all you did today that includes any battery I did, any lists I did from the
+   body page, any sessions I did, any achieved finishers I did."
+
+   Every one of those was already stored — and stored in four different
+   shapes, in four different places, keyed four different ways: a session on
+   the day log, a battery on the week, body work under the date, a finisher
+   inside the day's log object. Nothing had ever put them beside each other,
+   so there was no screen in the app that could answer the plainest question
+   she asks of it.
+
+   This answers it once, here, so the card and anything else that ever asks
+   agree about what a day held (rule 33).
+
+   Four things it will not do.
+
+   It never describes a day it cannot evidence. A row exists only where the
+   store behind it actually holds something, and it counts what is there
+   rather than asserting a total (rule 23).
+
+   It settles rest first. A day she has said was rest cannot show a session,
+   because restIsFinal has already taken it out — the same view every
+   calculation reads (rule 33).
+
+   It never scores her. There is no fraction of a day, no "3 of 5 done", no
+   colour for a thin day. Each line is a thing that happened, stated (rules
+   24, 25).
+
+   And when nothing has happened yet it returns nothing at all, so the card
+   does not draw. An empty "what you did today" panel on a morning she has not
+   trained is an accounting of a miss, and there is no accounting in this app.
+   ==========================================================================*/
+
+/* which programme and list a body-work exercise belongs to. History keeps its
+   names: a set-aside programme is searched too, so a list she did in June
+   still reads as itself rather than as a raw id. */
+const bwHomeOf = (data, exId) => {
+  for (const pg of (data.bodywork || [])) {
+    const lists = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
+    const hit = lists.find((l) => (l.exercises || []).some((x) => x && x.id === exId));
+    if (hit) return { area: pg.area || "body work", list: hit.title || "" };
+  }
+  return null;
+};
+
+/* Is there a real reading against this measure in this sitting. Every shape a
+   measure can take — both sides, weight x reps, a rung, a written note.
+
+   IT ASKS THE CELL, NOT readMeasure. The first version of this asked
+   readMeasure whether the row produced a number, and readMeasure turns an
+   empty timed hold into Number("") — which is 0, which is not NaN. So every
+   timed test in the battery counted as done the moment any other row was
+   typed, and the card would have told her she had taken measurements she had
+   not taken (rule 23). A reading is a cell with something in it. */
+const measureFilled = (entry, f) => {
+  if (!entry || !f) return false;
+  const some = (k) => String(entry[k] ?? "").trim() !== "";
+  if (f.rungs && f.rungs.length > 1 && some(f.id + "__rung")) return true;
+  if (f.type === "weightreps") {
+    return some(f.id + "__w") || some(f.id) || some(f.id + "__L") || some(f.id + "__R");
+  }
+  if (f.bilateral) return some(f.id + "__L") || some(f.id + "__R");
+  return some(f.id);
+};
+
+/* A mobility test is done when either side, or the single score, is entered. */
+const mobFilled = (e) => {
+  if (e === undefined || e === null) return false;
+  if (typeof e !== "object") return String(e).trim() !== "";
+  return ["l", "L", "r", "R", "score", "v"].some((k) => String(e[k] ?? "").trim() !== "");
+};
+
+/* Was this sitting worked on with her hands on this particular date. The
+   sitting records every day it was touched (`days`); `started` and `on` are
+   read as well so that sittings taken before that was written still answer. */
+const sittingTouched = (sit, date) => !!sit && (
+  (sit.days || []).includes(date) || sit.started === date || sit.on === date);
+
+/* How far into a sitting she is. `filled` counts every reading in it,
+   including readings against a row that has since been paused — she took that
+   measurement and rule 20 does not let it disappear. `asked` is what the
+   battery currently asks for. Where the two disagree the denominator goes
+   rather than being invented (rule 23). */
+const sittingCount = (filled, asked) => (!filled ? ""
+  : filled > asked ? filled + (filled === 1 ? " measure in" : " measures in")
+  : filled + " of " + asked + " measures in");
+
+const doneOnDay = (data, date) => {
+  if (!data || !date) return [];
+  const rows = [];
+  const add = (id, what, detail, go) => rows.push({ id, what, detail: detail || "", go: go || null });
+
+  const LG = restIsFinal(data.logs || {});
+  const l = LG[date] || null;
+
+  /* ---- what she trained ------------------------------------------------ */
+  if (l && l.completed) {
+    const mins = String(l.minutes ?? "").trim();
+    add("session", l.type || "A session", mins ? mins + " min" : "", { kind: "session" });
+  }
+  (l && l.extraSessions || []).forEach((x, i) => {
+    if (!x) return;
+    add("extra:" + i, x.type || "Extra session",
+      String(x.minutes ?? "").trim() ? x.minutes + " min" : "", { kind: "session" });
+  });
+  (l && l.extras || []).forEach((x, i) => { if (x) add("plus:" + i, String(x), "", { kind: "session" }); });
+
+  /* A day she moved rather than trained is a day she did something, and rule
+     4 is explicit that reaching any rung means the day was not missed. It
+     goes on the list under its own name, never as a lesser session. */
+  if (l && l.state === "moved" && !l.completed) {
+    add("moved", l.movedWhat || "Something smaller",
+      String(l.movedMins ?? "").trim() ? l.movedMins + " min" : "", { kind: "session" });
+  }
+
+  /* ---- the batteries --------------------------------------------------- */
+  const ws = weekStart(date, weekStartOn(data.settings));
+  const wSit = (data.weekly || {})[ws];
+  if (sittingTouched(wSit, date)) {
+    const all = ((data.fields || {}).weekly || []);
+    add("weekly", "Weekly battery",
+      sittingCount(all.filter((f) => measureFilled(wSit, f)).length, all.filter(isLive).length),
+      { kind: "sheet", sheet: { kind: "weekly" } });
+  }
+  const mSit = (data.monthly || {})[monthKey(date)];
+  if (sittingTouched(mSit, date)) {
+    const all = ((data.fields || {}).monthly || []);
+    add("monthly", "Monthly benchmark",
+      sittingCount(all.filter((f) => measureFilled(mSit, f)).length, all.filter(isLive).length),
+      { kind: "sheet", sheet: { kind: "monthly" } });
+  }
+  const mobSit = (data.mobility || {})[ws];
+  if (sittingTouched(mobSit, date)) {
+    const all = (data.mobTests || []);
+    const done = all.filter((m) => mobFilled(mobSit[m.id])).length;
+    const asked = all.filter(isLive).length;
+    add("mobility", "Mobility tests",
+      !done ? "" : done > asked ? done + (done === 1 ? " test" : " tests") : done + " of " + asked + " tested",
+      { kind: "sheet", sheet: { kind: "mobility" } });
+  }
+
+  /* Trying the things she said she wants to be able to do is a battery of its
+     own, and rule 9 puts it above the computed ones. */
+  const scored = (data.goals || []).filter((g) => (g.scores || [])
+    .some((x) => x && x.date === date && x.value !== undefined && x.value !== ""));
+  if (scored.length) {
+    add("goals", scored.length === 1 ? "Tried: " + (scored[0].text || "a goal")
+      : "Tried " + scored.length + " of the things you want to do",
+      scored.length === 1
+        ? (scored[0].scores || []).filter((x) => x.date === date).map((x) => x.value + "/10")[0] || ""
+        : scored.map((g) => (g.scores || []).find((x) => x.date === date)?.value).filter((v) => v !== undefined).join(" · "),
+      { kind: "sheet", sheet: { kind: "goals" } });
+  }
+
+  /* ---- the lists off the Body page ------------------------------------- */
+  const bw = (data.bwlog || {})[date] || {};
+  const byList = {};
+  Object.keys(bw).forEach((exId) => {
+    const e = bw[exId] || {};
+    if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return;
+    const home = bwHomeOf(data, exId);
+    const name = home ? (home.list ? home.area + " · " + home.list : home.area) : "Body work";
+    byList[name] = (byList[name] || 0) + 1;
+  });
+  Object.keys(byList).sort().forEach((name) => {
+    add("bw:" + name, name, byList[name] + (byList[name] === 1 ? " exercise" : " exercises"),
+      { kind: "tab", tab: "body" });
+  });
+
+  /* ---- the ten minutes after a session ---------------------------------- */
+  const drills = Object.values((l && l.drillsDone) || {}).filter(Boolean).length;
+  if (drills) add("drills", "Drills after your session", drills + (drills === 1 ? " drill" : " drills"), null);
+
+  /* ---- work done ON her, which is still work done ------------------------ */
+  (l && l.therapy || []).forEach((x, i) => {
+    if (!x) return;
+    const th = THERAPIES.find((y) => y.id === x.type);
+    add("therapy:" + i, th ? th.label : String(x.type || "Body work"),
+      String(x.minutes ?? "").trim() ? x.minutes + " min" : "", null);
+  });
+
+  /* ---- the finisher, if she got it -------------------------------------
+     Only when she says she did. "Didn't do it" is not a failure and does not
+     appear here, and neither does an unanswered one (rule 24). */
+  if (l && l.bet && l.bet.met === true) {
+    add("bet", l.bet.text || "Your finisher",
+      l.bet.target ? "past your best of " + l.bet.target : "done", null);
+  }
+
+  return rows;
 };
 
 /* ============================================================================
@@ -12086,6 +12281,61 @@ function BodyWorkCard({ log, write, isToday }) {
   );
 }
 
+/* ============================================================================
+   WHAT YOU DID TODAY
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August. One card, near the top of the landing page,
+   holding everything the day actually contained: the session, the batteries,
+   the lists off the Body page, the finisher if she got it.
+
+   It is a LIST OF THINGS THAT HAPPENED, and deliberately not a score. There
+   is no fraction of a day in it, no target, no colour for a thin day and no
+   empty state — when the day holds nothing the card is not there at all,
+   because a panel headed "what you did today" with nothing under it is an
+   accounting of a miss (rules 24, 25).
+
+   Every row that has somewhere to go, goes there: the battery rows open the
+   battery, the body-work rows open the Body page, the session row opens the
+   session. A row with nowhere to go does not pretend to be a button (rule 11).
+
+   It follows the day she is looking at, like everything else on this page —
+   so stepping back to Tuesday shows Tuesday.
+   ==========================================================================*/
+const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
+  if (!rows || !rows.length) return null;
+  return (
+    <Card style={{ background: C.pist }}>
+      <Eyebrow color={C.moss}>{isToday ? "What you did today" : `What you did on ${dayLabel}`}</Eyebrow>
+      <div>
+        {rows.map((r, i) => {
+          const inner = (
+            <span style={{ display: "flex", alignItems: "baseline", gap: 10, width: "100%" }}>
+              <span style={{ flex: 1, fontSize: 14.5, color: C.ink, lineHeight: 1.4 }}>{r.what}</span>
+              {r.detail && (
+                <span className="mono" style={{ flexShrink: 0, fontSize: 11, color: C.muted, letterSpacing: "0.04em" }}>
+                  {r.detail}
+                </span>
+              )}
+              {r.go && <span style={{ flexShrink: 0, fontSize: 13, color: C.muted }}>›</span>}
+            </span>
+          );
+          const line = { display: "flex", alignItems: "center", width: "100%", textAlign: "left",
+            padding: "9px 0", borderTop: i === 0 ? "none" : `1px solid ${C.line}` };
+          return r.go ? (
+            <button key={r.id} onClick={() => onGo && onGo(r.go)} className="tap"
+              style={{ ...line, border: "none", borderTop: line.borderTop, background: "transparent",
+                cursor: "pointer", fontFamily: "inherit" }}>
+              {inner}
+            </button>
+          ) : (
+            <div key={r.id} style={line}>{inner}</div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+};
+
 function Today({ data, setData, coach, setSheet, goTab }) {
   /* one note a day, taken from the pool and never handed out twice */
   useEffect(() => {
@@ -12279,6 +12529,10 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   const totalMinutes = [Number(log?.minutes) || 0, ...extraSessions.map((x) => Number(x.minutes) || 0)]
     .reduce((a, b) => a + b, 0);
 
+  /* Everything this day actually held, from the stores rather than from this
+     screen's own state, so it says the same thing the coach is told. */
+  const didRows = doneOnDay(data, logDate);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
@@ -12302,6 +12556,109 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           <span style={{ fontSize: 13 }}>⌕</span> Search
         </button>
       </div>
+
+      {/* HER INSTRUCTION, 16 August, with a screenshot round both cards:
+          "push these two cards to the top of the landing page". These are the
+          two she fills in first and the two the coach reads before it decides
+          anything — so having to scroll past the note, the numbers, the week
+          strip and the coach's own line to reach the fields that line was
+          computed from was backwards. Moved whole; neither card changed. */}
+      {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
+               Her instruction of 8 August: the WHOOP export lands weekly, so
+               recovery and sleep have to be typeable first thing, every day,
+               and they have to reach the decision rather than a report. Both
+               are read by the class picker the moment they are entered - a
+               low recovery or a short night steps today's class down. The
+               weekly import overwrites both with the exact values.
+
+               This card existed at the top of Today and was lost when the
+               page was reordered on 8 August. It is back. */}
+      {isToday && (
+        <Card style={{ background: coach.recValue ? C.card : C.pist, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+            <Eyebrow color={coach.recValue ? C.muted : C.signal}>This morning</Eyebrow>
+            {coach.recovery && (
+              <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em",
+                textTransform: "uppercase", color: coach.recovery.key === "green" ? C.moss
+                  : coach.recovery.key === "rest" ? C.clay : C.muted }}>
+                {coach.recovery.label}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Recovery" unit="%" value={coach.recValue}
+                onChange={(v) => setData((d) => ({ ...d,
+                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } }))} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Field label="Sleep" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
+            </div>
+          </div>
+
+          {/* HER DECISION IN THE CALCULATION REVIEW, 12 August: Adaptation was
+              blocked on WHOOP strain, which had no input anywhere. She chose a
+              typed box, read off the WHOOP screen. The import overwrites it
+              with the exact figure when the file lands. */}
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Day strain" unit="0–21, from WHOOP" value={(data.morning?.[coach.t] || {}).strain}
+                onChange={(v) => setData((d) => ({ ...d,
+                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), strain: v } } }))} />
+            </div>
+            <div style={{ flex: 1 }} />
+          </div>
+
+          {/* "It doesn't know that I woke up or I'm sleeping." — 10 August.
+              One field, and the coach stops treating the first half hour of
+              her day as a verdict on it. */}
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+            <div style={{ flex: 1 }}>
+              <Field label="Woke at" unit="hh:mm" type="text" value={coach.wokeRaw}
+                onChange={(v) => setData((d) => {
+                  /* HER FIND, 12 August: this wrote wokeAt while sleep
+                     regularity read wakeAt — one letter apart, never connected.
+                     Both are written now: the raw text she typed, and the
+                     parsed minutes the calculation reads. */
+                  const m = String(v).match(/^(\d{1,2})[:.h]?(\d{2})?$/);
+                  const mins = m ? (Number(m[1]) % 24) * 60 + (Number(m[2] || 0) % 60) : undefined;
+                  return { ...d,
+                    morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}),
+                      wokeAt: v, ...(mins !== undefined ? { wakeAt: String(mins) } : {}) } } };
+                })} />
+            </div>
+            {/* HER INSTRUCTION, 12 August: "Put the nap next to woke up at,
+                not under it." Sleep is the night; this is anything she added
+                to it afterwards, and it can be filled at any point in the day. */}
+            <div style={{ flex: 1 }}>
+              <Field label="Nap" unit="hours" value={log?.nap} onChange={(v) => write({ nap: v })} />
+            </div>
+          </div>
+
+          {/* HER INSTRUCTION, 12 August: "Wire it." The setting had no control
+              and nothing behind it. This is what it turns on — her own words
+              about how she is physically, never a score (rule 25 as she has
+              now written it: nothing here is counted or ranked). */}
+          {data.settings?.trackSymptoms && (
+            <Note label="Anything you're feeling"
+              value={(data.morning?.[coach.t] || {}).symptoms || ""}
+              onChange={(v) => setData((d) => ({ ...d,
+                morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), symptoms: v } } }))}
+              hint="A headache, a cold coming, a sore back, nothing at all. It goes to the coach with the rest of your morning. It is never scored and never counted against a session." />
+          )}
+
+          <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: -4 }}>
+            {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
+          </div>
+
+          <InfoNote why="These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost.">
+            What these two change
+          </InfoNote>
+        </Card>
+      )}
+
+      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
       {note && (
         <button onClick={() => setSheet({ kind: "notes" })} className="tap" style={{
@@ -12404,6 +12761,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         )}
       </div>
 
+      {/* WHAT SHE DID — her instruction, 16 August. Under the strip because
+          the strip is where the day gets chosen. */}
+      <DidToday rows={didRows} isToday={isToday} dayLabel={dayAndMonth(logDate)}
+        onGo={(go) => {
+          if (!go) return;
+          if (go.kind === "sheet") setSheet(go.sheet);
+          else if (go.kind === "tab") goTab && goTab(go.tab);
+          else if (go.kind === "session") setSessionDetail(true);
+        }} />
 
       {/* A past day she has opened, that the calendar is painting white:
           the day says what the app can and cannot see in it, and gives her
@@ -12547,102 +12913,6 @@ function Today({ data, setData, coach, setSheet, goTab }) {
 
 
 
-      {/* ---- THIS MORNING, BEFORE THE COACH DECIDES ---------------------
-               Her instruction of 8 August: the WHOOP export lands weekly, so
-               recovery and sleep have to be typeable first thing, every day,
-               and they have to reach the decision rather than a report. Both
-               are read by the class picker the moment they are entered - a
-               low recovery or a short night steps today's class down. The
-               weekly import overwrites both with the exact values.
-
-               This card existed at the top of Today and was lost when the
-               page was reordered on 8 August. It is back. */}
-      {isToday && (
-        <Card style={{ background: coach.recValue ? C.card : C.pist, padding: "14px 16px" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
-            <Eyebrow color={coach.recValue ? C.muted : C.signal}>This morning</Eyebrow>
-            {coach.recovery && (
-              <span className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em",
-                textTransform: "uppercase", color: coach.recovery.key === "green" ? C.moss
-                  : coach.recovery.key === "rest" ? C.clay : C.muted }}>
-                {coach.recovery.label}
-              </span>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <Field label="Recovery" unit="%" value={coach.recValue}
-                onChange={(v) => setData((d) => ({ ...d,
-                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), recovery: v } } }))} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <Field label="Sleep" unit="hours" value={log?.sleep} onChange={(v) => write({ sleep: v })} />
-            </div>
-          </div>
-
-          {/* HER DECISION IN THE CALCULATION REVIEW, 12 August: Adaptation was
-              blocked on WHOOP strain, which had no input anywhere. She chose a
-              typed box, read off the WHOOP screen. The import overwrites it
-              with the exact figure when the file lands. */}
-          <div style={{ display: "flex", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <Field label="Day strain" unit="0–21, from WHOOP" value={(data.morning?.[coach.t] || {}).strain}
-                onChange={(v) => setData((d) => ({ ...d,
-                  morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), strain: v } } }))} />
-            </div>
-            <div style={{ flex: 1 }} />
-          </div>
-
-          {/* "It doesn't know that I woke up or I'm sleeping." — 10 August.
-              One field, and the coach stops treating the first half hour of
-              her day as a verdict on it. */}
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-            <div style={{ flex: 1 }}>
-              <Field label="Woke at" unit="hh:mm" type="text" value={coach.wokeRaw}
-                onChange={(v) => setData((d) => {
-                  /* HER FIND, 12 August: this wrote wokeAt while sleep
-                     regularity read wakeAt — one letter apart, never connected.
-                     Both are written now: the raw text she typed, and the
-                     parsed minutes the calculation reads. */
-                  const m = String(v).match(/^(\d{1,2})[:.h]?(\d{2})?$/);
-                  const mins = m ? (Number(m[1]) % 24) * 60 + (Number(m[2] || 0) % 60) : undefined;
-                  return { ...d,
-                    morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}),
-                      wokeAt: v, ...(mins !== undefined ? { wakeAt: String(mins) } : {}) } } };
-                })} />
-            </div>
-            {/* HER INSTRUCTION, 12 August: "Put the nap next to woke up at,
-                not under it." Sleep is the night; this is anything she added
-                to it afterwards, and it can be filled at any point in the day. */}
-            <div style={{ flex: 1 }}>
-              <Field label="Nap" unit="hours" value={log?.nap} onChange={(v) => write({ nap: v })} />
-            </div>
-          </div>
-
-          {/* HER INSTRUCTION, 12 August: "Wire it." The setting had no control
-              and nothing behind it. This is what it turns on — her own words
-              about how she is physically, never a score (rule 25 as she has
-              now written it: nothing here is counted or ranked). */}
-          {data.settings?.trackSymptoms && (
-            <Note label="Anything you're feeling"
-              value={(data.morning?.[coach.t] || {}).symptoms || ""}
-              onChange={(v) => setData((d) => ({ ...d,
-                morning: { ...d.morning, [coach.t]: { ...(d.morning?.[coach.t] || {}), symptoms: v } } }))}
-              hint="A headache, a cold coming, a sore back, nothing at all. It goes to the coach with the rest of your morning. It is never scored and never counted against a session." />
-          )}
-
-          <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: -4 }}>
-            {coach.awakeLabel ? `up ${coach.awakeLabel} · now ${coach.nowLabel}` : `now ${coach.nowLabel}`}
-          </div>
-
-          <InfoNote why="These two are the only things the coach has about today until the weekly WHOOP export lands, and it reads them before it picks a class. Recovery is scored against your own thirty-day normal rather than WHOOP's scale, so a low day means low for you. A night that is short for you steps the class down one level on its own - it can only ever make the day gentler, never harder. The import overwrites both with the exact figures when it lands, and nothing you type is lost.">
-            What these two change
-          </InfoNote>
-        </Card>
-      )}
-
-      {isToday && <MoodCard log={log} write={write} setSheet={setSheet} coach={coach} />}
 
       {/* HER INSTRUCTION, 12 August: "I want talk to my coach after how I
           feel, because that's where it makes sense" — and the read after
@@ -22161,8 +22431,14 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       ? { logs: { ...(d.logs || {}), [coach.t]: { ...l, completed: true,
           type: l.type || (isWeekly ? "Weekly measurements" : "Monthly benchmark") } } }
       : {};
+    /* WHICH DAYS SHE ACTUALLY WORKED ON THIS SITTING (16 August). `started`
+       is the first day and nothing else, so a battery spread over a Saturday
+       and a Sunday could not be seen on the Sunday — and "what you did today"
+       has to be able to see it. Every day is kept; none is ever removed. */
+    const days = prev.days || (prev.started ? [prev.started] : []);
     return { ...d, ...stamp, [which]: { ...(d[which] || {}),
-      [key]: { ...prev, [k]: v, started: prev.started || coach.t } } };
+      [key]: { ...prev, [k]: v, started: prev.started || coach.t,
+        days: days.includes(coach.t) ? days : [...days, coach.t] } } };
   });
 
   /* Mobility is the end of this battery, not a separate errand. It keeps its
@@ -22172,8 +22448,11 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   const mob = (data.mobility && data.mobility[coach.ws]) || {};
   const putMob = (id, patch) => setData((d) => {
     const week = (d.mobility || {})[coach.ws] || {};
+    const mdays = week.days || (week.started ? [week.started] : []);
     return { ...d, mobility: { ...(d.mobility || {}),
-      [coach.ws]: { ...week, started: week.started || coach.t, [id]: { ...(week[id] || {}), ...patch } } } };
+      [coach.ws]: { ...week, started: week.started || coach.t,
+        days: mdays.includes(coach.t) ? mdays : [...mdays, coach.t],
+        [id]: { ...(week[id] || {}), ...patch } } } };
   });
 
   /* THE THINGS SHE WANTS TO DO ARE A BATTERY OF THEIR OWN.
