@@ -1501,8 +1501,14 @@ const sittingFields = (data, which, key) => {
      for on any screen that asks her for a number. It stays in the pool below,
      so it is still visible, still reversible, and still in every chart. */
   const live = liveFields(data);
+  /* A MONTHLY ROW CAN ASK TO BE IN THE WEEKLY BATTERY (16 August, her
+     instruction about body fat and muscle). Weekly rows are in unless they say
+     `inWeekly: false`; monthly rows are out unless they say `inWeekly: true`.
+     Opt-out for one list, opt-in for the other — so adding a monthly row later
+     cannot land in her weekly ten minutes by forgetting a flag. */
   const base = which === "weekly"
-    ? live.weekly.filter((f) => f.inWeekly !== false)
+    ? [...live.weekly.filter((f) => f.inWeekly !== false),
+       ...live.monthly.filter((f) => f.inWeekly === true)]
     : [...live.monthly, ...live.weekly];
   const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
   const kept = base.filter((f) => !out.includes(f.id));
@@ -3426,11 +3432,25 @@ const SEED_WEEKLY = [
     why: "It is read at the end of the block, alongside everything else, and it is mined for patterns across the year. Nothing you write here is decoration." },
 ];
 
+/* HER INSTRUCTION, 16 August: "add body fat% and body muscle % to the weekly
+   battery… I tried to enter my weekly body fat and body muscle but couldn't
+   find it anywhere."
+
+   They were never missing — they were MONTHLY rows, `inWeekly: false`, which
+   is how they have been since long before build 158, and the weekly battery
+   only ever shows weekly rows. So the place she was looking was the one place
+   they could not be. `inWeekly: true` now, and the weekly battery takes any
+   monthly row that opts in (see `batteryFields`).
+
+   Nothing about where the numbers LIVE changes: a monthly sitting still writes
+   its `fromMonthly` copy into the weekly store, `analyseMeasure` still
+   de-duplicates the two, and every reading she has already taken keeps its
+   place in the trend (rule 20). She simply gets asked weekly as well. */
 const SEED_MONTHLY = [
-  { id: "muscle", cap: "body", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: false ,
+  { id: "muscle", cap: "body", label: "Muscle",   unit: "%", type: "number", better: "up",   role: "anchor", inWeekly: true ,
     how: "Same scales, same conditions as your weight. Log the percentage the scales report.",
     why: "Maintaining muscle through your fifties is the whole point of the training. It moves slowly, so only a change beyond the measurement error counts as a change at all." },
-  { id: "fat",    cap: "body", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: false ,
+  { id: "fat",    cap: "body", label: "Body fat", unit: "%", type: "number", better: "down", role: "anchor", inWeekly: true ,
     how: "Same scales, same conditions, same time of day.",
     why: "Read alongside muscle rather than on its own. Consumer scales are not accurate in absolute terms, but they are reasonably consistent, which is what makes the direction usable." },
 ];
@@ -3636,6 +3656,16 @@ const SPEND_KINDS = {
   chat: "talking to your coach", read: "the monthly read",
   list: "building a list", edit: "editing your lists",
   bodywork: "designing your body-work lists", note: "writing a note back",
+  /* HER INSTRUCTION, 16 August: "I need to make sure that everything in costs
+     is included as a total in the cost calculation of the app."
+     It was not. The memory fold is a real call on her key — it runs when she
+     puts a conversation down, and it recorded what it spent into
+     `data.memory.cost`, which `spendSince` has never read. Measured on a
+     loaded account: about 14c the first time, when it seeds from everything
+     she has, and 2.5-3.5c each time after. On a ten-message conversation
+     showing her 7c, that is a third again, invisible.
+     It is a line like every other line now. */
+  memory: "keeping your coach's memory of you up to date",
 };
 const spendEntry = (kind, usage, F, t) => ({
   at: Date.now(), date: t, kind,
@@ -3949,7 +3979,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 161";
+const BUILD = "16 August 2026 · 162";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -12184,10 +12214,24 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
 
       {/* ---- the top of the page: what day, one line to read, two numbers ---- */}
-      <div style={{ padding: "6px 4px 0" }}>
+      <div style={{ padding: "6px 4px 0", display: "flex", alignItems: "center",
+        justifyContent: "space-between", gap: 10 }}>
         <div className="mono" style={{ fontSize: 10.5, letterSpacing: "0.16em", textTransform: "uppercase", color: C.muted }}>
           {prettyDate(coach.t)}
         </div>
+        {/* SEARCH, AT THE BEGINNING OF THE LANDING PAGE — her instruction, 16
+            August, after she could not find where to enter her body fat and
+            muscle. It finds every measure, drill, class, number, goal and
+            screen in the app, including the ones that are paused or set aside,
+            and opens the place each one lives. */}
+        <button onClick={() => setSheet({ kind: "search" })} className="tap"
+          aria-label="Search the app" style={{
+            flexShrink: 0, display: "flex", alignItems: "center", gap: 6,
+            padding: "7px 13px", borderRadius: 999, cursor: "pointer",
+            border: `1.5px solid ${C.line}`, background: C.card,
+            fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", color: C.muted }}>
+          <span style={{ fontSize: 13 }}>⌕</span> Search
+        </button>
       </div>
 
       {note && (
@@ -19654,6 +19698,181 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
   );
 }
 
+/* ============================================================================
+   SEARCH — ONE PLACE THAT FINDS ANYTHING IN THE APP
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "I need a search button at the beginning of my
+   landing page that covers every single field in the app. Yesterday I tried to
+   enter my weekly body fat and body muscle but couldn't find it anywhere."
+
+   That is the fault this fixes, and it is not really a missing feature — it is
+   the same fault as the summary page having its only door inside a fold about
+   batteries (rule 11). The app has grown to five tabs and twenty-seven sheets,
+   and knowing which one holds a thing has quietly become her job. It should
+   not be.
+
+   So: everything she can enter, read or change is indexed, and every result
+   opens the screen it lives on. Measures include the ones that are paused or
+   set aside — those are exactly the ones she cannot find by browsing, because
+   they are deliberately hidden from the screens that ask for numbers.
+
+   The index is built from her data at render, never stored, so it can never go
+   stale and it costs nothing to keep.
+--------------------------------------------------------------------------- */
+const searchIndex = (data, coach) => {
+  const out = [];
+  const add = (label, sub, group, open, extra) => {
+    if (!label) return;
+    out.push({ label: String(label), sub: sub || "", group, open, hay:
+      (String(label) + " " + (sub || "") + " " + (extra || "")).toLowerCase() });
+  };
+  const status = (f) => f.status === "paused" ? "paused — still on your record"
+    : f.status === "removed" ? "set aside — tap to bring it back"
+    : f.status === "retired" ? "retired" : "";
+
+  /* ---- every measure, in both batteries, whatever its state ---- */
+  (data.fields?.weekly || []).forEach((f) => add(f.label,
+    [f.unit ? `in ${f.unit}` : "", "weekly battery", status(f)].filter(Boolean).join(" · "),
+    "Measure", { sheet: { kind: "weekly", key: coach.ws } }, f.how));
+  (data.fields?.monthly || []).forEach((f) => add(f.label,
+    [f.unit ? `in ${f.unit}` : "",
+     f.inWeekly === true ? "weekly battery and monthly benchmark" : "monthly benchmark",
+     status(f)].filter(Boolean).join(" · "),
+    "Measure", { sheet: { kind: f.inWeekly === true ? "weekly" : "monthly",
+      key: f.inWeekly === true ? coach.ws : coach.mk } }, f.how));
+
+  /* ---- mobility, drills, classes ---- */
+  (coach.mobTests || []).forEach((m) => add(m.label,
+    [m.unit ? `in ${m.unit}` : "", m.side ? "left and right" : "", "mobility battery"]
+      .filter(Boolean).join(" · "), "Mobility", { sheet: { kind: "mobility" } }, m.how));
+  (coach.drills || []).forEach((d) => add(d.label, [d.targets || "", "drill"].filter(Boolean).join(" · "),
+    "Drill", { sheet: { kind: "mobility" } }, d.how));
+  (data.library || []).filter((w) => w && w.status !== "removed").forEach((w) => add(w.name,
+    [w.goal || "", (w.durations || []).join("/") + " min"].filter(Boolean).join(" · "),
+    "Class", { tab: "plan" }, w.equipment));
+
+  /* ---- every calculation, by name and by what it means ---- */
+  (coach.allMetrics || []).forEach((v) => add(v.label,
+    [v.scope || "", v.key ? "on your landing page" : "one tap away"].filter(Boolean).join(" · "),
+    "Number", { sheet: { kind: "vital", id: v.id } }, v.plain));
+
+  /* ---- her own words and her own work ---- */
+  (coach.openGoals || []).forEach((g) => add(g.text, "something you want to be able to do",
+    "Goal", { sheet: { kind: "goals" } }));
+  (coach.openIssues || []).forEach((i) => add(i.text, `on your record since ${i.date}`,
+    "Record", { sheet: { kind: "written" } }));
+  (data.bodywork || []).filter((p) => p && p.status !== "removed").forEach((p) => {
+    add(p.area, `${(p.lists || []).length} lists of body work`, "Body work", { tab: "body" });
+    (p.lists || []).forEach((l) => (l.exercises || []).forEach((x) => add(x.name,
+      `${p.area} · list ${l.n}${x.dose ? ` · ${x.dose}` : ""}`, "Body work", { tab: "body" }, x.how)));
+  });
+
+  /* ---- the thresholds, so a number she disagrees with is one search away ---- */
+  Object.keys(FORMULA_DEFAULTS).forEach((k) => add(k, "a threshold you can change",
+    "Setting", { sheet: { kind: "formulas" } }));
+
+  /* ---- and the screens themselves ---- */
+  [["Your summary", "what your coach is given, and what it costs", { sheet: { kind: "summary" } }],
+   ["Next month's programme", "the monthly read", { sheet: { kind: "review" } }],
+   ["Talk to your coach", "", { sheet: { kind: "chat" } }],
+   ["Weekly battery", "this week's measurements", { sheet: { kind: "weekly", key: coach.ws } }],
+   ["Monthly benchmark", "body composition and the slow measures", { sheet: { kind: "monthly", key: coach.mk } }],
+   ["Mobility battery", "eight tests", { sheet: { kind: "mobility" } }],
+   ["Journal", "everything you have written", { sheet: { kind: "journal" } }],
+   ["Your record", "everything you have told your coach", { sheet: { kind: "written" } }],
+   ["What your coach remembers", "", { sheet: { kind: "memory" } }],
+   ["What the coach believes about you", "", { sheet: { kind: "profile" } }],
+   ["Which numbers your coach carries", "", { sheet: { kind: "coachmetrics" } }],
+   ["Formulas and scoring", "every threshold in the app", { sheet: { kind: "formulas" } }],
+   ["WHOOP import", "", { sheet: { kind: "whoop" } }],
+   ["Your programme", "blocks and the calendar", { sheet: { kind: "program" } }],
+   ["Notes you kept", "", { sheet: { kind: "notes" } }],
+   ["Today", "", { tab: "today" }], ["Workouts", "", { tab: "plan" }],
+   ["Body", "", { tab: "body" }], ["Progress", "", { tab: "progress" }],
+   ["Settings", "", { tab: "settings" }],
+  ].forEach(([l, s, o]) => add(l, s, "Screen", o));
+
+  return out;
+};
+
+/* Matches on every word she types, in any order, anywhere in the entry — so
+   "fat body" finds Body fat, and a half-remembered word still lands. */
+const searchHits = (index, q) => {
+  const words = String(q || "").toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return index
+    .filter((e) => words.every((w) => e.hay.includes(w)))
+    .sort((a, b) => {
+      const ap = a.label.toLowerCase().startsWith(words[0]) ? 0 : 1;
+      const bp = b.label.toLowerCase().startsWith(words[0]) ? 0 : 1;
+      return ap - bp || a.label.length - b.label.length;
+    });
+};
+
+function SearchSheet({ data, coach, setSheet, goTab, close }) {
+  const [q, setQ] = useState("");
+  const index = searchIndex(data, coach);
+  const hits = searchHits(index, q).slice(0, 40);
+  const groups = [...new Set(hits.map((h) => h.group))];
+
+  const goTo = (e) => {
+    close();
+    if (e.open?.tab && goTab) goTab(e.open.tab);
+    if (e.open?.sheet) setSheet(e.open.sheet);
+  };
+
+  return (
+    <div>
+      <Eyebrow color={C.moss}>Search</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        Find anything
+      </h1>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 14 }}>
+        Every measure, drill, class, number, goal and screen in the app — including the ones that are
+        paused or set aside, which are the hardest to find by looking. Tap a result and it opens
+        where that thing lives.
+      </div>
+
+      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)}
+        placeholder="body fat, squat, recovery, mobility…"
+        style={{ width: "100%", padding: "14px 16px", borderRadius: 12, fontSize: 16,
+          fontFamily: "inherit", color: C.ink, background: C.card,
+          border: `1.5px solid ${C.line}`, outline: "none", marginBottom: 6 }} />
+      <div className="mono" style={{ fontSize: 10, color: C.muted, margin: "0 0 14px 2px" }}>
+        {q.trim() ? `${hits.length} of ${index.length} things` : `${index.length} things to search`}
+      </div>
+
+      {q.trim() && !hits.length && (
+        <Card>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted }}>
+            Nothing matches that. Try one word rather than several — and if something you know you
+            have is genuinely missing from here, tell your coach, because that is a fault worth
+            fixing rather than a search worth retrying.
+          </div>
+        </Card>
+      )}
+
+      {groups.map((g) => (
+        <div key={g} style={{ marginBottom: 14 }}>
+          <Eyebrow>{g}</Eyebrow>
+          {hits.filter((h) => h.group === g).map((h, i) => (
+            <button key={g + i} onClick={() => goTo(h)} className="tap" style={{
+              display: "block", width: "100%", textAlign: "left", cursor: "pointer",
+              background: C.card, border: "none", borderRadius: 12,
+              padding: "12px 14px", marginTop: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{h.label}</div>
+              {h.sub && (
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>{h.sub}</div>
+              )}
+            </button>
+          ))}
+        </div>
+      ))}
+      <div style={{ height: 28 }} />
+    </div>
+  );
+}
+
 function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   const [busy, setBusy] = useState(false);
   /* HER QUESTION, 11 August: "I saw a tab that let me send everything I've
@@ -21108,6 +21327,9 @@ Two or three sentences unless she asks for more.`;
     const key = data.settings?.apiKey;
     if (!key && !insideClaude()) return;
     folding.current = true;
+    /* OUTSIDE the try, because `finally` records what it spent and a binding
+       declared inside the try is not in scope there. */
+    const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
     try {
       /* built from the data as it stands INCLUDING what she just said, which
          is why this runs after persist rather than beside it */
@@ -21116,17 +21338,23 @@ Two or three sentences unless she asks for more.`;
         return [...c, { id: sessionId.current, date: coach.t, about: about || "open chat",
           messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
       })() };
-      const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
       const text = await askModel({
         apiKey: key, system: MEMORY_SYSTEM, maxTokens: 3000, usage: spent,
         messages: [{ role: "user", content: memoryInput(withChat, coach) }],
       });
       if (!text || !String(text).trim()) return;      /* rule 23: no fold is not an empty fold */
-      setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, coach.t, coach.t, spent) }));
+      setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, coach.t, coach.t, spent, formulas(d.settings)) }));
     } catch (e) {
       /* silent to her, deliberately: she asked a training question and got an
          answer. The memory simply stays where it was and catches up next time. */
-    } finally { folding.current = false; }
+    } finally {
+      /* RULE 36, AND HER INSTRUCTION OF 16 AUGUST. This call spends her money
+         whether or not the fold came back usable, so it is recorded here
+         rather than beside the success — a failed call still cost her. It was
+         landing only in `data.memory.cost`, which the total never read. */
+      noteSpend(setData, "memory", spent, coach.t);
+      folding.current = false;
+    }
   };
   const send = async () => {
     const text = draft.trim();
@@ -21777,7 +22005,14 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   const pausedHere = pausedFields(data).filter((f) => (isWeekly ? f.which === "weekly" : true));
   const pauseBtn = { padding: "8px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
     border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink, fontFamily: "inherit" };
-  const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length;
+  /* Counted the same way the battery is actually built (16 August), including
+     the monthly rows that opt in — body fat and muscle. It counted only the
+     weekly list, so the moment those two joined the weekly battery this line
+     would have told her "15 of your 30" above eighteen rows on screen. Rule 23:
+     if the app asserts something, the assertion is computed. */
+  const optedInMonthly = (data.fields.monthly || []).filter((f) => f.inWeekly === true).length;
+  const weeklyCount = data.fields.weekly.filter((f) => f.inWeekly !== false).length + optedInMonthly;
+  const weeklyPool = data.fields.weekly.length + optedInMonthly;
   const onlyMonthly = (f) => !isWeekly && f.inWeekly === false;
   /* ============================================================================
      EVERY FIELD SAVES ITSELF, THE MOMENT IT IS TYPED
@@ -21902,7 +22137,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
       </h2>
       <p style={{ fontSize: 12, color: C.muted, margin: "0 0 10px", lineHeight: 1.45 }}>
         {isWeekly
-          ? `The short version — ${weeklyCount} of your ${data.fields.weekly.length} tests, about ten minutes. Same list as the monthly, just the quick end of it. Skip anything you didn't test; partial entries are fine.`
+          ? `The short version — ${weeklyCount} of your ${weeklyPool} tests, about ten minutes. Same list as the monthly, just the quick end of it. Skip anything you didn't test; partial entries are fine.`
           : `The whole list — all ${data.fields.weekly.length} tests plus body composition, about thirty minutes. The rows marked ONLY HERE are the ones the short weekly version never asks for. Doing this covers this week's weekly check as well — it always lands on a weekly day, so you never do the same exercise twice in a week.`}
       </p>
 
@@ -22621,6 +22856,8 @@ function CoachApp() {
             <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} show={sheet.show} close={() => setSheet(null)} />
           ) : sheet.kind === "summary" ? (
             <SummarySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
+          ) : sheet.kind === "search" ? (
+            <SearchSheet data={data} coach={coach} setSheet={setSheet} goTab={go} close={() => setSheet(null)} />
           ) : sheet.kind === "briefing" ? (
             <Briefing coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "chat" ? (
@@ -23149,7 +23386,10 @@ const memoryInput = (data, coach) => {
    list before the new one is written, so a fold that loses something can
    always be read back (rule 20). Failures are kept too, with their reason —
    a fold that did not happen must never look like one that did. */
-const foldedMemory = (m, text, upto, at, spend) => {
+/* `F` added 16 August: this was the one cost path that called `centsFor` with
+   no formulas, so it priced at the defaults and quietly ignored her if she
+   changed priceIn or priceOut in the formulas sheet (rule 12). */
+const foldedMemory = (m, text, upto, at, spend, F) => {
   const prev = m || {};
   const keep = Array.isArray(prev.versions) ? prev.versions : [];
   return {
@@ -23160,7 +23400,7 @@ const foldedMemory = (m, text, upto, at, spend) => {
       .filter((v) => v.text),
     tokensIn: (prev.tokensIn || 0) + ((spend && spend.in) || 0),
     tokensOut: (prev.tokensOut || 0) + ((spend && spend.out) || 0),
-    cost: (prev.cost || 0) + (spend ? centsFor(spend) : 0),
+    cost: (prev.cost || 0) + (spend ? centsFor(spend, F) : 0),
   };
 };
 
