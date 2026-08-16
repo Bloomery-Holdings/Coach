@@ -3949,7 +3949,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 160";
+const BUILD = "16 August 2026 · 161";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -14666,6 +14666,32 @@ function Settings({ data, setData, coach, setSheet }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* THE SUMMARY, WHERE SHE CAN ACTUALLY SEE IT.
+          ------------------------------------------------------------------
+          HER REPORT, 16 August: "I can't see the summary dashboard on a page
+          on the app." She was right, and it was not her missing it. The page
+          was built on her instruction of 15 August — "make the summary
+          dashboard a page that I can see" — and then given its only door
+          INSIDE the Assessments fold, between the battery editors and the
+          Inputs section, under a label that says "edit both batteries and the
+          formulas". Nothing about that says her summary is in there.
+
+          It is the first thing on this screen now, above every fold, because
+          it is the single page that says what her coach is given and what
+          that costs. The door beside the monthly read stays where it is, and
+          so does the one on the cost card in the chat — three doors to one
+          page, none of them hidden. Her choice of placement, 16 August. */}
+      <Card style={{ background: C.mint }}>
+        <Eyebrow color={C.moss}>What your coach is given</Eyebrow>
+        <div style={{ fontSize: 13, lineHeight: 1.55, color: C.muted, margin: "6px 0 12px" }}>
+          Everything your coach knows about you, on one page — as trends rather than a paragraph a
+          week, which is why it stays the same size however many months you add. You can read every
+          word of it, send your own writing with it or not, and switch back to sending everything
+          whenever you want.
+        </div>
+        <Btn kind="signal" onClick={() => setSheet({ kind: "summary" })}>See your summary</Btn>
+      </Card>
+
       <Fold title="You" note="name, age, height, goal">
         <Field label="Name" unit="" type="text" value={s.name} onChange={(v) => set("name", v)} />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
