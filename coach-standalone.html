@@ -4248,7 +4248,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 168";
+const BUILD = "16 August 2026 · 169";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -21431,10 +21431,54 @@ const bwHistory = (data, exId, skip) => {
     });
     return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 };
-const bwSay = (e) => {
+/* ============================================================================
+   A BAND IS NOT A WEIGHT
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August, on a clamshell whose own line says OPTIONAL LIGHT
+   RESISTANCE BAND: "why i can't edit. weight should be band."
+
+   The log box was labelled "Weight / kg" because the box that decides what to
+   ask for matched the word "band" into the same bucket as dumbbells and
+   barbells. A band has no kilograms. Asking her for them is the app asserting
+   a unit that does not exist for the movement (rule 23), and it made her own
+   record unreadable: a 3 in that box meant nothing at all.
+
+   And she could not put it right, which is the second half of her sentence.
+   The editor let her change the name, the dose, the how and the video — but
+   what the boxes ASK FOR was derived from text matching and was the one thing
+   on the card she had no say over. Rule 12: build nothing that cannot be
+   changed from inside the app.
+
+   So the guess stays, because a guess from the exercise's own words is right
+   most of the time — and `loadKind` overrides it permanently the moment she
+   says otherwise, the same standing everything else of hers has.
+
+   THE STORAGE KEY DOES NOT MOVE. A band level still goes in `w`, where every
+   reading she has already taken lives. Rule 20: nothing of hers is migrated
+   away to make a label read better.
+   ==========================================================================*/
+const loadKindOf = (ex) => {
+    if (ex && (ex.loadKind === "band" || ex.loadKind === "weight" || ex.loadKind === "none"))
+        return ex.loadKind;
+    const txt = `${(ex && ex.tool) || ""} ${(ex && ex.dose) || ""} ${(ex && ex.how) || ""}`.toLowerCase();
+    if (/\bband\b|tubing|loop\b/.test(txt) && !/\bkg\b|dumbbell|kettlebell|barbell|plate/.test(txt))
+        return "band";
+    if (/\bkg\b|dumbbell|kettlebell|barbell|plate|weight/.test(txt))
+        return "weight";
+    if (/bodyweight|no equipment|none\b/.test(txt))
+        return "none";
+    return "none";
+};
+const LOAD_BOX = {
+    weight: { label: "Weight", unit: "kg", say: (v) => `${v} kg` },
+    band: { label: "Band", unit: "colour or level", say: (v) => `${v} band` },
+    none: null,
+};
+const bwSay = (e, ex) => {
     var _a, _b, _c;
+    const box = LOAD_BOX[loadKindOf(ex)];
     return [
-        String((_a = e.w) !== null && _a !== void 0 ? _a : "").trim() ? `${e.w} kg` : "",
+        String((_a = e.w) !== null && _a !== void 0 ? _a : "").trim() ? (box ? box.say(e.w) : `${e.w}`) : "",
         String((_b = e.reps) !== null && _b !== void 0 ? _b : "").trim() ? `${e.reps} reps` : "",
         String((_c = e.secs) !== null && _c !== void 0 ? _c : "").trim() ? `${e.secs}s` : "",
     ].filter(Boolean).join(" x ");
@@ -21461,7 +21505,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         };
     });
     const past = bwHistory(data, ex.id, today);
-    const lastTime = past.find((x) => bwSay(x));
+    const lastTime = past.find((x) => bwSay(x, ex));
     const putNote = (v) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
             [today]: { ...((d.logs || {})[today] || {}),
                 drillNotes: { ...(((d.logs || {})[today] || {}).drillNotes || {}), [noteId]: v } } } }));
@@ -21485,7 +21529,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                         textTransform: "uppercase", color: C.muted } }, "What you did"),
                 lastTime && (React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.moss } },
                     "last time ",
-                    bwSay(lastTime)))),
+                    bwSay(lastTime, ex)))),
             (() => {
                 var _a, _b, _c, _d, _e, _f;
                 /* AUDIT ITEM 20: every exercise asked for Weight, Reps AND Hold —
@@ -21494,14 +21538,18 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                    something already in it always stays (rule 20). */
                 const txt2 = `${ex.dose || ""} ${ex.how || ""} ${ex.tool || ""}`.toLowerCase();
                 const holdish = /hold|sec\b|second|breath|minute/.test(txt2);
-                const weighted = /\bkg\b|dumbbell|kettlebell|weight|barbell|plate|band/.test(txt2);
                 const repish = /\brep|\bx\s*\d|\d+\s*x\b|each side|times/.test(txt2) || !holdish;
-                const showW = weighted || String((_a = did.w) !== null && _a !== void 0 ? _a : "").trim() !== "";
+                /* WHAT IT IS LOADED WITH, and what that box is therefore called. Her
+                   report of 16 August: a band exercise was asking her for kilograms.
+                   A box she has already written in always stays, whatever the label
+                   says now (rule 20). */
+                const box = LOAD_BOX[loadKindOf(ex)];
+                const showW = !!box || String((_a = did.w) !== null && _a !== void 0 ? _a : "").trim() !== "";
                 const showR = repish || String((_b = did.reps) !== null && _b !== void 0 ? _b : "").trim() !== "";
                 const showS = holdish || String((_c = did.secs) !== null && _c !== void 0 ? _c : "").trim() !== "";
                 return (React.createElement("div", { style: { display: "flex", gap: 8 } },
                     showW && React.createElement("span", { style: { flex: 1 } },
-                        React.createElement(Field, { label: "Weight", unit: "kg", value: (_d = did.w) !== null && _d !== void 0 ? _d : "", onChange: (v) => putDid("w", v) })),
+                        React.createElement(Field, { type: box && box.unit === "colour or level" ? "text" : undefined, label: box ? box.label : "Load", unit: box ? box.unit : "", value: (_d = did.w) !== null && _d !== void 0 ? _d : "", onChange: (v) => putDid("w", v) })),
                     showR && React.createElement("span", { style: { flex: 1 } },
                         React.createElement(Field, { label: "Reps", unit: "each set", value: (_e = did.reps) !== null && _e !== void 0 ? _e : "", onChange: (v) => putDid("reps", v) })),
                     showS && React.createElement("span", { style: { flex: 1 } },
@@ -21521,13 +21569,21 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                 React.createElement("div", { style: { marginTop: 6 } }, past.map((x, i) => (React.createElement("div", { key: i, className: "mono", style: { fontSize: 11, color: C.muted, marginBottom: 3 } },
                     dayAndMonth(x.date),
                     " \u2014 ",
-                    bwSay(x) || "—"))))))),
+                    bwSay(x, ex) || "—"))))))),
         React.createElement(ExerciseNote, { value: notes[noteId], onChange: putNote, history: noteHistory(data, "drill", noteId, today), ask: (txt) => setSheet({ kind: "chat", about: ex.name,
                 seed: `About ${ex.name} in my ${prog.area} work: ${txt}` }), seeAll: () => setSheet({ kind: "written" }) }),
         !editing ? (React.createElement("div", { style: { paddingTop: 8 } },
             React.createElement(EditChip, { label: `Edit ${ex.name}`, onClick: () => setEditing(true) }))) : (React.createElement("div", { style: { marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 } },
             React.createElement(Field, { label: "Name", unit: "", type: "text", value: ex.name, onChange: (v) => patch({ name: v }) }),
             React.createElement(Field, { label: "What you need", unit: "", type: "text", value: ex.tool, onChange: (v) => patch({ tool: v }) }),
+            React.createElement("div", { style: { fontSize: 12.5, fontWeight: 500, marginBottom: 6 } }, "What it is loaded with"),
+            React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 14 } }, [["weight", "Weight in kg"], ["band", "A band"], ["none", "Bodyweight"]].map(([k, lbl]) => (React.createElement("button", { key: k, onClick: () => patch({ loadKind: k }), className: "tap mono", style: {
+                    flex: 1, padding: "8px 0", borderRadius: 7, cursor: "pointer", fontSize: 10.5,
+                    fontWeight: 500, fontFamily: "inherit",
+                    border: `1.5px solid ${loadKindOf(ex) === k ? C.signal : C.line}`,
+                    background: loadKindOf(ex) === k ? C.signal : "transparent",
+                    color: loadKindOf(ex) === k ? C.chalk : C.muted
+                } }, lbl)))),
             React.createElement(Field, { label: "Sets and reps", unit: "", type: "text", value: ex.dose, onChange: (v) => patch({ dose: v }) }),
             React.createElement(Note, { label: "How it's done", value: ex.how, onChange: (v) => patch({ how: v }) }),
             React.createElement(Note, { label: "What it reaches", value: ex.targets, onChange: (v) => patch({ targets: v }) }),
