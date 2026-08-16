@@ -4078,7 +4078,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 168";
+const BUILD = "16 August 2026 · 169";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -24768,11 +24768,54 @@ const bwHistory = (data, exId, skip) => {
   });
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 };
-const bwSay = (e) => [
-  String(e.w ?? "").trim() ? `${e.w} kg` : "",
-  String(e.reps ?? "").trim() ? `${e.reps} reps` : "",
-  String(e.secs ?? "").trim() ? `${e.secs}s` : "",
-].filter(Boolean).join(" x ");
+/* ============================================================================
+   A BAND IS NOT A WEIGHT
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August, on a clamshell whose own line says OPTIONAL LIGHT
+   RESISTANCE BAND: "why i can't edit. weight should be band."
+
+   The log box was labelled "Weight / kg" because the box that decides what to
+   ask for matched the word "band" into the same bucket as dumbbells and
+   barbells. A band has no kilograms. Asking her for them is the app asserting
+   a unit that does not exist for the movement (rule 23), and it made her own
+   record unreadable: a 3 in that box meant nothing at all.
+
+   And she could not put it right, which is the second half of her sentence.
+   The editor let her change the name, the dose, the how and the video — but
+   what the boxes ASK FOR was derived from text matching and was the one thing
+   on the card she had no say over. Rule 12: build nothing that cannot be
+   changed from inside the app.
+
+   So the guess stays, because a guess from the exercise's own words is right
+   most of the time — and `loadKind` overrides it permanently the moment she
+   says otherwise, the same standing everything else of hers has.
+
+   THE STORAGE KEY DOES NOT MOVE. A band level still goes in `w`, where every
+   reading she has already taken lives. Rule 20: nothing of hers is migrated
+   away to make a label read better.
+   ==========================================================================*/
+const loadKindOf = (ex) => {
+  if (ex && (ex.loadKind === "band" || ex.loadKind === "weight" || ex.loadKind === "none")) return ex.loadKind;
+  const txt = `${(ex && ex.tool) || ""} ${(ex && ex.dose) || ""} ${(ex && ex.how) || ""}`.toLowerCase();
+  if (/\bband\b|tubing|loop\b/.test(txt) && !/\bkg\b|dumbbell|kettlebell|barbell|plate/.test(txt)) return "band";
+  if (/\bkg\b|dumbbell|kettlebell|barbell|plate|weight/.test(txt)) return "weight";
+  if (/bodyweight|no equipment|none\b/.test(txt)) return "none";
+  return "none";
+};
+const LOAD_BOX = {
+  weight: { label: "Weight", unit: "kg", say: (v) => `${v} kg` },
+  band:   { label: "Band", unit: "colour or level", say: (v) => `${v} band` },
+  none:   null,
+};
+
+const bwSay = (e, ex) => {
+  const box = LOAD_BOX[loadKindOf(ex)];
+  return [
+    String(e.w ?? "").trim() ? (box ? box.say(e.w) : `${e.w}`) : "",
+    String(e.reps ?? "").trim() ? `${e.reps} reps` : "",
+    String(e.secs ?? "").trim() ? `${e.secs}s` : "",
+  ].filter(Boolean).join(" x ");
+};
 
 function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
   const [editing, setEditing] = useState(false);
@@ -24796,7 +24839,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
     };
   });
   const past = bwHistory(data, ex.id, today);
-  const lastTime = past.find((x) => bwSay(x));
+  const lastTime = past.find((x) => bwSay(x, ex));
   const putNote = (v) => setData((d) => ({ ...d, logs: { ...(d.logs || {}),
     [today]: { ...((d.logs || {})[today] || {}),
       drillNotes: { ...(((d.logs || {})[today] || {}).drillNotes || {}), [noteId]: v } } } }));
@@ -24841,7 +24884,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
             textTransform: "uppercase", color: C.muted }}>What you did</span>
           {lastTime && (
             <span className="mono" style={{ fontSize: 10, color: C.moss }}>
-              last time {bwSay(lastTime)}
+              last time {bwSay(lastTime, ex)}
             </span>
           )}
         </div>
@@ -24852,14 +24895,20 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
              something already in it always stays (rule 20). */
           const txt2 = `${ex.dose || ""} ${ex.how || ""} ${ex.tool || ""}`.toLowerCase();
           const holdish = /hold|sec\b|second|breath|minute/.test(txt2);
-          const weighted = /\bkg\b|dumbbell|kettlebell|weight|barbell|plate|band/.test(txt2);
           const repish = /\brep|\bx\s*\d|\d+\s*x\b|each side|times/.test(txt2) || !holdish;
-          const showW = weighted || String(did.w ?? "").trim() !== "";
+          /* WHAT IT IS LOADED WITH, and what that box is therefore called. Her
+             report of 16 August: a band exercise was asking her for kilograms.
+             A box she has already written in always stays, whatever the label
+             says now (rule 20). */
+          const box = LOAD_BOX[loadKindOf(ex)];
+          const showW = !!box || String(did.w ?? "").trim() !== "";
           const showR = repish || String(did.reps ?? "").trim() !== "";
           const showS = holdish || String(did.secs ?? "").trim() !== "";
           return (
             <div style={{ display: "flex", gap: 8 }}>
-              {showW && <span style={{ flex: 1 }}><Field label="Weight" unit="kg" value={did.w ?? ""} onChange={(v) => putDid("w", v)} /></span>}
+              {showW && <span style={{ flex: 1 }}><Field type={box && box.unit === "colour or level" ? "text" : undefined}
+                label={box ? box.label : "Load"} unit={box ? box.unit : ""}
+                value={did.w ?? ""} onChange={(v) => putDid("w", v)} /></span>}
               {showR && <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={did.reps ?? ""} onChange={(v) => putDid("reps", v)} /></span>}
               {showS && <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={did.secs ?? ""} onChange={(v) => putDid("secs", v)} /></span>}
             </div>
@@ -24884,7 +24933,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
             <div style={{ marginTop: 6 }}>
               {past.map((x, i) => (
                 <div key={i} className="mono" style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>
-                  {dayAndMonth(x.date)} — {bwSay(x) || "—"}
+                  {dayAndMonth(x.date)} — {bwSay(x, ex) || "—"}
                 </div>
               ))}
             </div>
@@ -24904,6 +24953,22 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         <div style={{ marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
           <Field label="Name" unit="" type="text" value={ex.name} onChange={(v) => patch({ name: v })} />
           <Field label="What you need" unit="" type="text" value={ex.tool} onChange={(v) => patch({ tool: v })} />
+          {/* HER INSTRUCTION, 16 August: "weight should be band". The app
+              guesses this from the exercise's own words and gets it right most
+              of the time; when it does not, this is where she says so, and it
+              stays said (rule 12). Her readings do not move — a band level is
+              stored in the same place a weight was. */}
+          <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 6 }}>What it is loaded with</div>
+          <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
+            {[["weight", "Weight in kg"], ["band", "A band"], ["none", "Bodyweight"]].map(([k, lbl]) => (
+              <button key={k} onClick={() => patch({ loadKind: k })} className="tap mono" style={{
+                flex: 1, padding: "8px 0", borderRadius: 7, cursor: "pointer", fontSize: 10.5,
+                fontWeight: 500, fontFamily: "inherit",
+                border: `1.5px solid ${loadKindOf(ex) === k ? C.signal : C.line}`,
+                background: loadKindOf(ex) === k ? C.signal : "transparent",
+                color: loadKindOf(ex) === k ? C.chalk : C.muted }}>{lbl}</button>
+            ))}
+          </div>
           <Field label="Sets and reps" unit="" type="text" value={ex.dose} onChange={(v) => patch({ dose: v })} />
           <Note label="How it's done" value={ex.how} onChange={(v) => patch({ how: v })} />
           <Note label="What it reaches" value={ex.targets} onChange={(v) => patch({ targets: v })} />
