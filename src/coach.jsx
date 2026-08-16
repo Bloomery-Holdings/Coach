@@ -4010,7 +4010,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 165";
+const BUILD = "16 August 2026 · 166";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4696,15 +4696,24 @@ const briefNum = (v) => {
     : Math.round(n * 100) / 100;
 };
 
-/* one measure, every sitting it has a number in, oldest to newest, with the
-   move across the whole row. No labels repeated, no units repeated — the unit
-   is on the row once and the numbers are bare. */
-const briefRow = (f, store, keys, F) => {
-  const vals = keys.map((k) => {
+/* ONE MEASURE, EVERY SITTING IT HAS A NUMBER IN, oldest to newest, with the
+   move across the whole row.
+
+   HER REPORT, 16 August: "it also does not show any trends... it currently is
+   so wordy and not easy to interpret." The trend was there and had been since
+   build 160 — as a line of text, inside a scrolling monospace box, which is
+   not a thing anyone can read as a trend.
+
+   So the row is DATA now, and the sentence is one of two things built from it.
+   The page draws the other. Neither can drift from the other, because there is
+   only one of them (rule 33), and nothing about what the coach is sent
+   changes — the same words go, at the same cost. */
+const trendRow = (f, store, keys, F) => {
+  const cells = keys.map((k) => {
     const v = readMeasure(store[k] || {}, f);
     return isNaN(v) ? null : briefNum(v);
   });
-  const real = vals.filter((v) => v !== null);
+  const real = cells.filter((v) => v !== null);
   if (real.length === 0) return null;
   const first = real[0], last = real[real.length - 1];
   const move = first ? Math.round(((last - first) / Math.abs(first)) * 100) : 0;
@@ -4714,10 +4723,24 @@ const briefRow = (f, store, keys, F) => {
      against the percentage move, not against raw units. */
   const floor = noiseFloorFor(f, F);
   const moved = Math.abs(move) >= (isFinite(floor) ? floor : 0);
+  const right = (f.better === "down" ? last < first : last > first);
   const dir = !moved ? "holding"
-    : (f.better === "down" ? last < first : last > first) ? `${move > 0 ? "+" : ""}${move}%`
+    : right ? `${move > 0 ? "+" : ""}${move}%`
     : `${move > 0 ? "+" : ""}${move}% (wrong way)`;
-  return `${f.label}${f.bilateral ? " L/R" : ""} ${vals.map((v) => (v === null ? "·" : v)).join(" ")} ${dir}`;
+  return { id: f.id, label: `${f.label}${f.bilateral ? " L/R" : ""}`, unit: f.unit || "",
+    cells, dir, moved, right, points: real.length };
+};
+
+/* every measure with a reading, and the dates they were taken on */
+const trendData = (fields, store) => {
+  const keys = Object.keys(store || {}).sort();
+  return { keys, use: keys.slice(-BRIEF_COLS) };
+};
+
+const briefRow = (f, store, keys, F) => {
+  const r = trendRow(f, store, keys, F);
+  if (!r) return null;
+  return `${r.label} ${r.cells.map((v) => (v === null ? "·" : v)).join(" ")} ${r.dir}`;
 };
 
 const briefTable = (fields, store, label, F) => {
@@ -13210,13 +13233,15 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         <LadderCard data={data} setData={setData} coach={coach} />
       )}
 
-      {/* ---- BENCHMARK DAY, BEFORE THE SESSION ---------------------------
-               Her instruction: "then benchmark day before the sessions." On a
-               day it is due it IS the session, so it has to be read first. */}
-      {isToday && measureDue && (
-        <MeasureDueCard data={data} setData={setData} coach={coach} setSheet={setSheet}
-          monthly={showMonthlyCall} />
-      )}
+      {/* ---- THE BATTERY CARD IS GONE ------------------------------------
+          HER INSTRUCTION, 16 August, striking it out: "remove this card
+          altogether." It said the same thing the Needs you row above already
+          said, on the same screen, and Needs you is the block that chases
+          things — that is what it is for. Its two controls moved into that
+          row rather than being lost: "carry on" is the row's own button now,
+          and "not today" opens the same flow inside the row.
+
+          MeasureDueCard itself stays in the file, unrendered here. */}
 
 
 
@@ -17963,10 +17988,17 @@ function CanDoNow({ coach, setSheet, compact }) {
    does not touch the day's class. It asks which part she is declining, and
    every answer it can give stays inside measuring.
    ==========================================================================*/
-function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
-  /* null -> the plain call | "which" -> the question | "one" -> pick a test */
-  const [step, setStep] = useState(null);
+function MeasureDueCard({ data, setData, coach, setSheet, monthly, startAt, onDone }) {
+  /* null -> the plain call | "which" -> the question | "one" -> pick a test.
+     `startAt` opens it straight at one of those, which is how the Needs you
+     row uses it: the card itself is gone from Today (16 August), and only its
+     "not today" question survives, opened inside the row that asked. */
+  const [step, setStep] = useState(startAt || null);
   const [done, setDone] = useState(null);
+  /* When it is living inside a row rather than being a card, backing out of
+     the question closes the row rather than falling through to the plain call
+     — which would draw the card she asked to have removed. */
+  const backOut = () => { if (onDone) onDone(); else setStep(null); };
 
   const which = monthly ? "monthly" : "weekly";
   const periodKey = monthly ? coach.mk : coach.ws;
@@ -18103,6 +18135,10 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
     );
   }
 
+  /* Inside a row there is no card to fall back to, so a finished answer just
+     closes the row (the Needs you list re-reads the deferral itself). */
+  if (startAt && step === null) { if (onDone) onDone(); return null; }
+
   if (step === "which") {
     return (
       <Card style={{ background: C.pist }}>
@@ -18116,7 +18152,7 @@ function MeasureDueCard({ data, setData, coach, setSheet, monthly }) {
           <Btn kind="ghost" onClick={() => setStep("one")}>Just one of them</Btn>
         </div>
         <div style={{ marginTop: 8 }}>
-          <Btn kind="quiet" onClick={() => setStep(null)}>Actually, I'll do it</Btn>
+          <Btn kind="quiet" onClick={backOut}>Actually, I'll do it</Btn>
         </div>
       </Card>
     );
@@ -18646,8 +18682,30 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
       /* rpe / sets / during / felt / note are no longer rows here at all —
          they belong to a session, and this list belongs to the day. See the
          filter below. */
-      case "battery":  return chip("open", () => setSheet({ kind: "weekly" }), true, "battery");
-      case "benchmark":return chip("open", () => setSheet({ kind: "monthly" }), true, "benchmark");
+      /* HER INSTRUCTION, 16 August, with the battery card struck through:
+         "make the carry on button in the needs you card instead of open and
+         remove this card altogether."
+
+         So the row says "carry on" once there is something to carry on with,
+         which is the word the card used and the only word that tells her the
+         numbers she already typed are still there.
+
+         "Not today" comes with it. It lived on the card and nowhere else, and
+         moving a battery on purpose is not a debt (rule 24) — losing the way
+         to do it would be removing something she did not ask to lose. It
+         opens in the row, where the row asked (rule 11). */
+      case "battery":  return (
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {chip(doing === "battery" ? "close" : "not today", () => act("battery"), false, "battery-move")}
+          {chip(coach.weeklyStarted ? "carry on" : "open", () => setSheet({ kind: "weekly" }), true, "battery")}
+        </span>
+      );
+      case "benchmark":return (
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {chip(doing === "benchmark" ? "close" : "not today", () => act("benchmark"), false, "benchmark-move")}
+          {chip(coach.monthlyStarted ? "carry on" : "open", () => setSheet({ kind: "monthly" }), true, "benchmark")}
+        </span>
+      );
       case "whoop":    return chip("import", () => setSheet({ kind: "whoop" }), true, "whoop");
       case "mobility": return chip("open", () => setSheet({ kind: "mobility" }), true, "mobility");
       case "backup":   return <BackupNowButton data={data} label="back up" compact />;
@@ -18675,6 +18733,16 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
      different questions ended up pointing at the same essay. */
   const inline = (r) => {
     switch (r.id) {
+      /* The card is gone; its "not today" flow is not. Same component, opened
+         straight at the question it asks — all of it, or one of them. */
+      case "battery": return (
+        <MeasureDueCard data={data} setData={setData} coach={coach} setSheet={setSheet}
+          monthly={false} startAt="which" onDone={() => setDoing(null)} />
+      );
+      case "benchmark": return (
+        <MeasureDueCard data={data} setData={setData} coach={coach} setSheet={setSheet}
+          monthly={true} startAt="which" onDone={() => setDoing(null)} />
+      );
       case "rhythm": {
         const sc = scheduleOf(data.settings);
         const set = scheduleSet(data.settings);
@@ -20094,6 +20162,213 @@ function ScopePicker({ scope, onPick }) {
    and a one-tap escape to the old everything-in-full behaviour for a single
    conversation.
 --------------------------------------------------------------------------- */
+/* ============================================================================
+   THE SUMMARY, AS TABLES
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "the summary does not seem to include calculations
+   summary. it also does not show any trends. should it include tables in
+   addition to words? I thought there will be table that shows the trend of my
+   weekly measurements, daily calculations and so forth. it currently is so
+   wordy and not easy to interpret."
+
+   Everything she asked for was already in what the coach gets. The weekly
+   battery has been a trend table since build 160 — one row per measure, one
+   number per sitting, the move across the row at the end — and the
+   calculations have been in it since the same build. Neither was READABLE:
+   the page rendered the whole payload as one block of monospace text in a
+   420-pixel scrolling box, so the trend was a line of digits and the
+   twenty-two calculations were a single run-on paragraph at the bottom.
+
+   Her choice, asked and answered the same day: tables on the page, and NOTHING
+   changed about what is sent. The coach gets exactly the same words at exactly
+   the same cost. This is a rendering of them.
+
+   Three things it will not do. It does not compute anything of its own — every
+   figure here comes from the same functions that build the text, so the page
+   and the payload cannot disagree (rule 33). It shows a dash where she has no
+   number and says what is missing rather than inventing one (rule 23). And a
+   measure with a single sitting says "1 sitting" rather than drawing a trend
+   through one point — which is the honest answer to why she could not see a
+   trend: she has one.
+   ==========================================================================*/
+
+const TCELL = { padding: "5px 7px", fontSize: 11, whiteSpace: "nowrap" };
+
+const TrendTable = ({ title, note, dates, rows, empty }) => {
+  if (!rows || !rows.length) {
+    return (
+      <Card style={{ marginBottom: 12 }}>
+        <Eyebrow>{title}</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5 }}>{empty}</div>
+      </Card>
+    );
+  }
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+        <Eyebrow>{title}</Eyebrow>
+        <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+          {dates.length} {dates.length === 1 ? "sitting" : "sittings"}
+        </span>
+      </div>
+      {note && <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, margin: "2px 0 10px" }}>{note}</div>}
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table className="mono" style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
+          <thead>
+            <tr>
+              <th style={{ ...TCELL, textAlign: "left", position: "sticky", left: 0,
+                background: C.card, color: C.muted, fontWeight: 600 }} />
+              {dates.map((d) => (
+                <th key={d} style={{ ...TCELL, textAlign: "right", color: C.muted, fontWeight: 600 }}>
+                  {d.length > 7 ? d.slice(5) : d}
+                </th>
+              ))}
+              <th style={{ ...TCELL, textAlign: "right", color: C.muted, fontWeight: 600 }}>move</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                <td style={{ ...TCELL, textAlign: "left", position: "sticky", left: 0,
+                  background: C.card, color: C.ink, fontFamily: "inherit", maxWidth: 150,
+                  overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</td>
+                {r.cells.map((v, i) => (
+                  <td key={i} style={{ ...TCELL, textAlign: "right",
+                    color: v === null ? C.line : C.ink }}>{v === null ? "·" : v}</td>
+                ))}
+                <td style={{ ...TCELL, textAlign: "right", fontWeight: 600,
+                  color: r.dir === "holding" ? C.muted : r.right ? C.moss : C.ochre }}>{r.dir}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+};
+
+/* The calculations, as a list of values rather than one run-on paragraph.
+   A number without its input shows a dash and says what it needs (rule 23),
+   and tapping it opens the coach with that number in hand (rule 11). */
+const NumbersTable = ({ shown, total, onAsk }) => (
+  <Card style={{ marginBottom: 12 }}>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+      <Eyebrow>The numbers your coach carries</Eyebrow>
+      <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{shown.length} of {total}</span>
+    </div>
+    <div style={{ marginTop: 4 }}>
+      {shown.map((v) => (
+        <button key={v.id} onClick={() => onAsk && onAsk(v)} className="tap" style={{
+          display: "block", width: "100%", textAlign: "left", border: "none",
+          borderTop: `1px solid ${C.line}`, background: "transparent", cursor: "pointer",
+          padding: "8px 0", fontFamily: "inherit" }}>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ flex: 1, fontSize: 13, color: C.ink }}>
+              {v.label}
+              {v.key && <span className="mono" style={{ fontSize: 9, color: C.moss, marginLeft: 6 }}>HEADLINE</span>}
+            </span>
+            <span className="mono" style={{ fontSize: 13, fontWeight: 700,
+              color: v.value === null || v.value === undefined ? C.line : C.ink }}>{v.display}</span>
+          </span>
+          {v.need && (
+            <span style={{ display: "block", fontSize: 10.5, color: C.muted, lineHeight: 1.4, marginTop: 2 }}>
+              {v.need}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  </Card>
+);
+
+function SummaryTables({ data, coach, setSheet }) {
+  const F = formulas(data.settings);
+  const build = (fields, store) => {
+    const { use } = trendData(fields, store);
+    return { dates: use,
+      rows: (fields || []).filter((f) => f.type !== "note")
+        .map((f) => trendRow(f, store, use, F)).filter(Boolean) };
+  };
+  const weekly = build(data.fields?.weekly || [], data.weekly || {});
+  const monthly = build(data.fields?.monthly || [], data.monthly || {});
+
+  /* mobility keeps its own store shape, so it builds its own rows — the same
+     dates-across, move-at-the-end shape, read from left and right separately
+     because the GAP between sides is the thing that matters */
+  const mobKeys = Object.keys(data.mobility || {}).sort().slice(-BRIEF_COLS);
+  const mobRows = [];
+  (coach.mobTests || []).forEach((m) => {
+    const one = (pick) => {
+      const cells = mobKeys.map((k) => {
+        const e = ((data.mobility || {})[k] || {})[m.id];
+        if (e === undefined || e === null) return null;
+        const v = typeof e === "object" ? pick(e) : e;
+        return v === undefined || v === "" || isNaN(Number(v)) ? null : briefNum(v);
+      });
+      return cells.some((c) => c !== null) ? cells : null;
+    };
+    const add = (suffix, cells) => {
+      if (!cells) return;
+      const real = cells.filter((c) => c !== null);
+      const first = real[0], last = real[real.length - 1];
+      const move = first ? Math.round(((last - first) / Math.abs(first)) * 100) : 0;
+      const right = m.better === "down" ? last < first : last > first;
+      mobRows.push({ id: m.id + suffix, label: m.label + suffix, cells,
+        right, dir: real.length < 2 ? "—" : `${move > 0 ? "+" : ""}${move}%` });
+    };
+    if (m.side) {
+      add(" L", one((e) => e.l ?? e.L));
+      add(" R", one((e) => e.r ?? e.R));
+    } else add("", one((e) => e.score ?? e.v));
+  });
+
+  /* WHOOP by morning rather than by sitting */
+  const mDays = Object.keys(data.morning || {}).sort().filter((d) => d <= coach.t).slice(-F.briefMornings);
+  const whoopRow = (id, label, get) => {
+    const cells = mDays.map((d) => {
+      const v = get(d);
+      return v === undefined || v === null || v === "" || isNaN(Number(v)) ? null : briefNum(v);
+    });
+    if (!cells.some((c) => c !== null)) return null;
+    const real = cells.filter((c) => c !== null);
+    const first = real[0], last = real[real.length - 1];
+    const move = first ? Math.round(((last - first) / Math.abs(first)) * 100) : 0;
+    return { id, label, cells, right: last >= first,
+      dir: real.length < 2 ? "—" : `${move > 0 ? "+" : ""}${move}%` };
+  };
+  const mg = (d) => (data.morning || {})[d] || {};
+  const lg = (d) => (data.logs || {})[d] || {};
+  const whoopRows = [
+    whoopRow("rec", "Recovery %", (d) => mg(d).recovery),
+    whoopRow("slp", "Sleep h", (d) => lg(d).sleep),
+    whoopRow("hrv", "HRV ms", (d) => mg(d).hrv),
+    whoopRow("rhr", "Resting HR", (d) => mg(d).rhr),
+    whoopRow("str", "Day strain", (d) => mg(d).strain),
+    whoopRow("sh", "Shoulder AM /5", (d) => mg(d).shoulderAM),
+  ].filter(Boolean);
+
+  const shown = metricsForCoach(coach.allMetrics, data.settings);
+
+  return (
+    <div>
+      <TrendTable title="Weekly battery" dates={weekly.dates} rows={weekly.rows}
+        note={`Oldest to newest. A dot is a sitting where you did not do that one. "Holding" means the change is inside the measurement error for that measure — not a drop.`}
+        empty="Nothing logged yet. Your first sitting starts the row; the trend appears from the second." />
+      <TrendTable title="Monthly benchmark" dates={monthly.dates} rows={monthly.rows}
+        note="Oldest to newest, one column per month."
+        empty="No benchmark logged yet." />
+      <TrendTable title="Mobility" dates={mobKeys} rows={mobRows}
+        note="Where a test is measured both sides it has a row each, because the gap between sides matters more than either number."
+        empty="Not taken yet — about ten minutes." />
+      <TrendTable title="WHOOP" dates={mDays} rows={whoopRows}
+        note="One column per morning. These are measured rather than reported — read them as drift, not as single days."
+        empty="Nothing imported yet." />
+      <NumbersTable shown={shown} total={(coach.allMetrics || []).length}
+        onAsk={(v) => setSheet && setSheet({ kind: "chat", about: v.id })} />
+    </div>
+  );
+}
+
 function SummarySheet({ data, setData, coach, setSheet, close }) {
   const wordsOn = !!data.settings?.wordsScope;
   const wordsScope = data.settings?.wordsScope || { kind: "days", n: 7 };
@@ -20213,6 +20488,18 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
           {full ? "Stop — go back to the summary" : "Read everything instead"}
         </button>
       </Card>
+
+      {/* HER INSTRUCTION, 16 August: tables, on the page, and nothing about
+          what is sent changes. Above the text, because the tables are what she
+          reads and the text is what she checks. */}
+      <div style={{ marginBottom: 14 }}>
+        <Eyebrow color={C.ochre}>The same numbers, as tables</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "2px 0 12px" }}>
+          Every figure below is the one your coach is given, drawn rather than written. Dates run
+          left to right, oldest first, and the last column is the move across the whole row.
+        </div>
+        <SummaryTables data={data} coach={coach} setSheet={setSheet} />
+      </div>
 
       <Card style={{ marginBottom: 14 }}>
         <Eyebrow>Word for word</Eyebrow>
