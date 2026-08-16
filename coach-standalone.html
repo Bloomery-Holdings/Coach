@@ -4304,7 +4304,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 180";
+const BUILD = "16 August 2026 · 181";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4940,7 +4940,7 @@ const batteryMinsOn = (sit, list, date) => {
         .filter((f) => on[f.id] === date)
         .reduce((a, f) => a + (Number(f.mins) || 0), 0);
 };
-const doneOnDay = (data, date) => {
+const doneOnDay = (data, date, onCard) => {
     var _a, _b;
     if (!data || !date)
         return [];
@@ -5022,10 +5022,26 @@ const doneOnDay = (data, date) => {
         const done = byList[name];
         add("bw:" + name, name, done.length + (done.length === 1 ? " exercise" : " exercises"), { kind: "tab", tab: "body" }, done);
     });
-    /* ---- the ten minutes after a session ---------------------------------- */
-    const drills = Object.values((l && l.drillsDone) || {}).filter(Boolean).length;
-    if (drills)
-        add("drills", "Drills after your session", drills + (drills === 1 ? " drill" : " drills"), null);
+    /* ---- the ten minutes after a session ----------------------------------
+       HER REPORT, 16 August: this said "1 drill" on a day when her ten-minutes
+       card showed none done at all. A tick outlives the list it was made in,
+       because the ten minutes are rebuilt from her goals and her scores — so
+       the count was for a drill that had left the card.
+  
+       Her tick stays in her file (rule 20). What stops is claiming it: a tick
+       counts only if the app can find the drill, it has not been set aside,
+       and — where the caller knows what was actually on the card, which it does
+       for today — it is a drill she could see. And it says WHICH, so the row
+       opens like every other row here rather than asserting a bare number. */
+    const ticked = Object.keys((l && l.drillsDone) || {}).filter((k) => (l.drillsDone || {})[k]);
+    const roster = (data.drills && data.drills.length ? data.drills : SEED_DRILLS);
+    const realDrills = ticked
+        .map((id) => (roster || []).find((x) => x && x.id === id))
+        .filter((d) => d && isLive(d))
+        .filter((d) => !onCard || onCard.includes(d.id));
+    if (realDrills.length)
+        add("drills", "Drills after your session", realDrills.length + (realDrills.length === 1 ? " drill" : " drills"), null, realDrills.map((d) => ({ what: d.label || "a drill",
+            detail: d.mins ? d.mins + " min" : "" })));
     /* ---- work done ON her, which is still work done ------------------------ */
     (l && l.therapy || []).forEach((x, i) => {
         var _a;
@@ -12908,7 +12924,7 @@ const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
         doors));
 };
 function Today({ data, setData, coach, setSheet, goTab }) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     /* one note a day, taken from the pool and never handed out twice */
     useEffect(() => {
         var _a;
@@ -13101,7 +13117,10 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         .reduce((a, b) => a + b, 0);
     /* Everything this day actually held, from the stores rather than from this
        screen's own state, so it says the same thing the coach is told. */
-    const didRows = doneOnDay(data, logDate);
+    /* Only for the day she is actually looking at, because that is the only day
+       whose ten minutes the app can still see. An earlier day's ticks stand as
+       recorded — they were true when she made them. */
+    const didRows = doneOnDay(data, logDate, logDate === coach.t ? (((_b = coach.dailyDrills) === null || _b === void 0 ? void 0 : _b.list) || []).map((x) => x.id) : undefined);
     return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 10 } },
         React.createElement("div", { style: { padding: "6px 4px 0", display: "flex", alignItems: "center",
                 justifyContent: "space-between", gap: 10 } },
@@ -13131,7 +13150,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement(Field, { label: "Sleep", unit: "hours", value: log === null || log === void 0 ? void 0 : log.sleep, onChange: (v) => write({ sleep: v }) }))),
             React.createElement("div", { style: { display: "flex", gap: 12 } },
                 React.createElement("div", { style: { flex: 1 } },
-                    React.createElement(Field, { label: "Day strain", unit: "0\u201321, from WHOOP", value: (((_b = data.morning) === null || _b === void 0 ? void 0 : _b[coach.t]) || {}).strain, onChange: (v) => setData((d) => {
+                    React.createElement(Field, { label: "Day strain", unit: "0\u201321, from WHOOP", value: (((_c = data.morning) === null || _c === void 0 ? void 0 : _c[coach.t]) || {}).strain, onChange: (v) => setData((d) => {
                             var _a;
                             return ({ ...d,
                                 morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), strain: v } } });
@@ -13153,7 +13172,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         }) })),
                 React.createElement("div", { style: { flex: 1 } },
                     React.createElement(Field, { label: "Nap", unit: "hours", value: log === null || log === void 0 ? void 0 : log.nap, onChange: (v) => write({ nap: v }) }))),
-            ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.trackSymptoms) && (React.createElement(Note, { label: "Anything you're feeling", value: (((_d = data.morning) === null || _d === void 0 ? void 0 : _d[coach.t]) || {}).symptoms || "", onChange: (v) => setData((d) => {
+            ((_d = data.settings) === null || _d === void 0 ? void 0 : _d.trackSymptoms) && (React.createElement(Note, { label: "Anything you're feeling", value: (((_e = data.morning) === null || _e === void 0 ? void 0 : _e[coach.t]) || {}).symptoms || "", onChange: (v) => setData((d) => {
                     var _a;
                     return ({ ...d,
                         morning: { ...d.morning, [coach.t]: { ...(((_a = d.morning) === null || _a === void 0 ? void 0 : _a[coach.t]) || {}), symptoms: v } } });
@@ -13435,7 +13454,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 background: String(log.minutes) === String(m) ? C.ink : "transparent",
                                 color: String(log.minutes) === String(m) ? C.chalk : C.muted,
                             } }, m))),
-                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_e = log.minutes) !== null && _e !== void 0 ? _e : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
+                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_f = log.minutes) !== null && _f !== void 0 ? _f : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
                                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
                                 border: `1.5px solid ${((s === null || s === void 0 ? void 0 : s.durations) || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` } }),
                         React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min")),
@@ -13451,7 +13470,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                             } }, "same today")))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement(AutoText, { value: (_f = log === null || log === void 0 ? void 0 : log.loads) !== null && _f !== void 0 ? _f : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: (_g = log === null || log === void 0 ? void 0 : log.loads) !== null && _g !== void 0 ? _g : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => write({ loads: v }), current: (log === null || log === void 0 ? void 0 : log.loads) || "" })),
                     React.createElement("div", { style: { marginTop: 7 } },
                         React.createElement(InfoNote, { small: true, why: "Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class \u2014 so next month you can see what actually moved rather than what the class usually calls for." }, "what this is for")))),
@@ -13618,7 +13637,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 5 } }, "The easiest way back in"),
                 React.createElement("div", { style: { fontSize: 14.5, fontWeight: 600, color: C.ink } }, coach.easiest ? coach.easiest.name : "Whatever is smallest today"),
                 React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 5 } }, coach.easiest
-                    ? `${((_g = coach.easiest.durations) === null || _g === void 0 ? void 0 : _g[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
+                    ? `${((_h = coach.easiest.durations) === null || _h === void 0 ? void 0 : _h[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
                     : "There is nothing in your library small enough to name, so pick the smallest thing you have. The point today is the restart, not the session.")),
             React.createElement(Btn, { kind: "signal", onClick: () => {
                     var _a;
@@ -13692,7 +13711,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement("div", { className: "disp", style: { fontSize: 18, fontWeight: 700, marginBottom: 6 } }, coach.weeklyDue ? "This week's numbers are open" : "This week's numbers are in"),
                     React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 } }, coach.weeklyDue
                         ? "Squat, push-up, cable row, plank, elliptical, reach, balance — about ten minutes. This is what every chart and every score is built from."
-                        : ((_j = (_h = data.weekly) === null || _h === void 0 ? void 0 : _h[coach.ws]) === null || _j === void 0 ? void 0 : _j.fromMonthly)
+                        : ((_k = (_j = data.weekly) === null || _j === void 0 ? void 0 : _j[coach.ws]) === null || _k === void 0 ? void 0 : _k.fromMonthly)
                             ? "Filled in from the monthly benchmark — the weekly is part of it, so you don't do the same exercises twice. Open it any time to correct a number."
                             : "You've filled in the weekly battery. Open it again any time to correct a number."),
                     React.createElement(Btn, { kind: coach.weeklyDue ? "signal" : "ghost", onClick: () => setSheet({ kind: "weekly", key: coach.ws }) }, coach.weeklyDue ? "Enter this week's measurements" : "Review this week's measurements"),
