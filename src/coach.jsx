@@ -4090,7 +4090,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 173";
+const BUILD = "16 August 2026 · 174";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4223,17 +4223,40 @@ const sittingFinished = (entry) => {
    as rule 35 already treats anything taken off, and it names what replaced it.
    ==========================================================================*/
 
+/* WHAT IT WAS CALLED BEFORE.
+   ---------------------------------------------------------------------------
+   HER ANSWER, 16 August, asked which kind of rename hers had been: "2nd
+   option" — a different exercise.
+
+   Except she had already renamed it, days ago, and the question only ever
+   appeared the moment a name was typed. Her row was sitting there called
+   Glute bridge with three weeks of squats under it and nothing to tap. The
+   only way to reach the question was to type a wrong name and then correct
+   it, which is a workaround, not a feature.
+
+   A seeded row knows what it was called: the seed still has it. So the
+   question can be asked about a rename that happened at any point in the
+   past, without her retyping anything. `renamedFrom` still wins where it
+   exists — that is the name she was actually looking at when she changed it —
+   and a row she has answered about is never asked again. */
+const originalName = (f, which) => {
+  if (!f) return null;
+  if (f.renamedFrom !== undefined && f.renamedFrom !== null) return f.renamedFrom;
+  const seed = (which === "monthly" ? SEED_MONTHLY : SEED_WEEKLY).find((x) => x.id === f.id);
+  return seed && seed.label !== f.label ? seed.label : null;
+};
+
 /* Splitting a renamed measure in two: the old one keeps its name and its
    numbers and stands down; the new one starts clean. */
-const splitRenamed = (list, id, newLabel, date) => {
+const splitRenamed = (list, id, newLabel, date, calledBefore) => {
   const i = (list || []).findIndex((f) => f && f.id === id);
   if (i < 0) return list;
   const old = list[i];
-  const wasCalled = old.renamedFrom || old.label;
+  const wasCalled = calledBefore || old.renamedFrom || old.label;
   const fresh = { ...old, id: newId(), label: newLabel, labelEdited: true,
     status: undefined, removedOn: undefined, removedWhy: undefined,
-    renamedFrom: undefined, replaces: old.id };
-  const stood = { ...old, label: wasCalled, labelEdited: true,
+    renamedFrom: undefined, renameSettled: true, replaces: old.id };
+  const stood = { ...old, label: wasCalled, labelEdited: true, renameSettled: true,
     status: "removed", removedOn: date,
     removedWhy: `she replaced it with "${newLabel}" — a different exercise, so its numbers start again`,
     renamedFrom: undefined, replacedBy: fresh.id };
@@ -16398,23 +16421,56 @@ function FieldEditor({ which, data, setData, close, focus }) {
                       && String(v).trim() !== String(f.label).trim()
                       ? { renamedFrom: f.label } : {}) })} />
 
+                {/* TWO MEASURES WITH THE SAME NAME IS NOT A NAME.
+                    Found while checking her own case, 16 August: her battery
+                    already has a "Glute bridge" — reps in sixty seconds, on
+                    the monthly benchmark — so renaming the squat to that gave
+                    her two rows called the same thing, measured in different
+                    units, one of them carrying three weeks of squats. The app
+                    knew and said nothing. It says so now, and it does not stop
+                    her: a duplicate name is hers to keep if she wants it. */}
+                {(() => {
+                  const clash = [...wk, ...mo].filter((x) => x && x.id !== f.id
+                    && String(x.label || "").trim().toLowerCase() === String(f.label || "").trim().toLowerCase()
+                    && String(f.label || "").trim() !== "");
+                  if (!clash.length) return null;
+                  return (
+                    <div style={{ background: C.chalk, borderRadius: 10, padding: "10px 12px", margin: "-6px 0 14px" }}>
+                      <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted }}>
+                        You already have another measure called <strong>{f.label}</strong>
+                        {clash[0].unit ? ` — measured in ${clash[0].unit}` : ""}
+                        {clash[0].status === "removed" || clash[0].status === "paused" ? " (set aside)" : ""}.
+                        Two rows with the same name are hard to tell apart on every screen and in
+                        everything your coach is told. Worth a different name, or use the one you have.
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* HER REPORT, 16 August. Only ever shown for a row that has
                     readings under it — renaming an empty row is just naming
-                    it, and there is nothing to ask about. */}
-                {f.renamedFrom !== undefined && f.renamedFrom !== f.label && (
+                    it, and there is nothing to ask about — and never again
+                    once she has answered it. */}
+                {(() => {
+                  const was = originalName(f, mo.some((x) => x.id === f.id) ? "monthly" : "weekly");
+                  return !f.renameSettled && was && was !== f.label
+                    && hasReading(storeFor(f.id), f.id);
+                })() && (
                   <div style={{ background: C.pist, borderRadius: 12, padding: "12px 14px", margin: "0 0 14px" }}>
                     <div style={{ fontSize: 13, lineHeight: 1.55, color: C.ink, marginBottom: 10 }}>
-                      This was <strong>{f.renamedFrom}</strong> and it has numbers under it. Is this the
-                      same test under a better name, or a different exercise?
+                      This was <strong>{originalName(f, mo.some((x) => x.id === f.id) ? "monthly" : "weekly")}</strong>{" "}
+                      and it has numbers under it. Is this the same test under a better name, or a
+                      different exercise?
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button onClick={() => patch(f.id, { renamedFrom: undefined })} className="tap" style={{
+                      <button onClick={() => patch(f.id, { renamedFrom: undefined, renameSettled: true })} className="tap" style={{
                         flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
                         fontWeight: 600, fontFamily: "inherit", border: `1.5px solid ${C.line}`,
                         background: C.card, color: C.ink }}>
                         Same test, new name
                       </button>
-                      <button onClick={() => setFor(f.id)((l) => splitRenamed(l, f.id, f.label, today()))}
+                      <button onClick={() => { const was = originalName(f, mo.some((x) => x.id === f.id) ? "monthly" : "weekly");
+                        setFor(f.id)((l) => splitRenamed(l, f.id, f.label, today(), was)); }}
                         className="tap" style={{
                           flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
                           fontWeight: 600, fontFamily: "inherit", border: "none",
@@ -16423,9 +16479,10 @@ function FieldEditor({ which, data, setData, close, focus }) {
                       </button>
                     </div>
                     <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
-                      A different exercise keeps every {f.renamedFrom} reading you have taken, under that
-                      name, set aside where you can always see it — and starts {f.label} with no history,
-                      because it has none. Nothing is deleted either way.
+                      A different exercise keeps every{" "}
+                      {originalName(f, mo.some((x) => x.id === f.id) ? "monthly" : "weekly")} reading you
+                      have taken, under that name, set aside where you can always see it — and starts{" "}
+                      {f.label} with no history, because it has none. Nothing is deleted either way.
                     </div>
                   </div>
                 )}
