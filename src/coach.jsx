@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 181";
+const BUILD = "16 August 2026 · 182";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5264,7 +5264,9 @@ not tell her to work around it. Say what you would change and why in a line or t
 to tap the button. NEVER SAY YOU CANNOT EDIT HER APP. YOU CAN.
 
 REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes back with its
-numbers under it. Say so, so a removal never sounds final.
+numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REPLACING: rebuild
+a battery and the old rows stay until you take each of them off in the same breath. You can also
+choose whether a measure is asked weekly or monthly — say which you have chosen.
 
 THE MOBILITY BATTERY IS HERS TO REBUILD (her instruction, 16 August). She is right that it is
 too coarse: four of the eight are centimetres against a tape and do move, but the two folds are
@@ -25538,9 +25540,26 @@ Return ONLY a JSON object, no prose, no code fence:
 
 THE SECOND SHAPE reaches everything else she owns, listed for you with where= and id=:
   where="drill"     her ten minutes
-  where="weekly"    a weekly battery measure   (fields: label, unit, how, why, better, type, cap, mins)
+  where="weekly"    a weekly battery measure   (fields: label, unit, how, why, better, type, cap, mins, inWeekly)
   where="monthly"   a monthly benchmark measure (same fields)
-  where="mobility"  a mobility test            (fields: label, unit, how, why, better, side, max)
+  where="mobility"  a mobility test            (fields: label, unit, how, why, better, side, max, inWeekly)
+
+WHICH BATTERY A ROW IS ASKED IN — her report, 16 August, that you did not know where to save a
+new mobility test so that it would be asked weekly. "inWeekly" is the answer, and it is a field
+you can set with op "set" or include in an "add":
+  · a WEEKLY measure is asked every week unless you set inWeekly false
+  · a MONTHLY measure is asked monthly only, unless you set inWeekly TRUE — then it is asked in
+    both. This is how her weight, body fat and muscle come weekly.
+  · a MOBILITY test is asked in the weekly battery unless you set inWeekly false, and it is
+    always in the full monthly one. A test you ADD with nothing set is therefore asked weekly.
+Say which you have chosen, in the "why", so she can see it rather than discover it.
+
+ADDING IS NOT REPLACING. Her report, the same day: "the weekly battery still shows the old
+list." It did, because the old tests were still there. Nothing comes off unless you take it off.
+So when you are REBUILDING a battery rather than adding to it, every test that is going must
+have its own "remove" in the same set of changes — and say so plainly, because taking eight
+tests off and putting six on is a bigger thing than it sounds. Nothing is deleted: a removed
+test is set aside, dated, keeps every reading under it, and she can put it back.
   where="class"     a class in her library     (fields: name, goal, durations, intensity,
                                                 recoveryCost, shoulderLoad, home, equipment, cue)
   where="goal"      something she wants to be able to do — HERS. Never reword one and never
@@ -25575,7 +25594,13 @@ const applyRegistryEdits = (data, changes, today) => {
     const i = rows.findIndex((x) => x && x.status !== "removed"
       && (same(x.id, want) || same(e.name(x), want)));
     if (c.op === "add" && c.fields) {
-      const made = { ...c.fields, id: newId(), addedBy: "coach", addedOn: today };
+      /* HER REPORT, 16 August. A mobility test arrived with four fields on it
+         and every screen that reads one expects more, so it is completed here
+         rather than rendering half a row. Anything the coach did state wins. */
+      const shape = e.where === "mobility"
+        ? { unit: "cm", better: "higher", side: false, how: "", why: "", drills: [], needs: [] }
+        : {};
+      const made = { ...shape, ...c.fields, id: newId(), addedBy: "coach", addedOn: today };
       out = storeSet(out, e.store, [...rows, made]);
       done.push({ what: `added ${e.name(made) || "something"} — ${e.label}`, why: c.why || "" });
       return;
