@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 182";
+const BUILD = "16 August 2026 · 183";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -14409,52 +14409,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               second session, and the way to add one. */}
           {!isFuture && (
           <Card>
-            {!log?.type && extraSessions.length === 0 ? null : (
+            {extraSessions.length === 0 ? null : (
               <div style={{ marginBottom: 14 }}>
-                {log?.type && (() => {
-                  /* HER REPORT, 10 August: "it should also say it is
-                     incomplete in this card. Why is there no conformity and
-                     proper wiring in this app?"
-
-                     She is right. Three places said something about the
-                     benchmark and all three meant different things by the
-                     same tick. ONE rule now, everywhere a measurement is
-                     named: the tick belongs to the SESSION, and if the
-                     battery behind it is unfinished the row says so and
-                     opens it. */
-                  const isMonthly = /benchmark/i.test(String(log.type || ""));
-                  const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
-                  const pr = isMonthly ? coach.monthlyProgress : isWeeklyM ? coach.weeklyProgress : null;
-                  const shut = isMonthly ? coach.monthlyDone : isWeeklyM ? coach.weeklyDone : true;
-                  const openBattery = !!pr && pr.total > 0 && !shut;
-                  return (
-                    <div style={{ padding: "10px 0", borderBottom: `1px solid ${C.line}` }}>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                        <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{log.type}</span>
-                        <input type="text" inputMode="numeric" value={log.minutes ?? ""}
-                          onChange={(e) => write({ minutes: e.target.value })}
-                          style={{ ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
-                            fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 }} />
-                        <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
-                        <span style={{ fontSize: 12, color: log.completed ? C.moss : C.muted }}>{log.completed ? "✓" : "…"}</span>
-                      </div>
-                      {/* ONE carry-on, not two. Her words with a marker pen:
-                          "why do I have 2 carry on buttons... I only need the
-                          carry on button." The card above already says it and
-                          already offers the way in; saying it twice on one
-                          screen is the same fault as saying it nowhere.
-
-                          16 August, same pen: "also redundant". The unfinished
-                          battery was being chased in THREE places on one
-                          screen — Needs you, the session card, and here. Needs
-                          you is the one that chases things; that is what it is
-                          for. This row now says what the session was and
-                          nothing else. `openBattery` is left computed above
-                          rather than removed, because the next thing anyone
-                          adds here will want it. */}
-                    </div>
-                  );
-                })()}
+                {/* THE MAIN SESSION USED TO BE REPEATED HERE. Removed 16
+                    August at her instruction — a marker pen through the row
+                    and one word: "remove this". The card above already says
+                    it, with its minutes, its effort and a "details" button
+                    that opens every field this row had. Saying it twice on
+                    one screen is the same fault as saying it nowhere. */}
                 {extraSessions.map((x) => {
                   const cls = classByName(x.type);
                   return (
