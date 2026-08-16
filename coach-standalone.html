@@ -1627,6 +1627,57 @@ const sittingFields = (data, which, key) => {
     return { fields: [...kept, ...added], out, pool, base };
 };
 /* ============================================================================
+   WHICH ROWS BELONG TO WHICH BATTERY — FOR READING, NOT FOR ASKING
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "you should take the percentage of body fat and
+   percentage of body muscle and weight from the weekly, because I input them
+   weekly, not monthly. So they don't show any progress in the table you have
+   in my summary, because it has the wrong input."
+
+   She is right, and it is worse than the table. Muscle and body fat live in
+   SEED_MONTHLY with `inWeekly: true`, which means the WEEKLY battery asks for
+   them — so her readings are written into the weekly store, week after week.
+   Every place that read a trend asked the monthly list for the monthly store,
+   found nothing, and printed nothing. The summary table showed no progress
+   because it was reading an empty cupboard.
+
+   And the same split runs through what the coach is sent. Her muscle
+   percentage and her body fat percentage reached the coach NOWHERE — not as a
+   number, not as a dash, not as a mention. Maintaining muscle through her
+   fifties is the stated point of this whole app, and the one measure of it was
+   invisible to the thing coaching her. That is rule 34, and rule 18 twice
+   over: a field that is collected and read by nothing is either wired in or
+   dropped.
+
+   `sittingFields` already knew the rule — it is what puts body fat in front of
+   her every week. It just governed ASKING and nothing governed READING. This
+   is the same rule, for reading: opt-out for the weekly list, opt-in for the
+   monthly one, and the monthly benchmark carries everything because it asks
+   everything.
+
+   IT ASKS THE STORE, NOT THE LIST. The first version of this mirrored the
+   asking rule exactly — weekly rows unless they opt out, monthly rows if they
+   opt in — and that was wrong in a way the sample history caught: a row marked
+   `inWeekly: false` today may have weeks of weekly readings behind it from
+   before it was moved, and mirroring the ask would have hidden every one of
+   them. Rule 20 does not allow that: a reading she took keeps its place in
+   every chart, whatever has happened to the row since.
+
+   So every row is offered to both stores and the readings decide. A row with
+   nothing in that store produces no trend and drops out by itself, which is
+   the honest way for it to go (rule 23). A row she has taken in both appears
+   in both, because she took it in both.
+
+   It does NOT filter to live rows either — a paused measure keeps its history
+   and its place in every chart (rule 35).
+   ==========================================================================*/
+const batteryRows = (data) => {
+    const seen = new Set();
+    return [...(((data || {}).fields || {}).weekly || []),
+        ...(((data || {}).fields || {}).monthly || [])]
+        .filter((f) => f && !seen.has(f.id) && seen.add(f.id));
+};
+/* ============================================================================
    HOW FAR THROUGH A SITTING SHE ACTUALLY IS
    ---------------------------------------------------------------------------
    HER REPORT, 10 August: "Any incomplete benchmark should show in the Needs
@@ -3203,15 +3254,32 @@ const readMeasure = (entry, f) => {
         if (both.length === 1)
             return NaN;
     }
+    /* ---- AN EMPTY BOX IS NOT A ZERO -------------------------------------
+       HER INSTRUCTION, 16 August: "dates where no inputs from my side are
+       assumed fixed to the input after it which assumes zero change. not
+       correct. if an input is empty then keep it empty."
+  
+       `Number("")` is 0, and 0 is not NaN. So a timed hold she never took read
+       as zero seconds, and every caller that asks "is this a real reading" by
+       testing isNaN was told yes. It put a row of zeros on her summary where she
+       had entered nothing, and it is the same fault that made a battery look
+       already-done in build 164.
+  
+       An empty string, a whitespace string and an absent key are all the same
+       thing: she has not taken this measurement. That is NaN, which is what
+       every caller already treats as "no reading" (rule 23). */
+    const bare = entry[f.id];
+    if (bare === undefined || bare === null || String(bare).trim() === "")
+        return NaN;
     if (f.type === "time") {
-        const raw = String(entry[f.id] || "");
+        const raw = String(bare);
         if (raw.includes(":")) {
             const [m, sec] = raw.split(":");
             return Number(m) * 60 + Number(sec);
         }
         return Number(raw);
     }
-    return Number(entry[f.id]);
+    return Number(bare);
 };
 /* A reading is every variant of the measure, written out. 7.5 kg on its own
    is not a result — it needs the reps it was lifted for. */
@@ -4180,7 +4248,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 166";
+const BUILD = "16 August 2026 · 167";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5166,7 +5234,7 @@ const briefNotes = (data) => {
 /* THE WHOLE THING. Pure — it takes her data and gives back text, so the page
    she reads and the thing the coach receives can never drift apart. */
 const briefText = (data, coach, opts) => {
-    var _a, _b, _c, _d;
+    var _a, _b;
     const o = opts || {};
     const wordsCut = o.wordsCut || null;
     const s = data.settings || {};
@@ -5202,9 +5270,11 @@ const briefText = (data, coach, opts) => {
     lines.push("");
     lines.push(briefGoals(coach));
     lines.push("");
-    lines.push(briefTable(((_c = data.fields) === null || _c === void 0 ? void 0 : _c.weekly) || [], data.weekly || {}, "WEEKLY BATTERY", F));
+    /* the rows each battery ASKS for, read from the store it writes to — so a
+       measure she takes weekly is read weekly (16 August) */
+    lines.push(briefTable(batteryRows(data), data.weekly || {}, "WEEKLY BATTERY", F));
     lines.push("");
-    lines.push(briefTable(((_d = data.fields) === null || _d === void 0 ? void 0 : _d.monthly) || [], data.monthly || {}, "MONTHLY BENCHMARK", F));
+    lines.push(briefTable(batteryRows(data), data.monthly || {}, "MONTHLY BENCHMARK", F));
     lines.push("");
     /* her own writing from the battery — the rows the trend table cannot read */
     const notes = briefNotes(data);
@@ -13418,10 +13488,14 @@ function Progress({ data, setData, coach, setSheet }) {
         const n = (a2.getFullYear() - b2.getFullYear()) * 12 + (a2.getMonth() - b2.getMonth()) + 1;
         return Math.max(floor, Math.min(n, 120));
     })();
-    /* One row per date anything was scored, one column per goal. connectNulls
-       joins across the dates a given goal was not tried, which is the honest
-       shape: the line runs between the readings that exist rather than
-       inventing a value for a week she did not try it. */
+    /* One row per date anything was scored, one column per goal.
+  
+       This used to join across the dates a given goal was not tried, and the
+       note here called that the honest shape. Her instruction of 16 August is
+       the later one and it says the opposite: "if an input is empty then keep it
+       empty." Joining the readings either side of a gap draws a value on every
+       date in between, and she never gave one. The line breaks instead, and the
+       dots show where the real scores are. */
     const goalSeries = (() => {
         const goals = (data.goals || []).filter((g) => g.status !== "retired" && (g.scores || []).length >= 2);
         if (!goals.length)
@@ -13636,7 +13710,7 @@ function Progress({ data, setData, coach, setSheet }) {
                     React.createElement(Tooltip, { contentStyle: tip }),
                     variants.length > 1 && (React.createElement(Legend, { wrapperStyle: { fontSize: 10.5, fontFamily: "'IBM Plex Mono', monospace", paddingTop: 10 } })),
                     bars.map((v) => (React.createElement(Bar, { key: v.key, yAxisId: v.axis, name: `${v.name} (${v.unit})`, dataKey: v.key, fill: "#F0C4D2", radius: [5, 5, 0, 0], barSize: 20 }))),
-                    lines.map((v, i) => (React.createElement(Line, { key: v.key, yAxisId: v.axis, name: `${v.name} (${v.unit})`, dataKey: v.key, connectNulls: true, stroke: i === 0 ? C.signal : C.moss, strokeWidth: 2.5, dot: { r: 4, fill: i === 0 ? C.signal : C.moss, strokeWidth: 0 }, activeDot: { r: 6 } }))))))) : (React.createElement(Blank, { text: "Nothing to plot yet. Fill in two weekly checks and every measure you've entered twice will show up here as a line.", action: "Fill in this week", onAction: () => setSheet({ kind: "weekly", key: coach.ws }) }))),
+                    lines.map((v, i) => (React.createElement(Line, { key: v.key, yAxisId: v.axis, name: `${v.name} (${v.unit})`, dataKey: v.key, stroke: i === 0 ? C.signal : C.moss, strokeWidth: 2.5, dot: { r: 4, fill: i === 0 ? C.signal : C.moss, strokeWidth: 0 }, activeDot: { r: 6 } }))))))) : (React.createElement(Blank, { text: "Nothing to plot yet. Fill in two weekly checks and every measure you've entered twice will show up here as a line.", action: "Fill in this week", onAction: () => setSheet({ kind: "weekly", key: coach.ws }) }))),
         React.createElement(Fold, { title: "What you want to be able to do", note: `${goalSeries.lines.length} scored over time` }, goalSeries.lines.length ? (React.createElement(React.Fragment, null,
             React.createElement(Explain, null, "Every time you score one of your goals it lands here. Ten is you can do it. A line that climbs slowly over months is exactly what this is for \u2014 it is the change you would never notice day to day."),
             React.createElement(ResponsiveContainer, { width: "100%", height: 190 },
@@ -13646,7 +13720,7 @@ function Progress({ data, setData, coach, setSheet }) {
                     React.createElement(YAxis, { domain: [0, 10], ticks: [0, 2, 4, 6, 8, 10], ...axis }),
                     React.createElement(Tooltip, { contentStyle: tip }),
                     React.createElement(Legend, { wrapperStyle: { fontSize: 10.5, paddingTop: 6 } }),
-                    goalSeries.lines.map((g, i) => (React.createElement(Line, { key: g.key, name: g.name, dataKey: g.key, connectNulls: true, stroke: [C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5], strokeWidth: 2.5, dot: { r: 4, strokeWidth: 0, fill: [C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5] }, activeDot: { r: 6 } }))))),
+                    goalSeries.lines.map((g, i) => (React.createElement(Line, { key: g.key, name: g.name, dataKey: g.key, stroke: [C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5], strokeWidth: 2.5, dot: { r: 4, strokeWidth: 0, fill: [C.signal, C.moss, C.ochre, C.clay, C.ink][i % 5] }, activeDot: { r: 6 } }))))),
             React.createElement("div", { style: { marginTop: 12 } }, goalSeries.lines.map((g) => (React.createElement("div", { key: g.key, style: { display: "flex", justifyContent: "space-between",
                     alignItems: "baseline", padding: "9px 0", borderTop: `1px solid ${C.chalk}` } },
                 React.createElement("span", { style: { fontSize: 13, color: C.ink, flex: 1, paddingRight: 10, lineHeight: 1.4 } }, g.name),
@@ -15069,7 +15143,7 @@ function WhoopLog({ data, setSheet, close }) {
                         React.createElement(YAxis, { ...axis, domain: ["auto", "auto"], label: { value: (selField === null || selField === void 0 ? void 0 : selField.unit) || "", angle: -90, position: "insideLeft", offset: 22,
                                 style: { fontSize: 9.5, fill: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" } } }),
                         React.createElement(Tooltip, { contentStyle: tip }),
-                        React.createElement(Line, { dataKey: "v", name: selField === null || selField === void 0 ? void 0 : selField.label, stroke: C.signal, strokeWidth: 2, dot: false, activeDot: { r: 5 }, connectNulls: true })))),
+                        React.createElement(Line, { dataKey: "v", name: selField === null || selField === void 0 ? void 0 : selField.label, stroke: C.signal, strokeWidth: 2, dot: { r: 3, fill: C.signal, strokeWidth: 0 }, activeDot: { r: 5 } })))),
                 (() => {
                     const st = stat(sel);
                     if (!st)
@@ -17634,7 +17708,6 @@ const NumbersTable = ({ shown, total, onAsk }) => (React.createElement(Card, { s
                     color: v.value === null || v.value === undefined ? C.line : C.ink } }, v.display)),
         v.need && (React.createElement("span", { style: { display: "block", fontSize: 10.5, color: C.muted, lineHeight: 1.4, marginTop: 2 } }, v.need))))))));
 function SummaryTables({ data, coach, setSheet }) {
-    var _a, _b;
     const F = formulas(data.settings);
     const build = (fields, store) => {
         const { use } = trendData(fields, store);
@@ -17642,8 +17715,8 @@ function SummaryTables({ data, coach, setSheet }) {
             rows: (fields || []).filter((f) => f.type !== "note")
                 .map((f) => trendRow(f, store, use, F)).filter(Boolean) };
     };
-    const weekly = build(((_a = data.fields) === null || _a === void 0 ? void 0 : _a.weekly) || [], data.weekly || {});
-    const monthly = build(((_b = data.fields) === null || _b === void 0 ? void 0 : _b.monthly) || [], data.monthly || {});
+    const weekly = build(batteryRows(data), data.weekly || {});
+    const monthly = build(batteryRows(data), data.monthly || {});
     /* mobility keeps its own store shape, so it builds its own rows — the same
        dates-across, move-at-the-end shape, read from left and right separately
        because the GAP between sides is the thing that matters */
