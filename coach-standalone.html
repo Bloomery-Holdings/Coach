@@ -4304,7 +4304,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 182";
+const BUILD = "16 August 2026 · 183";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -13548,42 +13548,16 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                             " min")),
                     React.createElement("span", { style: { color: C.signal, fontSize: 15, flexShrink: 0 } }, "\u2192")))))))),
         !isFuture && (React.createElement(Card, null,
-            !(log === null || log === void 0 ? void 0 : log.type) && extraSessions.length === 0 ? null : (React.createElement("div", { style: { marginBottom: 14 } },
-                (log === null || log === void 0 ? void 0 : log.type) && (() => {
-                    var _a;
-                    /* HER REPORT, 10 August: "it should also say it is
-                       incomplete in this card. Why is there no conformity and
-                       proper wiring in this app?"
-  
-                       She is right. Three places said something about the
-                       benchmark and all three meant different things by the
-                       same tick. ONE rule now, everywhere a measurement is
-                       named: the tick belongs to the SESSION, and if the
-                       battery behind it is unfinished the row says so and
-                       opens it. */
-                    const isMonthly = /benchmark/i.test(String(log.type || ""));
-                    const isWeeklyM = /measurement|weekly check/i.test(String(log.type || ""));
-                    const pr = isMonthly ? coach.monthlyProgress : isWeeklyM ? coach.weeklyProgress : null;
-                    const shut = isMonthly ? coach.monthlyDone : isWeeklyM ? coach.weeklyDone : true;
-                    const openBattery = !!pr && pr.total > 0 && !shut;
-                    return (React.createElement("div", { style: { padding: "10px 0", borderBottom: `1px solid ${C.line}` } },
-                        React.createElement("div", { style: { display: "flex", alignItems: "baseline", gap: 8 } },
-                            React.createElement("span", { style: { flex: 1, fontSize: 14, fontWeight: 500 } }, log.type),
-                            React.createElement("input", { type: "text", inputMode: "numeric", value: (_a = log.minutes) !== null && _a !== void 0 ? _a : "", onChange: (e) => write({ minutes: e.target.value }), style: { ...inputStyle, width: 54, padding: "6px 6px", marginBottom: 0, textAlign: "center",
-                                    fontFamily: "'IBM Plex Mono', monospace", fontSize: 12 } }),
-                            React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min"),
-                            React.createElement("span", { style: { fontSize: 12, color: log.completed ? C.moss : C.muted } }, log.completed ? "✓" : "…"))));
-                })(),
-                extraSessions.map((x) => {
-                    const cls = classByName(x.type);
-                    return (React.createElement("div", { key: x.id, style: { padding: "12px 0", borderBottom: `1px solid ${C.line}` } },
-                        React.createElement(SessionBlock, { custom: x.custom || !cls, name: x.type, onName: (v) => patchSession(x.id, { type: v }), cls: cls, note: x.note, minutes: x.minutes, onNote: (v) => patchSession(x.id, { note: v }), onMinutes: (v) => patchSession(x.id, { minutes: v }), onClass: (props) => cls && patchClass(cls.id, props), onRemove: () => dropSession(x.id) }),
-                        React.createElement(RpeTap, { value: x.rpe, onChange: (v) => patchSession(x.id, { rpe: v }) }),
-                        x.rpe && (React.createElement(DuringTap, { value: x.during, onChange: (v) => patchSession(x.id, { during: v }) })),
-                        x.during && (React.createElement(Scale, { label: "How you felt afterwards", value: x.energyAfter, onChange: (v) => patchSession(x.id, { energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
-                        ((cls === null || cls === void 0 ? void 0 : cls.resistance) || (cls === null || cls === void 0 ? void 0 : cls.equipment) || x.loads) && (React.createElement("div", { style: { marginTop: 10 } },
-                            React.createElement(Note, { label: "Weights and kit you used", value: x.loads, onChange: (v) => patchSession(x.id, { loads: v }) })))));
-                }))),
+            extraSessions.length === 0 ? null : (React.createElement("div", { style: { marginBottom: 14 } }, extraSessions.map((x) => {
+                const cls = classByName(x.type);
+                return (React.createElement("div", { key: x.id, style: { padding: "12px 0", borderBottom: `1px solid ${C.line}` } },
+                    React.createElement(SessionBlock, { custom: x.custom || !cls, name: x.type, onName: (v) => patchSession(x.id, { type: v }), cls: cls, note: x.note, minutes: x.minutes, onNote: (v) => patchSession(x.id, { note: v }), onMinutes: (v) => patchSession(x.id, { minutes: v }), onClass: (props) => cls && patchClass(cls.id, props), onRemove: () => dropSession(x.id) }),
+                    React.createElement(RpeTap, { value: x.rpe, onChange: (v) => patchSession(x.id, { rpe: v }) }),
+                    x.rpe && (React.createElement(DuringTap, { value: x.during, onChange: (v) => patchSession(x.id, { during: v }) })),
+                    x.during && (React.createElement(Scale, { label: "How you felt afterwards", value: x.energyAfter, onChange: (v) => patchSession(x.id, { energyAfter: v }), max: 5, lo: "wiped", hi: "great" })),
+                    ((cls === null || cls === void 0 ? void 0 : cls.resistance) || (cls === null || cls === void 0 ? void 0 : cls.equipment) || x.loads) && (React.createElement("div", { style: { marginTop: 10 } },
+                        React.createElement(Note, { label: "Weights and kit you used", value: x.loads, onChange: (v) => patchSession(x.id, { loads: v }) })))));
+            }))),
             React.createElement(Btn, { kind: adding ? "quiet" : "ghost", onClick: () => setAdding((a) => !a) }, adding ? "Never mind" : "+ Add another session"),
             adding && (React.createElement("div", { style: { marginTop: 14, borderTop: `1px solid ${C.line}`, paddingTop: 12 } },
                 React.createElement("div", { className: "mono", style: { fontSize: 9.5, letterSpacing: "0.11em",
