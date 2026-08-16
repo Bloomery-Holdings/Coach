@@ -4259,7 +4259,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 172";
+const BUILD = "16 August 2026 · 173";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4373,6 +4373,52 @@ const sittingFinished = (entry) => {
     if (entry.finished === undefined && entry.on && !entry.started)
         return true;
     return false;
+};
+/* ============================================================================
+   A NEW NAME IS NOT ALWAYS A NEW MOVEMENT — AND SOMETIMES IT IS
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "I changed the label name to a glute bridge because I
+   cannot do squats any more... it went with a new number as if I'm still doing
+   squats."
+
+   Three weeks of squats, renamed, and the trend read "Glute bridge 120 140 168
+   +40%" — forty per cent progress on a movement she has never done. The app
+   asserted a change it had not measured, which is rule 23, and it did it with
+   her own numbers, which is worse.
+
+   The app's own protocol text has been telling her to do this for weeks. The
+   1 km row says: "rename this row if you switch, because a kilometre on a
+   treadmill and a kilometre on an elliptical are two different tests and
+   comparing them tells you nothing." Good advice that the behaviour then
+   contradicted.
+
+   Both things are true and the app cannot tell which without asking:
+     - "Deep squat" to "Squat" is the same test, better named. Keep everything.
+     - "Squat" to "Glute bridge" is a different exercise. The squats she did
+       are still hers and still hers to see, under the name she did them
+       under — and the glute bridge starts with no history, because it has
+       none.
+
+   So it asks (rule 33), and it does not choose for her. Nothing is deleted
+   either way: the old measure is set aside with its readings intact, exactly
+   as rule 35 already treats anything taken off, and it names what replaced it.
+   ==========================================================================*/
+/* Splitting a renamed measure in two: the old one keeps its name and its
+   numbers and stands down; the new one starts clean. */
+const splitRenamed = (list, id, newLabel, date) => {
+    const i = (list || []).findIndex((f) => f && f.id === id);
+    if (i < 0)
+        return list;
+    const old = list[i];
+    const wasCalled = old.renamedFrom || old.label;
+    const fresh = { ...old, id: newId(), label: newLabel, labelEdited: true,
+        status: undefined, removedOn: undefined, removedWhy: undefined,
+        renamedFrom: undefined, replaces: old.id };
+    const stood = { ...old, label: wasCalled, labelEdited: true,
+        status: "removed", removedOn: date,
+        removedWhy: `she replaced it with "${newLabel}" — a different exercise, so its numbers start again`,
+        renamedFrom: undefined, replacedBy: fresh.id };
+    return [...list.slice(0, i), stood, fresh, ...list.slice(i + 1)];
 };
 const hasReading = (store, id) => {
     try {
@@ -5606,7 +5652,25 @@ async function loadData() {
                    herself is hers permanently. */
                 fields: {
                     weekly: pauseRehab(((_b = (_a = d.fields) === null || _a === void 0 ? void 0 : _a.weekly) === null || _b === void 0 ? void 0 : _b.length)
-                        ? addNewFields(retireFields(fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]), d.weekly, (((_c = d.settings) === null || _c === void 0 ? void 0 : _c.batteryTidy) || 0) >= SEED_VERSION), SEED_WEEKLY, (((_d = d.settings) === null || _d === void 0 ? void 0 : _d.batteryTidy) || 0) >= SEED_VERSION)
+                        ? addNewFields(retireFields(
+                        /* HER REPORT, 16 August: "I changed the label name to a
+                           glute bridge because I cannot do squats any more... it
+                           showed as Squat. It didn't change."
+      
+                           A rename made in the field editor carried `labelEdited`
+                           and survived. A rename made ANY OTHER WAY — by the coach,
+                           or by anything added later — did not, and the loader put
+                           the seed's name back on the next app open, silently. A
+                           name that reverts without a word is worse than a name that
+                           cannot be changed.
+      
+                           `label` comes out of what the seed refreshes. It was there
+                           for a one-off correction months ago; the cost of keeping
+                           it is that every rename is one forgotten flag away from
+                           being undone behind her. Everything else the seed owns —
+                           the protocol text, the unit, the shape of the row — is
+                           still refreshed. */
+                        fillFromSeed(d.fields.weekly, SEED_WEEKLY, ["how", "why", "unit", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel", "machine"]), d.weekly, (((_c = d.settings) === null || _c === void 0 ? void 0 : _c.batteryTidy) || 0) >= SEED_VERSION), SEED_WEEKLY, (((_d = d.settings) === null || _d === void 0 ? void 0 : _d.batteryTidy) || 0) >= SEED_VERSION)
                         : SEED_WEEKLY, d, today()),
                     /* ---- WHERE BODY COMPOSITION WENT ---------------------------
                        HER REPORT, 10 August: "Body composition all of a sudden
@@ -5623,7 +5687,7 @@ async function loadData() {
                        Same treatment as the weekly now. It only ever ADDS what the seed
                        has and she does not; nothing she wrote is touched (rule 20). */
                     monthly: ((_f = (_e = d.fields) === null || _e === void 0 ? void 0 : _e.monthly) === null || _f === void 0 ? void 0 : _f.length)
-                        ? addNewFields(fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "label", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]), SEED_MONTHLY, false)
+                        ? addNewFields(fillFromSeed(d.fields.monthly, SEED_MONTHLY, ["how", "why", "unit", "bilateral", "rungs", "mins", "inWeekly", "type", "cap", "loadLabel"]), SEED_MONTHLY, false)
                         : SEED_MONTHLY,
                 },
                 /* HER DECISION, 13 August: LES MILLS Core and Beginner Calisthenics
@@ -5646,7 +5710,7 @@ async function loadData() {
                 bwlog: d.bwlog && typeof d.bwlog === "object" ? d.bwlog : {},
                 /* An older file has neither — seed them, never wipe them (rule 20). */
                 mobTests: Array.isArray(d.mobTests) && d.mobTests.length
-                    ? addNewFields(retireMobTests(fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly", "label", "unit", "better", "side", "needs", "drills",
+                    ? addNewFields(retireMobTests(fillFromSeed(d.mobTests, SEED_MOBILITY, ["how", "why", "mins", "inWeekly", "unit", "better", "side", "needs", "drills",
                         "type", "steps", "max"]), d.mobility, (((_h = d.settings) === null || _h === void 0 ? void 0 : _h.batteryTidy) || 0) >= SEED_VERSION), SEED_MOBILITY, (((_j = d.settings) === null || _j === void 0 ? void 0 : _j.batteryTidy) || 0) >= SEED_VERSION)
                     : SEED_MOBILITY,
                 drills: Array.isArray(d.drills) && d.drills.length
@@ -14655,6 +14719,9 @@ function FieldEditor({ which, data, setData, close, focus }) {
     const [wk, setWk] = useState(data.fields.weekly);
     const list = both ? [...mo, ...wk] : wk;
     const setFor = (id) => (mo.some((f) => f.id === id) ? setMo : setWk);
+    /* the store a row's readings actually live in — the same test `setFor`
+       makes, so the two can never disagree about which battery a row is in */
+    const storeFor = (id) => (mo.some((f) => f.id === id) ? (data.monthly || {}) : (data.weekly || {}));
     const [openId, setOpenId] = useState(focus || null);
     const patch = (id, p) => setFor(id)((l) => l.map((f) => (f.id === id ? { ...f, ...p } : f)));
     /* reorder stays within the list a row lives in — the benchmark's shape is
@@ -14743,7 +14810,37 @@ function FieldEditor({ which, data, setData, close, focus }) {
                             border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px",
                         } }, "\u00D7"))),
                 openId === f.id && (React.createElement("div", { style: { padding: "4px 6px 14px" } },
-                    React.createElement(Field, { label: "Name", unit: "", type: "text", value: f.label, onChange: (v) => patch(f.id, { label: v, labelEdited: true }) }),
+                    React.createElement(Field, { label: "Name", unit: "", type: "text", value: f.label, onChange: (v) => patch(f.id, { label: v, labelEdited: true,
+                            /* remember what it was called, but only while it has
+                               numbers under it and only the FIRST time — so the
+                               question below is about the movement she started with,
+                               not about the last keystroke she typed */
+                            ...(f.renamedFrom === undefined
+                                && hasReading(storeFor(f.id), f.id)
+                                && String(v).trim() !== String(f.label).trim()
+                                ? { renamedFrom: f.label } : {}) }) }),
+                    f.renamedFrom !== undefined && f.renamedFrom !== f.label && (React.createElement("div", { style: { background: C.pist, borderRadius: 12, padding: "12px 14px", margin: "0 0 14px" } },
+                        React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.ink, marginBottom: 10 } },
+                            "This was ",
+                            React.createElement("strong", null, f.renamedFrom),
+                            " and it has numbers under it. Is this the same test under a better name, or a different exercise?"),
+                        React.createElement("div", { style: { display: "flex", gap: 8 } },
+                            React.createElement("button", { onClick: () => patch(f.id, { renamedFrom: undefined }), className: "tap", style: {
+                                    flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                                    fontWeight: 600, fontFamily: "inherit", border: `1.5px solid ${C.line}`,
+                                    background: C.card, color: C.ink
+                                } }, "Same test, new name"),
+                            React.createElement("button", { onClick: () => setFor(f.id)((l) => splitRenamed(l, f.id, f.label, today())), className: "tap", style: {
+                                    flex: 1, padding: "10px 8px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                                    fontWeight: 600, fontFamily: "inherit", border: "none",
+                                    background: C.signal, color: C.chalk
+                                } }, "A different exercise")),
+                        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 } },
+                            "A different exercise keeps every ",
+                            f.renamedFrom,
+                            " reading you have taken, under that name, set aside where you can always see it \u2014 and starts ",
+                            f.label,
+                            " with no history, because it has none. Nothing is deleted either way."))),
                     React.createElement(Note, { label: "How it's done", value: f.how, onChange: (v) => patch(f.id, { how: v, howEdited: true }), hint: "The protocol, precise enough that the number means the same thing next month." }),
                     React.createElement(Note, { label: "Why it's measured", value: f.why, onChange: (v) => patch(f.id, { why: v, whyEdited: true }) }),
                     React.createElement(Field, { label: "Video link", unit: "", type: "text", value: f.video || "", onChange: (v) => patch(f.id, { video: v.trim() }) }),
