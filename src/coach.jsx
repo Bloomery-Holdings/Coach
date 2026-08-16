@@ -4078,7 +4078,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 167";
+const BUILD = "16 August 2026 · 168";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -17174,7 +17174,26 @@ function WhoopImport({ data, setData, close }) {
         Object.entries(found.logs).forEach(([d, v]) => {
           const { _session, ...rest } = v;
           logs[d] = { ...(logs[d] || {}), ...rest };
-          if (_session && makeSessions && !logs[d]?.completed) {
+          /* HER QUESTION, 16 August: "when I upload whoop data, does it
+             override my sessions or duplicate them?" Neither — and the check
+             that answers it turned up the one case where it did neither
+             correctly.
+
+             A session SHE logged is never touched (`!logs[d].completed`), and
+             the day's workouts are folded into ONE session rather than one
+             each, so nothing doubles however often she imports the same file.
+
+             But a day she had said was REST has `completed: false`, so the
+             import walked straight past that guard and wrote `completed: true`
+             on top of `rest: true` — a day recorded as trained and rested at
+             once, which rule 33 says can never exist. WHOOP recording movement
+             does not overrule her: she is the one who says what a day was.
+
+             Nothing is lost by refusing. Every workout WHOOP saw is already on
+             the day as `whoopWorkouts` above, kept and visible, and if she
+             decides it was a session after all the day is hers to change. */
+          const restDay = !!logs[d]?.rest;
+          if (_session && makeSessions && !logs[d]?.completed && !restDay) {
             logs[d] = { ...logs[d], completed: true, ..._session };
           }
         });
