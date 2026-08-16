@@ -306,6 +306,7 @@ const FORMULA_DEFAULTS = {
   mobOk: 50,               /* ...adequate. Under it, needs work                       */
   mobFlag: 60,             /* under this the coach raises it                          */
   mobEvery: 7,             /* days between mobility batteries — hers to move           */
+  chatTail: 6,             /* messages of today's talk left open; the rest folds       */
   mobOverdueDays: 10,      /* days since the battery before it is chased              */
   mobGapFlag: 10,          /* left-right gap, percent, worth naming                   */
 
@@ -4091,7 +4092,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 176";
+const BUILD = "16 August 2026 · 177";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -16966,6 +16967,7 @@ function Formulas({ data, setData, close }) {
              ["batterySessionMins", "Minutes of battery work in a day before the day counts as trained"],
              ["leadCooldown", "Days a line the coach has led stands down before it may lead again"],
              ["briefBodyDays", "Days of your own movements the coach is told about"],
+             ["chatTail", "Messages of today's conversation left open before the rest folds"],
              ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
              ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
              ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
@@ -22036,6 +22038,17 @@ function Briefing({ coach, setSheet, close }) {
   );
 }
 
+/* The first thing SHE said that day, short enough to scan a list of them.
+   Her words, never the coach's — she is looking for what she asked, and the
+   coach's opening line is much the same every day. */
+const chatGist = (c, n) => {
+  const mine = ((c && c.messages) || []).find((m) => m && m.role === "user" && String(m.text || "").trim());
+  const said = String((mine || {}).text || "").replace(/\s+/g, " ").trim();
+  if (!said) return "";
+  const cut = Number(n) || 58;
+  return said.length > cut ? said.slice(0, cut).trimEnd() + "…" : said;
+};
+
 function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }) {
   /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
      HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
@@ -22071,9 +22084,16 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       ...(m.image ? { image: m.image } : {}) }))));
   const sessionId = useRef(todayChats[0]?.id || newId());
   const [showOld, setShowOld] = useState(false);
+  /* HER INSTRUCTION, 16 August. `showOld` opened every earlier day together;
+     this is which ONE of them is open. */
+  const [openDay, setOpenDay] = useState(null);
+  /* and whether the older part of today is unfolded */
+  const [showAllToday, setShowAllToday] = useState(false);
   /* And the half-typed message survives too. Dictating three sentences and
      losing them to a screen that slept is the same loss by another route. */
   const [draft, setDraft] = useState(seed || data.chatDraft || "");
+  /* how much of today stays open — hers, in the formulas sheet (rule 12) */
+  const tailFrom = Math.max(2, Number(formulas(data.settings).chatTail) || 6);
   const [busy, setBusy] = useState(false);
   /* HER INSTRUCTION, 13 August: photos to the coach. Shrunk on-device so a
      12-megapixel phone photo becomes a fraction of a megabyte before it is
@@ -23292,22 +23312,50 @@ Two or three sentences unless she asks for more.`;
             {showOld ? "Hide earlier conversations" : `Earlier conversations (${earlier.length} day${earlier.length === 1 ? "" : "s"})`}
           </button>
           {showOld && (
-            <div style={{ marginTop: 8, borderLeft: `2px solid ${C.line}`, paddingLeft: 10 }}>
-              {earlier.map((c) => (
-                <div key={c.id} style={{ marginBottom: 12 }}>
-                  <div className="mono" style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>
-                    {dayAndMonth(c.date)}
+            <div style={{ marginTop: 8 }}>
+              {/* ONE ROW PER DAY, and only the day she taps opens. Each says
+                  the date, how much was said, and the first thing SHE said —
+                  which is what she is actually scanning for. */}
+              {earlier.map((c) => {
+                const n = ((c.messages || []).length);
+                const open = openDay === c.id;
+                return (
+                  <div key={c.id} style={{ borderTop: `1px solid ${C.line}` }}>
+                    <button onClick={() => setOpenDay(open ? null : c.id)} className="tap" style={{
+                      width: "100%", textAlign: "left", border: "none", background: "transparent",
+                      cursor: "pointer", padding: "10px 2px", fontFamily: "inherit" }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <span className="mono" style={{ fontSize: 10, color: C.signal, width: 12, flexShrink: 0 }}>
+                          {open ? "▾" : "▸"}
+                        </span>
+                        <span className="mono" style={{ fontSize: 10.5, color: C.muted, flexShrink: 0 }}>
+                          {dayAndMonth(c.date)}
+                        </span>
+                        <span style={{ fontSize: 12, color: C.ink, lineHeight: 1.45,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {chatGist(c) || "nothing you said that day"}
+                        </span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 9.5, color: C.muted, marginLeft: 20, marginTop: 2 }}>
+                        {n} message{n === 1 ? "" : "s"}
+                      </div>
+                    </button>
+                    {open && (
+                      <div style={{ borderLeft: `2px solid ${C.line}`, paddingLeft: 10,
+                        marginLeft: 6, marginBottom: 12 }}>
+                        {(c.messages || []).map((m, i) => (
+                          <div key={i} style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 5,
+                            color: m.role === "user" ? C.ink : C.muted }}>
+                            <span className="mono" style={{ fontSize: 9.5, color: C.moss }}>
+                              {m.role === "user" ? "you" : "coach"}
+                            </span>{" "}{m.text}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  {(c.messages || []).map((m, i) => (
-                    <div key={i} style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 5,
-                      color: m.role === "user" ? C.ink : C.muted }}>
-                      <span className="mono" style={{ fontSize: 9.5, color: C.moss }}>
-                        {m.role === "user" ? "you" : "coach"}
-                      </span>{" "}{m.text}
-                    </div>
-                  ))}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -23353,8 +23401,22 @@ Two or three sentences unless she asks for more.`;
         </div>
       )}
 
+      {/* HER INSTRUCTION, 16 August: today grows all day and she cannot get
+          back through it. The last few exchanges stay where they are so she
+          can carry on mid-thought; everything before them folds into one line
+          she can open. Nothing is hidden that she is in the middle of. */}
+      {msgs.length > tailFrom && (
+        <button onClick={() => setShowAllToday((v) => !v)} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "4px 0",
+          marginBottom: 10, fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+          {showAllToday
+            ? "▾ Fold earlier today away"
+            : `▸ Earlier today (${msgs.length - tailFrom} message${msgs.length - tailFrom === 1 ? "" : "s"})`}
+        </button>
+      )}
+
       <div style={{ marginBottom: 14 }}>
-        {msgs.map((m, i) => (
+        {msgs.map((m, i) => (showAllToday || i >= msgs.length - tailFrom) && (
           <div key={i} style={{ display: "flex", flexDirection: "column",
             alignItems: m.role === "user" ? "flex-end" : "flex-start", marginBottom: 8 }}>
             <div style={{
