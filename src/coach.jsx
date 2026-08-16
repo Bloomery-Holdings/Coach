@@ -197,6 +197,16 @@ const FORMULA_DEFAULTS = {
   cacheLongGapMins: 60,    /* ...this small: the hour one does                 */
   cacheMinGaps: 10,        /* how many gaps before it trusts the measurement   */
 
+  /* ---- HOW MUCH HISTORY THE SUMMARY CARRIES -----------------------------
+     Her instruction, 16 August: the summary must be a full picture of her
+     performance without costing what sending everything cost. These say how
+     far each trend row reaches back. Longer rows cost a few words each and
+     see further; shorter ones are cheaper and blinder. Hers, like every
+     other threshold here. */
+  briefMornings: 14,       /* mornings of WHOOP in each row                    */
+  briefLiftDays: 10,       /* sessions of real loads carried                   */
+  briefNoteSittings: 8,    /* battery sittings her own wins are quoted from    */
+
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
      Her decision, 14 August. Every class in her library carries a cost from
      1 to 5. These say which of them today is allowed to reach for. This is
@@ -3612,6 +3622,35 @@ const centsSaved = (u, F) => {
    recorded nothing at all. It records now — and this only ever adds up what
    is on the record. A conversation from before build 143 carries no cost, and
    says so rather than being guessed at (rule 23). */
+/* EVERY OTHER THING THE APP SPENDS HER MONEY ON.
+   ---------------------------------------------------------------------------
+   HER QUESTION, 15 August: "the list building is inside the app, right? It
+   doesn't cost to build lists?" It does. Five calls besides the chat spend on
+   her key — building a list, editing her lists, designing the ten body-work
+   lists, writing a note back, and the monthly read. Only the chat and the read
+   were recorded, so the total she was shown was not her total. Rule 18: if the
+   app does something, she can see it.
+
+   One line per call, kept forever, never overwritten. */
+const SPEND_KINDS = {
+  chat: "talking to your coach", read: "the monthly read",
+  list: "building a list", edit: "editing your lists",
+  bodywork: "designing your body-work lists", note: "writing a note back",
+};
+const spendEntry = (kind, usage, F, t) => ({
+  at: Date.now(), date: t, kind,
+  tokensIn: Number(usage && usage.in) || 0,
+  tokensOut: Number(usage && usage.out) || 0,
+  cost: centsFor(usage || {}, F),
+});
+/* Written through setData so it survives a reload, and appended rather than
+   replaced so nothing she has already spent can be lost by a later call. */
+const noteSpend = (setData, kind, usage, t) => {
+  if (!usage || (!usage.in && !usage.out)) return;
+  setData((d) => ({ ...d,
+    spendLog: [...((d && d.spendLog) || []), spendEntry(kind, usage, formulas(d && d.settings), t)] }));
+};
+
 const spendSince = (data, from) => {
   const chats = (data.chats || []).filter((c) => c && (!from || c.date >= from));
   const reads = (data.reviews || []).filter((r) => r && (!from || r.date >= from));
@@ -3621,13 +3660,21 @@ const spendSince = (data, from) => {
      recorded — never asserted, and zero until there is something to show */
   const saved = chats.reduce((a, c) => a + (Number(c.saved) || 0), 0);
   const unknown = chats.filter((c) => c.cost === undefined).length;
+  /* everything that is not the chat and not the read (build 159) */
+  const other = ((data && data.spendLog) || []).filter((x) => x && (!from || x.date >= from));
+  const sumO = other.reduce((a, x) => a + (Number(x.cost) || 0), 0);
+  const byKind = {};
+  other.forEach((x) => { byKind[x.kind] = (byKind[x.kind] || 0) + (Number(x.cost) || 0); });
   return {
-    chatCents: sumC, readCents: sumR, cents: sumC + sumR, saved,
-    chats: chats.length, reads: reads.length, unknown,
+    chatCents: sumC, readCents: sumR, otherCents: sumO, byKind,
+    cents: sumC + sumR + sumO, saved,
+    chats: chats.length, reads: reads.length, other: other.length, unknown,
     tokensIn: chats.reduce((a, c) => a + (Number(c.tokensIn) || 0), 0)
-            + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0),
+            + reads.reduce((a, r) => a + (Number(r.tokensIn) || 0), 0)
+            + other.reduce((a, x) => a + (Number(x.tokensIn) || 0), 0),
     tokensOut: chats.reduce((a, c) => a + (Number(c.tokensOut) || 0), 0)
-             + reads.reduce((a, r) => a + (Number(r.tokensOut) || 0), 0),
+             + reads.reduce((a, r) => a + (Number(r.tokensOut) || 0), 0)
+             + other.reduce((a, x) => a + (Number(x.tokensOut) || 0), 0),
   };
 };
 const money = (cents) => `$${(Math.max(0, Number(cents) || 0) / 100).toFixed(2)}`;
@@ -3727,8 +3774,14 @@ const cachePolicy = (data, F) => {
      stored "off" — chosen back when this screen told her off cost nothing
      extra — outranks any default forever. It is treated as unset now. She can
      still force it off from Settings; that writes "never", which is honoured. */
+  /* BUILD 159. The 157 note said a forced off "writes never, which is
+     honoured". It did not: the Off button wrote "off", which this function
+     now treats as unset — so she had no way to turn caching off at all, and
+     the button sat highlighted while the mode said otherwise. Off writes
+     "never" now, and "never" resolves to off here so every reader downstream
+     sees the same three words it always saw. */
   const stored = (data && data.settings && data.settings.cacheMode) || "auto";
-  const forced = stored === "off" ? "auto" : stored;
+  const forced = stored === "off" ? "auto" : stored === "never" ? "off" : stored;
   const times = msgTimes(data);
   /* gaps between consecutive messages, in minutes, ignoring overnight breaks
      that no cache could ever span */
@@ -3740,7 +3793,13 @@ const cachePolicy = (data, F) => {
   const sorted = [...gaps].sort((a, b) => a - b);
   const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
   const enough = gaps.length >= f.cacheMinGaps;
-  const measured = !enough ? "off"
+  /* BUILD 159. The unmeasured default was OFF, on the reasoning that off is
+     never a penalty. That reasoning was wrong and it cost her money for a
+     week: writing the cache costs 2x ONCE, and every read after it costs a
+     tenth, so an hour cache pays for itself on message two of any
+     conversation. Off is only right when she never sends a second message.
+     Build 155 made this change and the workspace lost it; this is it again. */
+  const measured = !enough ? "1h"
     : median <= f.cacheShortGapMins ? "5m"
     : median <= f.cacheLongGapMins ? "1h"
     : "off";
@@ -3750,7 +3809,7 @@ const cachePolicy = (data, F) => {
     why: forced !== "auto"
       ? `you set this yourself`
       : !enough
-        ? `not enough measured yet — ${gaps.length} of ${f.cacheMinGaps} gaps. Off costs nothing extra, so it stays off until there is something to go on.`
+        ? `not enough measured yet — ${gaps.length} of ${f.cacheMinGaps} gaps. The hour cache is the safe guess until there is: it costs double once and a tenth every time after, so it pays for itself on your second message.`
         : measured === "5m" ? `your messages are typically ${Math.round(median)} minutes apart, which a five-minute cache survives`
         : measured === "1h" ? `your messages are typically ${Math.round(median)} minutes apart — too far for the short cache, close enough for the hour one`
         : `your messages are typically ${Math.round(median)} minutes apart, which no cache lives long enough to help with`,
@@ -3799,11 +3858,22 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
      one message and the next, which is exactly what a cache is for. A one-shot
      call (a read, a set of lists) is NOT cached: writing the cache costs 1.25x
      and nothing would ever read it back. */
+  /* BUILD 159, 15 AUGUST. The cache only helps on an OPENING stretch that is
+     byte-identical next time. It was one block containing today's clock and
+     today's conversation, so every single message changed it and the cache was
+     rewritten rather than read — caching was costing 25% more and saving
+     nothing. The prompt comes in two halves now: everything that does not
+     change during a conversation, which carries the cache mark, and the few
+     lines that do, which follow it uncached and cost almost nothing. */
+  const halves = typeof system === "string" ? { stable: system, live: "" } : (system || {});
+  const stable = String(halves.stable || "");
+  const live = String(halves.live || "");
   const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
     system: cache
-      ? [{ type: "text", text: system,
-           cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } }]
-      : system };
+      ? [{ type: "text", text: stable,
+           cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } },
+         ...(live ? [{ type: "text", text: live }] : [])]
+      : stable + (live ? "\n" + live : "") };
   if (search) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST", headers,
@@ -3879,7 +3949,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "15 August 2026 · 158";
+const BUILD = "15 August 2026 · 160";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4041,6 +4111,16 @@ const BLANK = {
        forward and charged again. She turns it on when she wants it, from the
        switch beside the coach. */
     webSearch: false,
+    /* WHAT THE COACH IS SENT (build 159, her instruction of 15 August).
+       "summary" is the summary page and nothing else — about 850 words
+       however many months accumulate. "everything" is the old behaviour,
+       every day and every entry in full, which is rule 34 and which cost
+       $3.44 in a single conversation. Hers to switch either way, any time.  */
+    payload: "summary",
+    /* HER OWN WORDS, sent verbatim alongside the summary, back as far as she
+       says. null means the summary only. She asked for this to be its own
+       control with its own window, independent of everything else. */
+    wordsScope: null,
     /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
@@ -4293,6 +4373,405 @@ const restIsFinal = (logs) => {
     } else out[k] = l;
   });
   return out;
+};
+
+/* ============================================================================
+   THE SUMMARY — WHAT THE COACH ACTUALLY GETS
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 15 August, after seeing one conversation cost $3.44 and
+   read 1,125,203 words:
+
+     "Is there a way where you can have a page on the app that summarises
+      everything in the most useful way possible in very little words and
+      numbers, so it gives a trend. It keeps accumulating numbers as trends
+      rather than separate numbers... and highlights ongoing injuries once,
+      not every time I say it... So there will be a page that is the only page
+      that communicates with the coach through the API and gives it all the
+      shorthand information it needs rather than every single word. If I have
+      seven exercises in the weekly battery, it can just give seven numbers."
+
+   That is exactly what this is. Every measure becomes ONE ROW that grows
+   sideways by one number a week instead of a new paragraph a week. An injury
+   is stated once with what was agreed about it. Her whole battery history
+   fits in about two hundred words however many months accumulate.
+
+   IT REVERSES RULE 34 ON PURPOSE. Rule 34 said nothing in the app may be
+   invisible to the coach and the coach must never be handed a description of
+   her in place of what she entered. This IS a description. So two things are
+   true and both are built: the summary says out loud that it is a summary and
+   that the coach must ask rather than invent, and "read everything today" is
+   one tap away whenever she wants the old behaviour back.
+
+   Numbers only in here. Her own words are a SEPARATE switch with its own
+   window (rule 12: she disposes), and when they travel raw they are not also
+   summarised — nothing is said twice.
+--------------------------------------------------------------------------- */
+
+/* how many columns of history a trend row carries. Twelve weeks is a season;
+   past that the row is still true, it just starts with an older number. Hers
+   to change like every other threshold (rule 12). */
+const BRIEF_COLS = 12;
+
+const briefNum = (v) => {
+  const n = Number(v);
+  if (!isFinite(n)) return null;
+  return Math.abs(n) >= 100 ? Math.round(n)
+    : Math.abs(n) >= 10 ? Math.round(n * 10) / 10
+    : Math.round(n * 100) / 100;
+};
+
+/* one measure, every sitting it has a number in, oldest to newest, with the
+   move across the whole row. No labels repeated, no units repeated — the unit
+   is on the row once and the numbers are bare. */
+const briefRow = (f, store, keys, F) => {
+  const vals = keys.map((k) => {
+    const v = readMeasure(store[k] || {}, f);
+    return isNaN(v) ? null : briefNum(v);
+  });
+  const real = vals.filter((v) => v !== null);
+  if (real.length === 0) return null;
+  const first = real[0], last = real[real.length - 1];
+  const move = first ? Math.round(((last - first) / Math.abs(first)) * 100) : 0;
+  /* rule 24: below the measurement error it is HOLDING, not a decline and not
+     a gain. The word is never "down" on noise. */
+  /* rule 24 again: the floor is a PERCENTAGE of the measure, so it is compared
+     against the percentage move, not against raw units. */
+  const floor = noiseFloorFor(f, F);
+  const moved = Math.abs(move) >= (isFinite(floor) ? floor : 0);
+  const dir = !moved ? "holding"
+    : (f.better === "down" ? last < first : last > first) ? `${move > 0 ? "+" : ""}${move}%`
+    : `${move > 0 ? "+" : ""}${move}% (wrong way)`;
+  return `${f.label}${f.bilateral ? " L/R" : ""} ${vals.map((v) => (v === null ? "·" : v)).join(" ")} ${dir}`;
+};
+
+const briefTable = (fields, store, label, F) => {
+  const keys = Object.keys(store || {}).sort();
+  if (!keys.length) return `${label}: none logged yet.`;
+  const use = keys.slice(-BRIEF_COLS);
+  /* HER WRITTEN ROWS ARE NOT NUMBERS, AND READING THEM AS NUMBERS INVERTED THEM.
+     Biggest win and Biggest challenge are type "note". Run through the trend
+     read they came out exactly backwards: a sitting where she wrote a sentence
+     scored NaN and printed "·", which the legend three lines below tells the
+     coach means SHE DID NOT DO IT — and a sitting where she wrote nothing
+     printed 0, because Number("") is 0. The row then asserted "holding" about
+     a sentence. Rule 23 twice over: a fallback that quietly substitutes a
+     plausible figure for a real one is a bug, and the app must never assert
+     what it has not computed. Rule 25 as well — her wins in her own words are
+     the one piece of self-referenced feedback that survived the gamification
+     cut, and this reported them to the coach as days she skipped.
+     Her writing travels under her own words switch, not as a fake number. */
+  const rows = (fields || []).filter((f) => f.type !== "note")
+    .map((f) => briefRow(f, store, use, F)).filter(Boolean);
+  if (!rows.length) return `${label}: ${use.length} sitting(s) logged, no numbers in them.`;
+  return `${label} — ${use.length} sitting(s), oldest to newest. Dates: ${use.map((k) => k.slice(5)).join(" ")}\n`
+    + `A dot means she did not do that one at that sitting. The last figure is the move across the whole\n`
+    + `row, and "holding" means the change is inside the measurement error for that measure — not a\n`
+    + `decline and not a gain (rule 24). Never call a holding number a drop.\n`
+    + rows.map((r) => `  ${r}`).join("\n");
+};
+
+/* HER INSTRUCTION: an injury is written down ONCE, with what was agreed about
+   it — not re-argued every time she mentions it. So the record comes through
+   as a standing item plus the standing decision, and the coach is told plainly
+   not to re-open it. */
+const briefIssues = (coach) => {
+  const open = coach.openIssues || [];
+  if (!open.length) return "OPEN, AND WHAT WAS AGREED: nothing open.";
+  return "OPEN, AND WHAT WAS AGREED — say it once if it is relevant, then move on. Do not re-ask what\n"
+    + "she already told you, and do not re-diagnose something that has a decision against it:\n"
+    + open.map((i) => {
+      const h = coach.historyFor(i);
+      const tried = (i.tried || []);
+      const agreed = tried.length
+        ? tried.map((t) => `${t.what} (${["no help", "barely", "some help", "helped", "resolved it"][Number(t.helped) - 1] || "not rated yet"})`).join("; ")
+        : "nothing agreed yet — worth settling it once and writing it down";
+      return `  * ${i.text} — since ${i.date}${h.occurrences >= 2 ? `, time ${h.occurrences}` : ""}. Agreed: ${agreed}.`;
+    }).join("\n");
+};
+
+const briefGoals = (coach) => {
+  const gs = coach.openGoals || [];
+  if (!gs.length) return "WHAT SHE WANTS TO BE ABLE TO DO: none set.";
+  return "WHAT SHE WANTS TO BE ABLE TO DO (these outrank what the numbers would prefer):\n"
+    + gs.map((g) => {
+      const sc = g.scores || [];
+      const line = sc.length
+        ? ` ${sc.map((x) => x.value).join(" ")}/10`
+        : " not scored yet";
+      return `  * "${g.text}"${line}`;
+    }).join("\n");
+};
+
+/* sessions a week, as a row of numbers, so adherence is a trend and not a
+   sentence. Rule 24: no streaks, no shaming — this is a count, not a score. */
+const briefWeeks = (data, coach, n) => {
+  const LG = restIsFinal(data.logs || {});
+  const out = [];
+  for (let w = n - 1; w >= 0; w--) {
+    let c = 0;
+    for (let d = 0; d < 7; d++) {
+      const day = addDays(coach.t, -(w * 7 + d));
+      const l = LG[day];
+      if (l && !l.rest && (l.type || (l.extraSessions || []).length)) c++;
+    }
+    out.push(c);
+  }
+  return out;
+};
+
+/* HER OWN WORDS, only when she has asked for them, only back as far as she
+   said. Verbatim — a themed line would save a few cents and lose the thing
+   that makes the coach sound like it knows her. */
+const briefWords = (data, cut) => {
+  if (!cut) return "";
+  const keep = (d) => cut === "all" || !d || String(d) >= cut;
+  const bits = [];
+  const j = (data.journal || []).filter((e) => keep(e && e.date));
+  if (j.length) bits.push(`  Journal:\n${j.map((e) => `    ${e.date}: ${e.text}`).join("\n")}`);
+  const nk = Object.keys(data.notes || {}).filter(keep).sort()
+    .filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text);
+  if (nk.length) bits.push(`  Notes she kept:\n${nk.map((k) => `    ${k}: "${data.notes[k].text}"`).join("\n")}`);
+  const said = [];
+  Object.keys(data.logs || {}).filter(keep).sort().forEach((d) => {
+    const l = data.logs[d] || {};
+    if (l.note) said.push(`    ${d}: "${l.note}"`);
+    const w = l.why;
+    if (w && (w.words || w.reason)) said.push(`    ${d} (${w.reason || "changed the plan"}): "${w.words || ""}"`);
+  });
+  if (said.length) bits.push(`  What she wrote on the day:\n${said.join("\n")}`);
+  if (!bits.length) return "\nHER OWN WORDS: she asked you to have them, and there are none inside that window.";
+  return `\nHER OWN WORDS, EXACTLY AS SHE WROTE THEM — she chose to send these, so read them properly.\nAnything here is her, not a summary of her:\n${bits.join("\n")}`;
+};
+
+/* ---------------------------------------------------------------------------
+   THE SIX THINGS THE FIRST SUMMARY LEFT OUT.
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August, after the cost audit: the savings rule outranks
+   the earlier rules where they conflict — "as long as I'm still giving the
+   coach the full picture and at the same time not having to pay loads of
+   money to do that."
+
+   The first summary bought its 98% saving partly by dropping things that are
+   her PERFORMANCE, not her filing: every WHOOP figure but today's recovery,
+   what the coach itself concluded last month, what she actually lifted, her
+   wins in her own words, how training FEELS, and every one of the numbers on
+   her own landing page. Measured, all six come to about 390 words — 0.16c a
+   message — and the summary is still ~89% smaller than build 158 with all of
+   them in. That is the trade she asked for, so they go back as TRENDS rather
+   than as paragraphs: rows of numbers that grow sideways by one figure a
+   week, never a new block a week.
+--------------------------------------------------------------------------- */
+
+/* WHOOP, MEASURED RATHER THAN REPORTED (rules 17 and 34). Today's recovery on
+   its own cannot show a drift, and a drift is the whole reason the strap is
+   there. One row per figure, oldest to newest, dots where she has none. */
+const briefWhoop = (data, coach) => {
+  const F = formulas(data.settings);
+  const days = Object.keys(data.morning || {}).sort().filter((d) => d <= coach.t).slice(-F.briefMornings);
+  if (!days.length) return "WHOOP: nothing imported yet. Say so rather than guessing at how she slept.";
+  const row = (get) => days.map((d) => {
+    const v = get(d);
+    return v === undefined || v === null || v === "" || isNaN(Number(v)) ? "·" : briefNum(v);
+  }).join(" ");
+  const m = (d) => data.morning[d] || {};
+  const lg = (d) => (data.logs || {})[d] || {};
+  const rows = [
+    ["recovery %", row((d) => m(d).recovery)],
+    ["sleep h", row((d) => lg(d).sleep)],
+    ["HRV ms", row((d) => m(d).hrv)],
+    ["resting HR", row((d) => m(d).rhr)],
+    ["day strain", row((d) => m(d).strain)],
+    ["shoulder AM /5", row((d) => m(d).shoulderAM)],
+  ].filter(([, r]) => /\d/.test(r));
+  return `WHOOP — last ${days.length} mornings, oldest to newest. Dates: ${days.map((k) => k.slice(5)).join(" ")}\n`
+    + `These are measured, not reported. Read them as drift, not as single days, and never prescribe from\n`
+    + `a number that is a dot.\n`
+    + rows.map(([l, r]) => `  ${l} ${r}`).join("\n");
+};
+
+/* WHAT THE APP ADDS UP ABOUT HER ADHERENCE. Rule 26 outranks every training
+   consideration, and how training FEELS is its main signal — it was the one
+   thing the summary dropped that predicts whether she is still here in a
+   year. */
+const briefAdherence = (coach) => `ADHERENCE — this outranks any training consideration:\n`
+  + `  habit strength ${coach.habitStrength ?? "—"}% · same-day consistency ${coach.cueConsistency ?? "—"}%`
+  + ` · ${coach.barrierWins} sessions done despite a barrier in 28 days`
+  + ` · ${coach.daysSinceSession === null ? "no session recorded yet" : `${coach.daysSinceSession} days since the last one`}`
+  + ` · ${coach.weeksTraining} weeks training\n`
+  + `  how it FEELS during sessions ${coach.affectMean ?? "not rated"}, afterwards ${coach.afterMean ?? "not rated"}`
+  + `${coach.affectByClass && coach.affectByClass.length ? ` (best: ${coach.affectByClass[0].name})` : ""}`;
+
+/* THE NUMBERS ON HER OWN SCREEN (rule 14). She can see these; the coach must
+   not be the last to know. Values only — how each one is worked out is on her
+   card under the "i", was 1,667 tokens of arithmetic every message, and the
+   coach never acted on it. A figure with no input says what it needs rather
+   than showing a number that is not there (rule 23). */
+const briefNumbers = (coach, data) => {
+  const shown = metricsForCoach(coach.allMetrics, data.settings);
+  if (!shown.length) return "THE NUMBERS YOU CARRY: none switched on.";
+  const all = (coach.allMetrics || []).length;
+  return `THE NUMBERS YOU CARRY — ${shown.length} of ${all} she runs. (headline) marks the five on her landing page.\n`
+    + `  ${shown.map((v) => `${v.label} ${v.display}${v.key ? " (headline)" : ""}${v.need ? ` [${v.need}]` : ""}`).join(" · ")}`;
+};
+
+/* WHAT IT CONCLUDED BEFORE (rule 8: one coach rather than twelve). Conclusions
+   and rules only — the reasoning behind them was written for the read itself.
+   Never trimmed by her window: what it decided about her is not a memory of a
+   past day, it is where it currently stands. */
+const briefReads = (data) => {
+  const rs = (data.reviews || []).filter((r) => r && r.ok);
+  if (!rs.length) return "WHAT YOU CONCLUDED BEFORE: you have not read everything for her yet.";
+  return "WHAT YOU CONCLUDED BEFORE — your own earlier conclusions. Be consistent with these or say plainly\n"
+    + "what changed your mind, and never make her explain something you already worked out:\n"
+    + rs.map((r) => {
+      const bits = [
+        (r.conclusions || []).length ? `concluded: ${r.conclusions.join("; ")}` : null,
+        (r.rules || []).length ? `rules you set: ${r.rules.join("; ")}` : null,
+        (r.focus || []).length ? `focus: ${r.focus.map((f) => f.area).join(", ")}` : null,
+      ].filter(Boolean);
+      return `  * ${r.date}${r.started === false ? " (she did not start that block)" : ""}: ${bits.join(" | ") || "nothing recorded"}`;
+    }).join("\n");
+};
+
+/* WHAT SHE ACTUALLY PUT ON THE BAR. The battery says what she can do on a test
+   day; this is what she did in the sessions themselves, and they are not the
+   same number. A day she logged as rest is not part of the lifting record
+   (rule 33). */
+const briefLifts = (data, coach) => {
+  const F = formulas(data.settings);
+  const out = [];
+  Object.keys(data.logs || {}).sort().reverse().forEach((d) => {
+    if (out.length >= F.briefLiftDays) return;
+    const l = data.logs[d] || {};
+    if (l.rest) return;
+    if (l.loads) out.push(`  ${d} ${l.type || "session"}: ${l.loads}`);
+    (l.extraSessions || []).forEach((x) => { if (x.loads && out.length < F.briefLiftDays) out.push(`  ${d} ${x.type || "session"}: ${x.loads}`); });
+  });
+  return out.length
+    ? `WHAT SHE ACTUALLY LIFTED, most recent first — the real record, not what the class calls for:\n${out.join("\n")}`
+    : "WHAT SHE ACTUALLY LIFTED: nothing recorded against a session yet.";
+};
+
+/* HER WINS AND HER CHALLENGES, IN HER OWN WORDS. These are the note rows of
+   the battery — the ones the trend table cannot read, and the ones rule 25
+   rests on: positive, specific and self-referenced is the form of feedback
+   that sustains training for years. They are hers, so they are quoted, never
+   summarised. */
+const briefNotes = (data) => {
+  const F = formulas(data.settings);
+  const fields = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])].filter((f) => f.type === "note");
+  if (!fields.length) return "";
+  const out = [];
+  [data.weekly, data.monthly].forEach((store) => {
+    Object.keys(store || {}).sort().slice(-F.briefNoteSittings).forEach((k) => {
+      fields.forEach((f) => {
+        const v = String((store[k] || {})[f.id] || "").trim();
+        if (v) out.push(`  ${k} ${f.label}: "${v}"`);
+      });
+    });
+  });
+  if (!out.length) return "";
+  return `WHAT SHE WROTE IN HER OWN BATTERY, most recent sittings — her words, not a summary of them:\n${out.join("\n")}`;
+};
+
+/* THE WHOLE THING. Pure — it takes her data and gives back text, so the page
+   she reads and the thing the coach receives can never drift apart. */
+const briefText = (data, coach, opts) => {
+  const o = opts || {};
+  const wordsCut = o.wordsCut || null;
+  const s = data.settings || {};
+  const F = formulas(s);
+  const weeks = briefWeeks(data, coach, 8);
+  const lines = [];
+
+  lines.push("=== HER SUMMARY ===");
+  lines.push("THIS IS A SUMMARY, AND YOU MUST TREAT IT AS ONE. It is her whole history compressed into");
+  lines.push("numbers on purpose, because sending it all in full was costing her real money. Everything");
+  lines.push("here is true and computed from what she entered. But it is not her exact words, and where");
+  lines.push("you need those — what she actually said about a session, a pain, a class — SAY SO and ask");
+  lines.push("her, or tell her she can send them with the switch under \"talk to your coach\". Never");
+  lines.push("invent the detail you cannot see, and never tell her something did not happen because it");
+  lines.push("is not in here.");
+  lines.push("");
+
+  lines.push(`WHO: ${s.name || "she"}${s.age ? `, ${s.age}` : ""}. Target ${s.weeklyTarget || "?"} sessions a week.`);
+  lines.push(`NOW: block "${coach.livePhase?.name || "none"}" week ${coach.weeksIntoBlock} of ${coach.livePhase?.weeks || "?"}.`
+    + ` This week ${coach.weekDone}/${coach.seasonTarget}. Consistency ${coach.consistency}% over 28 days.`
+    + ` Lapse state ${coach.lapseState}.`);
+  lines.push(`TODAY: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min` : "nothing prescribed"}.`
+    + ` Recovery ${coach.recValue || "not entered"}.`
+    + ` Shoulder: ${coach.shoulderFrozen ? "open and touched this week — no high shoulder load"
+      : coach.shoulderSore ? "open — high shoulder load marked down" : "nothing open"}.`);
+  lines.push(`SESSIONS A WEEK, last 8 weeks oldest to newest: ${weeks.join(" ")}`);
+  lines.push("");
+
+  /* rule 26 is the one that outranks everything, so what predicts it goes
+     high up rather than at the bottom where a long prompt loses things */
+  lines.push(briefAdherence(coach));
+  lines.push("");
+  lines.push(briefWhoop(data, coach));
+  lines.push("");
+
+  lines.push(briefIssues(coach));
+  lines.push("");
+  lines.push(briefGoals(coach));
+  lines.push("");
+
+  lines.push(briefTable(data.fields?.weekly || [], data.weekly || {}, "WEEKLY BATTERY", F));
+  lines.push("");
+  lines.push(briefTable(data.fields?.monthly || [], data.monthly || {}, "MONTHLY BENCHMARK", F));
+  lines.push("");
+  /* her own writing from the battery — the rows the trend table cannot read */
+  const notes = briefNotes(data);
+  if (notes) { lines.push(notes); lines.push(""); }
+
+  /* mobility keeps its own shape: the tests are not battery fields */
+  const mk = Object.keys(data.mobility || {}).sort().slice(-BRIEF_COLS);
+  if (mk.length) {
+    const rows = (coach.mobTests || []).map((m) => {
+      const vals = mk.map((k) => {
+        const v = (data.mobility[k] || {})[m.id];
+        if (v === undefined || v === null || v === "") return "·";
+        if (typeof v === "object") {
+          const L = v.l === undefined || v.l === "" ? "·" : briefNum(v.l);
+          const R = v.r === undefined || v.r === "" ? "·" : briefNum(v.r);
+          return `${L}/${R}`;
+        }
+        return String(briefNum(v) ?? "·");
+      });
+      return vals.every((x) => x === "·") ? null : `  ${m.label} ${vals.join(" ")}`;
+    }).filter(Boolean);
+    lines.push(`MOBILITY — ${mk.length} sitting(s). Where a test is measured both sides it reads left/right,`);
+    lines.push(`and the GAP between sides matters more than either number. Dates: ${mk.map((k) => k.slice(5)).join(" ")}`);
+    lines.push(rows.join("\n") || "  nothing entered");
+  } else {
+    lines.push("MOBILITY: not taken yet.");
+  }
+  lines.push("");
+
+  const paused = pausedFields(data);
+  lines.push(`PAUSED (coming back, not gone — train what has to get strong for it to return): ${
+    paused.length ? paused.map((f) => `${f.label}${f.dueBack ? ` until ${f.dueBack}` : ""}`).join(", ") : "nothing"}`);
+
+  const bw = (data.bodywork || []).filter((p) => p && p.status !== "removed");
+  lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
+
+  const lib = (data.library || []).filter((w) => w && w.status !== "removed");
+  lines.push(`CLASSES SHE OWNS — the only ones you may ever name: ${lib.map((w) => w.name).join(", ") || "none"}`);
+  lines.push("The detail of each class — duration, intensity, recovery cost, shoulder load, what it reaches —");
+  lines.push("is in front of you at the monthly read, not here. Do not guess at it.");
+  lines.push("");
+
+  lines.push(briefLifts(data, coach));
+  lines.push("");
+  lines.push(briefNumbers(coach, data));
+  lines.push("");
+  lines.push(briefReads(data));
+
+  const words = briefWords(data, wordsCut);
+  if (words) lines.push(words);
+
+  return lines.join("\n");
 };
 
 const repairLogs = (d) => {
@@ -11106,6 +11585,14 @@ function ReadCard({ data, setData, coach, setSheet }) {
       <Btn kind="signal" disabled={!scopeReady(scope)} onClick={() => setSheet({ kind: "review" })}>
         {scopeReady(scope) ? `Design next month from ${scopeLabel(scope)}` : "Type how far back first"}
       </Btn>
+      {/* HER INSTRUCTION, 15 August: the summary is a page she can see. Its
+          second door is here, beside the read, because this is the screen
+          where she looks at what the app knows about her. */}
+      <div style={{ marginTop: 10 }}>
+        <Btn kind="quiet" onClick={() => setSheet({ kind: "summary" })}>
+          See the summary your coach is given
+        </Btn>
+      </div>
 
       {last && (
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
@@ -14390,8 +14877,12 @@ function Settings({ data, setData, coach, setSheet }) {
                         {cp.why}
                       </div>
                       <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-                        {[["auto", "Let it decide"], ["off", "Off"], ["5m", "5 min"], ["1h", "1 hour"]].map(([k, l]) => {
-                          const on = (data.settings?.cacheMode || "auto") === k;
+                        {[["auto", "Let it decide"], ["never", "Off"], ["5m", "5 min"], ["1h", "1 hour"]].map(([k, l]) => {
+                          /* a stored "off" is the old value and counts as unset,
+                             so it highlights "Let it decide" — which is what it
+                             now does. Build 159. */
+                          const raw = data.settings?.cacheMode || "auto";
+                          const on = (raw === "off" ? "auto" : raw) === k;
                           return (
                             <button key={k} className="tap"
                               onClick={() => setData((d) => ({ ...d, settings: { ...(d.settings || {}), cacheMode: k } }))}
@@ -15368,6 +15859,11 @@ function Formulas({ data, setData, close }) {
              ["cacheLongGapMins", "…under this many: the hour one"],
              ["cacheMinGaps", "How many gaps before it trusts what it measured"]] },
 
+    { title: "How much history your summary carries", note: "Your summary is what your coach is given every time you talk to it, and it stays the same size however many months you add — because each measure is one row that grows sideways by a number, not a new paragraph. These say how far back each row reaches. Longer rows see further and cost a few more words; shorter ones are cheaper and blinder.",
+      rows: [["briefMornings", "Mornings of WHOOP in each row"],
+             ["briefLiftDays", "Sessions of real loads carried"],
+             ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
+
     { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
       rows: [["priceIn", "A million words read"],
              ["priceOut", "A million written back"],
@@ -16219,10 +16715,12 @@ function NotesArchive({ data, setData, coach, close }) {
   const writeOne = async () => {
     if (busy) return;
     setBusy(true);
+    const noteUse = {};
     try {
       const text = await askModel({
         apiKey: data.settings?.apiKey,
         maxTokens: 200,
+        usage: noteUse,
         messages: [{ role: "user", content:
 `Write one short line of encouragement for Nermeen.
 
@@ -16238,7 +16736,10 @@ Avoid anything close to these: ${(Object.values(data.notes || {}).slice(-12).map
       if (text) setData((x) => ({
         ...x, notes: { ...x.notes, [coach.t]: { text, kept: false, source: "written" } },
       }));
-    } catch (e) { /* pool note stays */ } finally { setBusy(false); }
+    } catch (e) { /* pool note stays */ } finally {
+      noteSpend(setData, "note", noteUse, coach.t);
+      setBusy(false);
+    }
   };
 
   return (
@@ -18976,6 +19477,157 @@ function ScopePicker({ scope, onPick }) {
   );
 }
 
+/* ============================================================================
+   THE SUMMARY PAGE — SHE CAN SEE EXACTLY WHAT HER COACH GETS
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 15 August: "Make the summary dashboard a page that I can
+   see." So this is not a hidden payload builder with a preview bolted on. It
+   is the page, and the coach is handed the same text she is reading — one
+   function, `briefText`, feeds both, so they can never drift apart.
+
+   Everything on this screen is a control, because rule 12 says she disposes:
+   what gets sent, whether her own words go too and how far back they reach,
+   and a one-tap escape to the old everything-in-full behaviour for a single
+   conversation.
+--------------------------------------------------------------------------- */
+function SummarySheet({ data, setData, coach, setSheet, close }) {
+  const wordsOn = !!data.settings?.wordsScope;
+  const wordsScope = data.settings?.wordsScope || { kind: "days", n: 7 };
+  const cut = wordsOn && scopeReady(wordsScope) ? scopeCutoff(wordsScope, coach.t) : null;
+  const full = data.settings?.payload === "everything";
+
+  let text = "";
+  let failed = false;
+  try { text = briefText(data, coach, { wordsCut: cut }); } catch (e) { failed = true; }
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  /* what it costs to send this once, at her own prices — computed, never
+     asserted, and only from numbers the app actually holds */
+  const F = formulas(data.settings);
+  const cents = (words * 1.35 * (F.priceIn ?? PRICE_IN)) / 10000;
+
+  const setWords = (sc) => setData((d) => ({ ...d,
+    settings: { ...(d.settings || {}), wordsScope: sc } }));
+
+  return (
+    <div>
+      <Eyebrow color={C.ochre}>What your coach is given</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        Your summary
+      </h1>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 14 }}>
+        This is the whole of what goes to your coach when you talk to it — not a preview of it,
+        the actual thing. Everything you have ever measured is in here as a trend rather than as
+        a paragraph a week, which is why it stays this size however many months you add.
+      </div>
+
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+          <Eyebrow>Its size</Eyebrow>
+          <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>
+            {full ? "sending everything instead" : "summary"}
+          </span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, textAlign: "center", margin: "11px 0 4px" }}>
+          <div>
+            <div className="mono disp" style={{ fontSize: 21, fontWeight: 800, color: C.ink }}>
+              {words.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>words</div>
+          </div>
+          <div>
+            <div className="mono disp" style={{ fontSize: 21, fontWeight: 800, color: C.ink }}>
+              {money(cents)}
+            </div>
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>to send it once</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+          {failed
+            ? "Something in your data stopped the summary being built. Nothing is lost — tell your coach you saw this."
+            : full
+              ? "You have it set to send everything, so this summary is NOT what goes — your whole history does, on every message. Switch it back below when you are done."
+              : "Every message you send costs about this, plus whatever you type. Nothing accumulates: the summary is the same size tomorrow as today."}
+        </div>
+      </Card>
+
+      {/* ---- HER OWN WORDS, HER OWN WINDOW ---------------------------------
+          Her instruction, 15 August: "I have to have the option of only
+          showing the summary, or also showing my own words, and a field where
+          showing my own words goes back two days, three days, one week, one
+          month. It's up to me." Independent of everything else, and when they
+          travel raw they are not also summarised — nothing is said twice. */}
+      <Card style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <Eyebrow>Your own words</Eyebrow>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, marginTop: 2 }}>
+              {wordsOn
+                ? `Going with the summary, exactly as you wrote them, back ${scopeLabel(wordsScope)}.`
+                : "Not going. The summary carries your numbers; your journal, notes and what you wrote on the day stay on the phone."}
+            </div>
+          </div>
+          <button onClick={() => setWords(wordsOn ? null : { kind: "days", n: 7 })}
+            className="tap" style={{
+              flexShrink: 0, padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+              fontSize: 12.5, fontWeight: 600, fontFamily: "inherit",
+              border: `1.5px solid ${wordsOn ? C.signal : C.line}`,
+              background: wordsOn ? C.signal : "transparent",
+              color: wordsOn ? C.chalk : C.ink }}>
+            {wordsOn ? "On" : "Off"}
+          </button>
+        </div>
+        {wordsOn && (
+          <div style={{ marginTop: 12 }}>
+            <ScopePicker scope={wordsScope} onPick={setWords} />
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+              A month of your writing costs about 6c a message on top. Your words are not what makes
+              this expensive — relaying everything else was.
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ---- THE ESCAPE HATCH ----------------------------------------------
+          Rule 34 said nothing in the app may be invisible to the coach. The
+          summary reverses that on her instruction, so the old behaviour has to
+          stay one tap away rather than being argued about. */}
+      <Card style={{ marginBottom: 14 }}>
+        <Eyebrow>When you want it to read everything</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "6px 0 10px" }}>
+          Every day in full, every entry, every conversation, every read — the way it worked before.
+          It is the honest answer when you think it is missing something, and it is expensive: a ten
+          message conversation ran to $3.44 on 15 August. Turn it back off when you are done.
+        </div>
+        <button onClick={() => setData((d) => ({ ...d,
+          settings: { ...(d.settings || {}), payload: full ? "summary" : "everything" } }))}
+          className="tap" style={{
+            width: "100%", padding: "12px 16px", borderRadius: 12, cursor: "pointer",
+            fontSize: 13.5, fontWeight: 600, fontFamily: "inherit",
+            border: `1.5px solid ${full ? C.clay : C.line}`,
+            background: full ? C.clay : "transparent",
+            color: full ? C.chalk : C.ink }}>
+          {full ? "Stop — go back to the summary" : "Read everything instead"}
+        </button>
+      </Card>
+
+      <Card style={{ marginBottom: 14 }}>
+        <Eyebrow>Word for word</Eyebrow>
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "6px 0 10px" }}>
+          Nothing here is hidden from you. If something in it is wrong, or you would rather your
+          coach did not carry it, say so and it comes out.
+        </div>
+        <pre className="mono" style={{
+          fontSize: 10.5, lineHeight: 1.5, color: C.ink, margin: 0, padding: "12px",
+          background: C.chalk, borderRadius: 10, whiteSpace: "pre-wrap", wordBreak: "break-word",
+          maxHeight: 420, overflowY: "auto" }}>{text || "Nothing to show."}</pre>
+      </Card>
+
+      <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach about any of it</Btn>
+      <div style={{ height: 28 }} />
+    </div>
+  );
+}
+
 function ReviewSheet({ data, setData, coach, setSheet, close, show }) {
   const [busy, setBusy] = useState(false);
   /* HER QUESTION, 11 August: "I saw a tab that let me send everything I've
@@ -19448,7 +20100,7 @@ function Briefing({ coach, setSheet, close }) {
   );
 }
 
-function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
+function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }) {
   /* ---- WHY THE CONVERSATION WAS ALWAYS EMPTY --------------------------
      HER REPORT, 10 August: "I recorded a lot to my coach, nothing seems to
      have been processed or acted upon."
@@ -19523,10 +20175,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
   const applyEdits = async (i) => {
     if (editingLists !== null) return;
     setEditingLists(i); setEditsMade(null); setListMade(null);
+    const editSpend = {};
     try {
       const raw = await askModel({
         apiKey: data.settings?.apiKey,
         system: EDIT_LISTS_SYSTEM,
+        usage: editSpend,
         messages: [{ role: "user", content:
           `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\nWHAT YOU JUST TOLD HER YOU WOULD CHANGE:\n${String(msgs[i]?.content || "")}` }],
         maxTokens: 3000,
@@ -19560,6 +20214,8 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         ? "This one needs your Anthropic key, which lives in Settings."
         : `I could not apply that. Nothing has changed. What came back: "${why}"` });
     }
+    /* recorded whether it worked or not — a failed call still cost her */
+    noteSpend(setData, "edit", editSpend, coach.t);
     setEditingLists(null);
   };
   const [listing, setListing] = useState(null);   /* index being turned into a list */
@@ -19567,13 +20223,15 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
   const makeList = async (i) => {
     if (listing !== null) return;
     setListing(i); setListMade(null);
+    const listSpend = {};
     try {
       const raw = await askModel({
         apiKey: data.settings?.apiKey,
         system: LIST_FROM_CHAT_SYSTEM,
         messages: [{ role: "user", content: String(msgs[i]?.content || "") }],
         maxTokens: 3000,
-        search: data.settings?.webSearch !== false,
+        usage: listSpend,
+        search: data.settings?.webSearch === true,
       });
       const out = parseReview(raw);
       if (!out || !Array.isArray(out.exercises) || !out.exercises.length) {
@@ -19612,6 +20270,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
         ? "This one needs your Anthropic key, which lives in Settings."
         : `I could not shape that into a list. Nothing has changed. What came back: "${why}"` });
     }
+    noteSpend(setData, "list", listSpend, coach.t);
     setListing(null);
   };
   const endRef = useRef(null);
@@ -19632,6 +20291,35 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
     if (!scrolled.current) { scrolled.current = true; return; }
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, busy]);
+
+  /* THE FEW LINES THAT CHANGE WHILE SHE IS TALKING. Everything above is
+     identical from one message to the next and is cached; this is not, and it
+     is tiny. Kept separate so the big half can be read back at a tenth of the
+     price rather than rewritten every time the minute hand moves. */
+  const liveContext = () => `=== AND THIS IS THIS MOMENT, WHICH IS WHY IT IS NOT WITH THE REST ===
+- THE CLOCK. It is ${coach.nowLabel}, which is ${coach.part.label}. ${coach.awakeLabel
+    ? `She woke at ${coach.wokeRaw} and has been up ${coach.awakeLabel}.${coach.justWoke
+        ? " SHE HAS ONLY JUST WOKEN UP. If she says she feels flat, low, tired or unable to face it, say so kindly: nobody has an honest read on themselves in the first hour, and a decision about training made from inside it is made on the wrong information. Suggest she gives it an hour before deciding anything. Do not treat the feeling as false — treat the timing as unreliable."
+        : ""}`
+    : "She has not told you what time she woke, and the WHOOP export has not filled it in either. If how she feels this morning comes up, it is worth asking — it changes what an early low mood means."}
+  Use the time of day: do not offer a full session late at night, and do not talk about tomorrow's plan at six in the morning as though today were over.
+- HOW SHE SAYS SHE IS TODAY: ${coach.moodToday ? `she tapped "${coach.moodToday}"${coach.moodToday !== "good" ? " — THIS OUTRANKS EVERYTHING ABOVE. Start with how she is, not with training. Do not open with a number or a plan." : ""}` : "not said"}`;
+
+  /* WHICH OF THE TWO SHE IS SENDING. One place, so the page she reads, the
+     breakdown she taps and the thing the coach receives can never be three
+     different answers. */
+  const payloadStable = () => {
+    if ((data.settings?.payload || "summary") === "everything") return context();
+    const sc = data.settings?.wordsScope;
+    const cut = sc && scopeReady(sc) ? scopeCutoff(sc, coach.t) : null;
+    try { return briefText(data, coach, { wordsCut: cut }); }
+    catch (e) {
+      /* rule 23: never silently send something other than what the page shows.
+         If the summary cannot be built, say so rather than quietly falling
+         back to the expensive payload she did not ask for. */
+      return "=== HER SUMMARY COULD NOT BE BUILT ===\nSomething in her stored data stopped the app assembling her summary, so you have almost\nnothing in front of you. Do not guess and do not pretend. Tell her plainly that the summary\nfailed to build, that you can see nothing but this message, and that she should tap \"Read\neverything instead\" on her summary page for this conversation.";
+    }
+  };
 
   const context = () => {
     /* ---- WHY THE COACH KEPT FORGETTING WHAT SHE HAD JUST DONE ----------
@@ -19671,6 +20359,20 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab }) {
        every goal, every paused item, every previous read's conclusions and
        everything she has written still travel in full whatever she sets. */
     const chatCut = scopeCutoff(data.settings?.chatScope || CHAT_SCOPE_DEFAULT, coach.t);
+    /* HER INSTRUCTION, 15 AUGUST — BUILD 159. "When I choose to push one day of
+       data, it means one day. If I ask for one week pushed, it's one week
+       pushed." It bounded the day list and nothing else, so a one-day window
+       still carried every battery, every mobility sitting, every journal entry
+       and every read she had ever done. It governs EVERYTHING WITH A DATE ON IT
+       now. What is not history — her goals, what is open in the record, her
+       library, her settings, the programmes she is currently doing — still
+       travels, because none of it is a memory of a past day.
+       This supersedes the "nothing is capped" reading of rule 15: the cap is
+       HERS, set by her, and Everything still means everything. */
+    const inWin = (d) => chatCut === "all" || !d || String(d) >= chatCut;
+    const winLine = chatCut === "all"
+      ? "She has this set to Everything, so every dated thing she has ever recorded is below."
+      : `SHE HAS ASKED YOU TO READ ${scopeLabel(data.settings?.chatScope || CHAT_SCOPE_DEFAULT).toUpperCase()}, and that is deliberate. Everything below with a date on it stops at ${chatCut}. Older days, batteries, sittings, journal entries and reads exist and are safe on her device — she has simply not asked you to read them for this. Do not guess at what is outside it and do not treat it as missing data. If the answer genuinely needs more history, say which and tell her she can widen the window under "talk to your coach".`;
     const recentDays = Array.from(new Set([...loggedDays, ...morningDays]))
       .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t
         && (chatCut === "all" || d >= chatCut)).sort();
@@ -19784,6 +20486,9 @@ ${m.upto ? `(folded up to ${m.upto}.)` : ""}
 `;
 })()}
 
+=== HOW FAR BACK SHE HAS ASKED YOU TO READ ===
+${winLine}
+
 Where she is right now:
 - Phase: ${coach.phase.name} — ${coach.phase.line}
 - Week ${coach.pos.week}, month ${coach.pos.month}, quarter ${coach.pos.quarter}.
@@ -19846,12 +20551,24 @@ ${(() => {
      of itself before the coach ever saw it. TODAY goes in whole — every
      message, uncut. Earlier days are trimmed but real. */
   const all = data.chats || [];
-  const todayC = all.filter((c) => c.date === coach.t);
-  const older = all.filter((c) => c.date !== coach.t);
+  /* BUILD 159, 15 AUGUST. Her window bounds this too, and until now it did
+     not. Every conversation she had ever had went out in full, every message,
+     with every message she sent — which is most of what a 397,014-word read
+     was. The window is HERS: set it to Everything and everything still goes.
+     Build 155 made this change and the workspace lost it; this is it again.
+     Nothing is deleted — the older conversations are on her device, and the
+     running memory below carries their shape whatever this says. */
+  const older = all.filter((c) => c.date !== coach.t)
+    .filter((c) => chatCut === "all" || !c.date || String(c.date) >= chatCut);
+  const outside = all.filter((c) => c.date !== coach.t).length - older.length;
   const one = (m) => `${m.role === "user" ? "SHE" : "YOU"}: ${m.text || ""}`;
   const lines = [];
-  todayC.forEach((c) => lines.push(`  * TODAY, in full — every word of it:\n${(c.messages || []).map((m) => "      " + one(m)).join("\n")}`));
+  /* BUILD 159. Today's exchange used to be pasted in here IN FULL as well as
+     being sent in the messages array — the same words twice, growing with
+     every line she typed, and the reason the cache could never be read back.
+     It is in the conversation itself; you are reading it there. */
   older.forEach((c) => lines.push(`  * ${c.date} — ${c.about}: ${(c.messages || []).map((m) => one(m)).join(" | ")}`));
+  if (outside > 0) lines.push(`  * (${outside} earlier conversation${outside === 1 ? " sits" : "s sit"} outside the window she set and ${outside === 1 ? "is" : "are"} not quoted here. Not gone — the shape of ${outside === 1 ? "it" : "them"} is in your running history above. If she asks about one, say you can read it back if she widens the window under "talk to your coach".)`);
   return lines.join("\n") || "  no previous conversations";
 })()}
 - THE RECORD — everything she has told you that isn't a number. READ THIS BEFORE ANSWERING ANYTHING
@@ -19871,11 +20588,11 @@ ${coach.openGoals.length ? coach.openGoals.map((g) => `  * "${g.text}"${(g.score
   If she describes something she cannot do, work out what it actually requires — which joints, which
   ranges, which regions — explain it plainly, and tell her it is worth adding to this list so it
   reaches the monthly design instead of being said once and lost.
-- MOBILITY, EVERY SITTING AND EVERY TEST, oldest first. Four of them are measured left and right, and
+- MOBILITY, EVERY SITTING INSIDE HER WINDOW, oldest first. Four of them are measured left and right, and
   the gap between sides matters more than either number on its own:
 ${(() => {
-  const ks = Object.keys(data.mobility || {}).sort();
-  if (!ks.length) return "  not taken yet";
+  const ks = Object.keys(data.mobility || {}).filter(inWin).sort();
+  if (!ks.length) return chatCut === "all" ? "  not taken yet" : "  none inside the window she set";
   return ks.map((k) => {
     const e = data.mobility[k] || {};
     const rows = (coach.mobTests || []).map((m) => {
@@ -19893,20 +20610,15 @@ ${(() => {
 - MOBILITY OVERALL: ${coach.mobScore === null ? "not taken yet" : `${coach.mobScore}%`}
 ${coach.mobScored.length ? coach.mobScored.map((r) => `  * ${r.label}: ${r.now}${r.unit}${r.gapPct !== null ? ` (L/R ${r.gapPct}% apart)` : ""}${r.moved !== null ? `, ${r.better ? "better" : "worse"} than last week` : ""}`).join("\n") : ""}
 - TODAY'S TEN MINUTES: ${coach.dailyDrills.list.length ? coach.dailyDrills.list.map((d) => d.label).join(", ") : "nothing prescribed"}
-- THE CLOCK. It is ${coach.nowLabel}, which is ${coach.part.label}. ${coach.awakeLabel
-    ? `She woke at ${coach.wokeRaw} and has been up ${coach.awakeLabel}.${coach.justWoke
-        ? " SHE HAS ONLY JUST WOKEN UP. If she says she feels flat, low, tired or unable to face it, say so kindly: nobody has an honest read on themselves in the first hour, and a decision about training made from inside it is made on the wrong information. Suggest she gives it an hour before deciding anything. Do not treat the feeling as false — treat the timing as unreliable."
-        : ""}`
-    : "She has not told you what time she woke, and the WHOOP export has not filled it in either. If how she feels this morning comes up, it is worth asking — it changes what an early low mood means."}
-  Use the time of day: do not offer a full session late at night, and do not talk about tomorrow's plan at six in the morning as though today were over.
-- HOW SHE SAYS SHE IS TODAY: ${coach.moodToday ? `she tapped "${coach.moodToday}"${coach.moodToday !== "good" ? " — this outranks everything below. Start with how she is, not with training. Do not open with a number or a plan." : ""}` : "not said"}
+  (The clock and how she says she is today are at the very end of this prompt — they move minute by
+  minute, so they are kept out of the part that does not.)
 - ADHERENCE STATE (this outranks any training consideration — the goal is that she is still training in a year):
   Lapse state: ${coach.lapseState}${coach.daysSinceSession !== null ? `, ${coach.daysSinceSession} days since her last session` : ""}. Weeks training: ${coach.weeksTraining}.
   Habit strength ${coach.habitStrength ?? "—"}%, same-days consistency ${coach.cueConsistency ?? "—"}%, ${coach.barrierWins} sessions completed despite a barrier in 28 days.
   How training FEELS during sessions: ${coach.affectMean ?? "not yet rated"}; how she feels afterwards: ${coach.afterMean ?? "not rated"}${coach.affectByClass?.length ? ` (best: ${coach.affectByClass[0].name})` : ""}.
   If she has been away, respond with self-compassion and one easy re-entry — never guilt, never catch-up plans, never an accounting of what was missed. The evidence is unambiguous that shame after a lapse predicts dropout and self-kindness predicts return.
 - Sets by body region this week (target 6+ each): ${coach.bodyRows.map((r) => `${r.label} ${r.sets}`).join(", ")}
-- Last monthly benchmark: ${monthlyLine}
+- Her latest monthly benchmark, whenever she did it (same — current standing, not history): ${monthlyLine}
 - WHO SHE IS — everything she has entered about herself in Settings. These are her own words and
   her own numbers; use them rather than any assumption about her.
 ${(() => {
@@ -19942,12 +20654,14 @@ ${(() => {
   }
   return out.join("\n");
 })()}
-- EVERY READ YOU HAVE EVER DONE FOR HER, oldest first — your own earlier conclusions, in your own
+- EVERY READ INSIDE HER WINDOW, oldest first — your own earlier conclusions, in your own
   words. You are the same coach across all of them. Be consistent with these or say plainly what
   changed your mind, and never make her explain something you already worked out.
 ${(() => {
-  const rs = (data.reviews || []).filter((r) => r && r.ok);
-  if (!rs.length) return "  none yet — you have not read everything for her before.";
+  const rs = (data.reviews || []).filter((r) => r && r.ok && inWin(r.date));
+  if (!rs.length) return chatCut === "all"
+    ? "  none yet — you have not read everything for her before."
+    : "  none inside the window she set. She has done reads outside it; she has not asked you to read them for this.";
   return rs.map((r) => [
     `  * ${r.date}${r.scopeLabel ? ` (you read ${r.scopeLabel})` : ""}`,
     r.interpretation ? `      what you said her numbers were doing: ${r.interpretation}` : null,
@@ -20042,7 +20756,7 @@ ${(() => {
   timer, a place to write what happened, how it is done, and a video. Say the exercises plainly,
   one per line with its dose, and tell her the button is there. Her instruction, 13 August:
   "I want to input time and reps and kilograms like when I do on the page of my body."
-${data.settings?.webSearch !== false ? `- YOU CAN SEARCH THE INTERNET. Her instruction, 13 August: "I want to give the coach access to
+${data.settings?.webSearch === true ? `- YOU CAN SEARCH THE INTERNET. Her instruction, 13 August: "I want to give the coach access to
   the Internet so it can get me video links and anything I want." Use it when a real answer needs
   something you do not hold — a demonstration video for an exercise, what the current evidence says,
   a protocol, a product she asks about. Give her the actual link, not a description of one. Do not
@@ -20050,7 +20764,7 @@ ${data.settings?.webSearch !== false ? `- YOU CAN SEARCH THE INTERNET. Her instr
   you cannot look something up.` : "- You cannot search the internet: she has turned that off in Settings. Say so plainly rather than guessing, and tell her the switch is in Settings, Inputs."}
 - NOTES SHE CHOSE TO KEEP. The app offers a line each day; these are the ones she kept, which makes
   them hers rather than the app's:
-${Object.keys(data.notes || {}).sort().filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text)
+${Object.keys(data.notes || {}).filter(inWin).sort().filter((k) => (data.notes[k] || {}).kept && (data.notes[k] || {}).text)
   .map((k) => `  * ${k}: "${data.notes[k].text}"`).join("\n") || "  none kept"}
 - THE CALCULATIONS SHE HAS ASKED YOU TO WATCH. Explain any of these in plain English on request,
   never in jargon, and always tie it back to HER training and what she should do next. Read them
@@ -20083,8 +20797,10 @@ ${metricsForCoach(coach.allMetrics, data.settings).map((v) => {
 - BODY WORK she books herself (never prescribed by you, but it changes what the next session can be):
 ${coach.bodywork.count28 ? `  ${coach.bodywork.count28} sessions in 28 days. ${coach.bodywork.reactive ? `RECENT: ${coach.bodywork.reactive.label} — tissue still settling, keep today light.` : ""}${coach.bodywork.support ? `RECENT: ${coach.bodywork.support.label} — she should tolerate more today.` : ""}${coach.bodywork.guided ? `RECENT: physiotherapy — their loading plan outranks yours.` : ""}` : "  none logged"}
 ${about ? `- She tapped "${about}" and came here to ask about it. Answer that first.` : ""}
-- EVERY DAY SHE HAS EVER LOGGED, oldest first — every session with everything recorded about it.
-  Not a window. If she mentions something she did, at any point since she started, it is in here.
+- EVERY DAY INSIDE THE WINDOW SHE SET, oldest first — every session with everything recorded about it.
+  This IS a window, and it is hers. It said "not a window" here while a window was being applied,
+  which meant you were told you had everything when you did not. If she mentions a day outside it,
+  say plainly that it is outside what she asked you to read rather than saying it did not happen.
   ${recent}
 - WHY SHE SKIPPED, SWAPPED OR CUT ONE SHORT, in her own words and her own taps. Never quote this back
   as an accounting; use it so she does not have to explain the same thing twice:
@@ -20103,7 +20819,7 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
     const name = (id) => (pool.find((f) => f.id === id) || {}).label || id;
     const out = [];
     [["weekly", data.weekly], ["monthly", data.monthly]].forEach(([which, store]) => {
-      Object.keys(store || {}).sort().reverse().forEach((k) => {
+      Object.keys(store || {}).filter(inWin).sort().reverse().forEach((k) => {
         const e = store[k] || {};
         Object.keys(e).forEach((key) => {
           if (!/__note$/.test(key)) return;
@@ -20112,14 +20828,14 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
         });
       });
     });
-    Object.keys(data.mobility || {}).sort().reverse().forEach((k) => {
+    Object.keys(data.mobility || {}).filter(inWin).sort().reverse().forEach((k) => {
       const e = data.mobility[k] || {};
       Object.keys(e).forEach((id) => {
         const v = e[id] && typeof e[id] === "object" ? String(e[id].note || "").trim() : "";
         if (v) out.push(`${k} ${(coach.mobTests || []).find((m) => m.id === id)?.label || id}: "${v}"`);
       });
     });
-    Object.keys(data.logs || {}).sort().reverse().forEach((date) => {
+    Object.keys(data.logs || {}).filter(inWin).sort().reverse().forEach((date) => {
       const dn = (data.logs[date] || {}).drillNotes || {};
       Object.keys(dn).forEach((id) => {
         const v = String(dn[id] || "").trim();
@@ -20128,21 +20844,21 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
     });
     return out.join(" | ") || "nothing yet";
   })()}
-- EVERY WEEKLY BATTERY SHE HAS EVER DONE, oldest first, measurement by measurement:
+- EVERY WEEKLY BATTERY INSIDE HER WINDOW, oldest first, measurement by measurement:
 ${(() => {
-  const ks = Object.keys(data.weekly || {}).sort();
-  if (!ks.length) return "  none yet";
+  const ks = Object.keys(data.weekly || {}).filter(inWin).sort();
+  if (!ks.length) return chatCut === "all" ? "  none yet" : "  none inside the window she set";
   return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
     .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.weekly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
-- EVERY MONTHLY BENCHMARK, oldest first, measurement by measurement:
+- EVERY MONTHLY BENCHMARK INSIDE HER WINDOW, oldest first, measurement by measurement:
 ${(() => {
-  const ks = Object.keys(data.monthly || {}).sort();
-  if (!ks.length) return "  none yet";
+  const ks = Object.keys(data.monthly || {}).filter(inWin).sort();
+  if (!ks.length) return chatCut === "all" ? "  none yet" : "  none inside the window she set";
   return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
     .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.monthly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
-- Last battery: ${battery}
+- Her latest battery, whenever she did it (this one line ignores the window, because it is where she stands now rather than a memory of a past day): ${battery}
 - MEASUREMENTS SHE HAS MOVED OR TAKEN OUT: ${(() => {
     const sk = data.skips || {}, df = data.deferrals || {};
     const pool = [...(data.fields?.weekly || []), ...(data.fields?.monthly || [])];
@@ -20161,15 +20877,15 @@ ${(() => {
 - Improving right now: ${(coach.improving || []).map((m) => `${m.label} ${m.pct > 0 ? "+" : ""}${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing yet"}
 - Declining right now: ${(coach.declining || []).map((m) => `${m.label} ${(m.pct || 0).toFixed(0)}%`).join(", ") || "nothing"}
 - Overall standing against her own bests: ${coach.overall ?? "not enough data"}/10
-- HER JOURNAL — EVERY ENTRY SHE HAS EVER WRITTEN, oldest first. ${(() => {
+- HER JOURNAL — EVERY ENTRY INSIDE HER WINDOW, oldest first. ${(() => {
   /* HER INSTRUCTION, 12 August: "I want the entries of the day to be all of
      them. All of the entries of the day should reach the coach. Don't limit
      them to six or twenty. I'm not talking to a different coach every day or
      every half a day. It's the same coach. It should know everything about
      me." Six reached here. Today's are separated out because a thing she wrote
      an hour ago is not the same as a thing she wrote in June. */
-  const all = data.journal || [];
-  if (!all.length) return "none yet";
+  const all = (data.journal || []).filter((e) => inWin(e && e.date));
+  if (!all.length) return chatCut === "all" ? "none yet" : "none inside the window she set";
   const todayJ = all.filter((e) => e.date === coach.t);
   const older = all.filter((e) => e.date !== coach.t);
   return (older.length ? `\n${older.map((e) => `  * ${e.date}: ${e.text}`).join("\n")}` : "")
@@ -20177,7 +20893,7 @@ ${(() => {
 })()}
 - WHAT WHOOP RECORDED FOR EACH WORKOUT, where she has it — this is measured, not reported: ${(() => {
     const out = [];
-    Object.keys(data.logs || {}).sort().reverse().forEach((d) => {
+    Object.keys(data.logs || {}).filter(inWin).sort().reverse().forEach((d) => {
       ((data.logs[d] || {}).whoopWorkouts || []).forEach((w) => {
         const bits = [w.name, w.min ? `${w.min}min` : null, w.strain ? `strain ${w.strain}` : null,
           w.hr ? `avg HR ${w.hr}` : null, w.maxHr ? `max HR ${w.maxHr}` : null,
@@ -20189,20 +20905,24 @@ ${(() => {
     });
     return out.join(" | ") || "none imported yet";
   })()}
-- HER LIBRARY — THE ONLY CLASSES THAT MAY EVER BE NAMED. She follows filmed classes. You may never
-  invent one, never name one that is not on this list, and never replace a class with a written
-  sets-and-reps session. (The one exception is rule 10: where something she has said she wants needs
-  a muscle or a range NOTHING here reaches, you may write her exercises for it — alongside a class,
-  never instead of one, and say plainly what the library could not do.)
+- THE ONLY CLASSES THAT MAY EVER BE NAMED. HER INSTRUCTION, 15 AUGUST: "The library does not need to
+  be accessible to the coach every time I talk to him. It adds no value. It only needs to be
+  accessible when he's doing my monthly programme." She is right — the full library ran to about
+  1,400 words and went out with every message, to be re-read every time she said anything. The
+  monthly read still carries all of it: every duration, intensity, recovery cost, shoulder load,
+  what each class reaches by region, what it needs and how it runs. That is where the choosing
+  happens. Here you get the names only, and they are here for ONE reason: so you cannot invent a
+  class or name one she does not own. If she asks what a class involves, say you have the detail in
+  front of you at the monthly read and ask her, or open it on her Workouts screen — do not guess at
+  a duration or a load you cannot see.
+  You may never invent a class, never name one that is not on this list, and never replace a class
+  with a written sets-and-reps session. (The one exception is rule 10: where something she has said
+  she wants needs a muscle or a range NOTHING she owns reaches, you may write her exercises for it —
+  alongside a class, never instead of one, and say plainly what the library could not do.)
 ${(() => {
   const lib = (data.library || []).filter((w) => w && w.status !== "removed");
   if (!lib.length) return "  her library is empty.";
-  return lib.map((w) => [
-    `  * ${w.name}${w.addon ? " (add-on, never a whole session)" : ""} — ${w.goal || "?"}, ${(w.durations || []).join("/") || "?"} min, intensity ${w.intensity ?? "?"}/5, recovery cost ${w.recoveryCost ?? "?"}, shoulder load ${w.shoulderLoad || "?"}${w.home ? ", can be done at home" : ""}`,
-    w.body ? `      reaches: ${Object.entries(w.body).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}/3`).join(", ")}` : null,
-    w.equipment ? `      needs: ${w.equipment}` : null,
-    w.structure ? `      how it runs: ${w.structure}` : null,
-  ].filter(Boolean).join("\n")).join("\n");
+  return "  " + lib.map((w) => `${w.name}${w.addon ? " (add-on)" : ""}`).join(", ");
 })()}
 - WHAT IS PAUSED, WHAT STANDS IN FOR IT, AND WHEN IT IS DUE AGAIN: ${(() => {
     const ps = pausedFields(data);
@@ -20259,7 +20979,7 @@ ${(() => {
 - Loads she has recorded: ${(data.library || []).filter((w) => w.resistance).map((w) => `${w.name}: ${w.resistance}`).join(" | ") || "none yet"}
 - WHAT SHE ACTUALLY LIFTED, most recent first (this is the real record; the line above is only what the class usually calls for): ${(() => {
     const out = [];
-    Object.keys(data.logs || {}).sort().reverse().forEach((d) => {
+    Object.keys(data.logs || {}).filter(inWin).sort().reverse().forEach((d) => {
       const l = data.logs[d];
       /* a day she logged as rest is not part of the lifting record */
       if (l?.rest) return;
@@ -20419,9 +21139,13 @@ Two or three sentences unless she asks for more.`;
         /* her decision, 14 August: the answer's room depends on what she asked */
         maxTokens: replyBudget(text, coach, formulas(data.settings)),
         apiKey: data.settings?.apiKey,
-        system: context(),
+        /* BUILD 159, HER INSTRUCTION OF 15 AUGUST. The summary page IS the
+           payload. `context()` — every day, every entry, every conversation —
+           is still here in full and one tap away, because rule 34 did not stop
+           being true; it stopped being the default. */
+        system: { stable: payloadStable(), live: liveContext() },
         messages: next.map(blockify),
-        search: data.settings?.webSearch !== false,
+        search: data.settings?.webSearch === true,
         usage: spend,
       }) || "I couldn't get a response just then. Try again in a moment.";
       const done = [...next, { role: "assistant", content: reply }];
@@ -20514,6 +21238,19 @@ Two or three sentences unless she asks for more.`;
                 ? `${(Number(here.tokensIn) || 0).toLocaleString()} words read, ${(Number(here.tokensOut) || 0).toLocaleString()} written back so far${Number(here.saved) > 0 ? `, ${money(here.saved)} of it saved by not re-reading the same thing twice` : ""}.`
                 : "Nothing recorded for this conversation yet — the figure appears after your first message."}
             </div>
+            {/* HER INSTRUCTION, 15 August: "I need the cost read to include my
+                total cost." Talking was the only thing being counted. Building
+                a list, editing your lists, designing the body-work lists,
+                writing a note and the monthly read all spend on her key, and
+                all of them are in the totals above now. This line names them
+                so the number is never a mystery. */}
+            {all.cents > all.chatCents && (
+              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 6 }}>
+                {money(all.chatCents)} of that is talking. The rest is everything else the app asks
+                the coach to do: {Object.keys(all.byKind || {}).map((k) => `${SPEND_KINDS[k] || k} ${money(all.byKind[k])}`).join(", ")}
+                {all.readCents > 0 ? `, the monthly read ${money(all.readCents)}` : ""}.
+              </div>
+            )}
             <div style={{ marginTop: 9 }}>
               <InfoNote small inherit
                 why={`This is what the app recorded, on your own key, at ${F2.priceIn} per million words read and ${F2.priceOut} per million written back. A word your coach already had in front of it from a moment ago costs a tenth. It is not your Anthropic bill — anything else on that account is not counted here. ${cp.why}`}>
@@ -20526,14 +21263,22 @@ Two or three sentences unless she asks for more.`;
                 HER device. So it counts its own payload, section by section,
                 and shows her the biggest ones. No guessing from here. */}
             <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-              <button onClick={() => setShowParts((v) => !v)} className="tap" style={{
-                border: "none", background: "transparent", cursor: "pointer", padding: 0,
-                fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
-                {showParts ? "Hide what's in it" : "What's in it, biggest first →"}
-              </button>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "baseline" }}>
+                <button onClick={() => setShowParts((v) => !v)} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                  fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                  {showParts ? "Hide what's in it" : "What's in it, biggest first →"}
+                </button>
+                {/* the page itself, from the screen where the money is spent */}
+                <button onClick={() => setSheet({ kind: "summary" })} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: 0,
+                  fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                  See your summary →
+                </button>
+              </div>
               {showParts && (() => {
                 let built = "";
-                try { built = context(); } catch (e) { built = ""; }
+                try { built = payloadStable() + "\n" + liveContext(); } catch (e) { built = ""; }
                 if (!built) return (
                   <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>
                     Couldn't measure it just now.
@@ -21848,10 +22593,12 @@ function CoachApp() {
             <MobilitySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "review" ? (
             <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} show={sheet.show} close={() => setSheet(null)} />
+          ) : sheet.kind === "summary" ? (
+            <SummarySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "briefing" ? (
             <Briefing coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "chat" ? (
-            <CoachChat data={data} setData={setData} coach={coach} seed={sheet.seed} about={sheet.about} close={() => setSheet(null)} goTab={go} />
+            <CoachChat data={data} setData={setData} coach={coach} seed={sheet.seed} about={sheet.about} close={() => setSheet(null)} goTab={go} setSheet={setSheet} />
           ) : sheet.kind === "settings-rhythm" ? (
             <RhythmSheet data={data} setData={setData} close={() => setSheet(null)} />
           ) : sheet.kind === "edit-weekly" || sheet.kind === "edit-monthly" ? (
@@ -22711,8 +23458,9 @@ const applyListEdits = (data, changes, today) => {
   return { bodywork, drills, goals, mobTests, done };
 };
 
-const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid }) => {
+const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid, usage }) => {
   const raw = await askModel({
+    usage,
     system: BODYWORK_SYSTEM,
     messages: [{ role: "user", content: [
       `BODY AREA SHE ASKED FOR, IN HER OWN WORDS: "${area}"`,
@@ -22756,18 +23504,27 @@ const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
   })),
 }));
 
-const designBodyWork = async ({ area, mins, apiKey, context, onProgress }) => {
+const designBodyWork = async ({ area, mins, apiKey, context, onProgress, usage }) => {
   const say = (m) => { try { onProgress && onProgress(m); } catch (e) { /* nothing */ } };
+  /* TWO calls, one bill. Both are added up here so the caller records what the
+     whole design actually cost rather than half of it (build 159). */
+  const u1 = {}, u2 = {};
   say("Writing lists 1 to 5…");
-  const first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [] });
+  const first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [], usage: u1 });
   let lists = shapeLists(first.lists.slice(0, 5), 1);
   let partial = false;
   try {
     say("Writing lists 6 to 10…");
-    const second = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 6,
+    const second = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 6, usage: u2,
       avoid: lists.map((l) => `${l.n}. ${l.title} — ${(l.exercises || []).map((x) => x.name).join(", ")}`) });
     lists = [...lists, ...shapeLists(second.lists.slice(0, 5), lists.length + 1)];
   } catch (e) { partial = true; }
+  if (usage) {
+    usage.in = (Number(u1.in) || 0) + (Number(u2.in) || 0);
+    usage.out = (Number(u1.out) || 0) + (Number(u2.out) || 0);
+    usage.cacheWrite = (Number(u1.cacheWrite) || 0) + (Number(u2.cacheWrite) || 0);
+    usage.cacheRead = (Number(u1.cacheRead) || 0) + (Number(u2.cacheRead) || 0);
+  }
   return { area: String(first.area || area), line: String(first.line || ""), lists, partial };
 };
 
@@ -23020,6 +23777,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
      than repeating the last ten. */
   const rebuild = async () => {
     setBusy(true); setErr(null);
+    const bwSpend = {};
     try {
       const said = [];
       Object.keys(data.logs || {}).sort().forEach((date) => {
@@ -23032,6 +23790,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
         });
       });
       const out = await designBodyWork({
+        usage: bwSpend,
         area: prog.area, mins: prog.mins, apiKey: data.settings?.apiKey,
         context: [
           `SHE HAS JUST FINISHED A FULL ROUND OF TEN. Design the next ten — harder or deeper where she coped, changed where she did not.`,
@@ -23050,6 +23809,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
         ? "This needs your API key, which lives in Settings."
         : "I couldn't build the next ten just now. Nothing has changed — try again in a minute.");
     }
+    noteSpend(setData, "bodywork", bwSpend, coach.t);
     setBusy(false);
   };
 
@@ -23211,8 +23971,10 @@ function BodyWork({ data, setData, coach, setSheet }) {
     if (busy) return;               /* one at a time, whatever she taps */
     if (!want) { setErr("Tell me which part of you needs the work first — tap one of the chips above, or say it in your own words."); return; }
     setBusy(true); setErr(null); setStep("");
+    const bwSpend = {};
     try {
       const out = await designBodyWork({
+        usage: bwSpend,
         area: want, mins: Number(mins) || 10, apiKey: data.settings?.apiKey,
         context: [
           `HER SHOULDER: ${data.settings?.shoulderInjury ? "the right one is rehabilitating and must not be loaded aggressively overhead" : "no current restriction"}.`,
@@ -23239,6 +24001,7 @@ function BodyWork({ data, setData, coach, setSheet }) {
         ? "The coach refused the request. That is almost always the key in Settings — expired, or with no credit on it. Nothing has changed."
         : `I couldn't reach the coach. Nothing has changed. What came back: "${why}"`);
     }
+    noteSpend(setData, "bodywork", bwSpend, coach.t);
     setBusy(false); setStep("");
   };
 
