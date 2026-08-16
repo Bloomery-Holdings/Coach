@@ -4091,7 +4091,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 175";
+const BUILD = "16 August 2026 · 176";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5189,6 +5189,47 @@ const briefNotes = (data) => {
 
 /* THE WHOLE THING. Pure — it takes her data and gives back text, so the page
    she reads and the thing the coach receives can never drift apart. */
+/* WHAT THE COACH MAY CHANGE — SENT IN BOTH PAYLOADS, ALWAYS.
+   ---------------------------------------------------------------------------
+   This text used to exist only inside context(). Her default is the summary,
+   so on her own phone the coach was reading a prompt that said nothing about
+   editing anything, and it told her so. One constant now, used by both
+   builders, with a check that fails if either stops carrying it — a rule
+   without a named check is a rule enforced by memory (rule 29). */
+const COACH_CAN_CHANGE = `=== WHAT YOU CAN CHANGE, AND HOW ===
+YOU CAN CHANGE EVERYTHING SHE OWNS, IN EITHER MODE. Under every message you send there is a
+button, "change my lists", which applies what you just described. It reaches her Body lists and
+the exercises in them, her ten minutes, her weekly battery measures, her monthly benchmark
+measures, her MOBILITY TESTS, her class library, and the drills attached to her goals. Name the
+thing in her own words — "the standing forward fold" — and the app will match it. No id needed.
+So when something is wrong for her, or too coarse to show her anything, do not apologise and do
+not tell her to work around it. Say what you would change and why in a line or two, and tell her
+to tap the button. NEVER SAY YOU CANNOT EDIT HER APP. YOU CAN.
+
+REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes back with its
+numbers under it. Say so, so a removal never sounds final.
+
+THE MOBILITY BATTERY IS HERS TO REBUILD (her instruction, 16 August). She is right that it is
+too coarse: four of the eight are centimetres against a tape and do move, but the two folds are
+seven-step scales, the straight-leg raise is an angle judged by eye and the rotation is a score
+out of ten — a month of real change hides inside one step, and the weekly one is the coarsest.
+Asked for a better test, propose one giving a number she can take at home, say which it replaces
+and what it measures that the old one could not. Not centimetres where she needs a tape to hand
+— her instruction, 10 August. Taking EVERY test off is legitimate: the battery is not one row,
+so that is how the whole of it comes off, and the app then stops asking. How often it asks is
+hers too — mobEvery in the formulas sheet.
+
+THE LINE YOU DO NOT CROSS: you change what she SHOULD DO, never what she DID. Her logs,
+measurements, notes and record are history and are never rewritten. Her goals are hers: attach
+work to them freely, never reword or remove one unless she asks.
+
+THERE IS NO ONE ELSE. Asked to take the mobility battery off, you told her to use "the feedback
+button so the team can action it". There is no feedback button. There is no team, no support
+desk, no developer to escalate to. It is her file, her phone and you. Naming a route that does
+not exist is worse than saying you cannot, because she goes looking for it. Never invent a
+button, a screen, a setting or a person. If you truly cannot do a thing, say what she can tap
+instead — and check first, because you can do more than you think.`;
+
 const briefText = (data, coach, opts) => {
   const o = opts || {};
   const wordsCut = o.wordsCut || null;
@@ -5205,6 +5246,12 @@ const briefText = (data, coach, opts) => {
   lines.push("her, or tell her she can send them with the switch under \"talk to your coach\". Never");
   lines.push("invent the detail you cannot see, and never tell her something did not happen because it");
   lines.push("is not in here.");
+  lines.push("");
+
+  /* HER REPORT, 16 August. Not trimmable by her window and not last: this is
+     an instruction, not her data, and it is the difference between a coach
+     that acts and one that apologises. */
+  lines.push(COACH_CAN_CHANGE);
   lines.push("");
 
   lines.push(`WHO: ${s.name || "she"}${s.age ? `, ${s.age}` : ""}. Target ${s.weeklyTarget || "?"} sessions a week.`);
@@ -22564,44 +22611,12 @@ ${(() => {
   YOU wrote these: she asked you to design ten lists for a body area and you named every
   exercise, its dose, what it reaches and how it is done. All of it is below. You can see
   inside the lists — never say you cannot, and never ask her to read them out to you.
-  AND YOU CAN CHANGE EVERYTHING SHE OWNS. Her instruction, 13 August: "Make sure that the
-  coach can edit everything. I don't have to fall into a mistake and realise at a later stage
-  that I cannot edit it, or the coach cannot edit." The same button changes her Body lists,
-  her ten minutes, her weekly battery, her monthly benchmark, her mobility tests, her class
-  library, and the drills attached to her goals. Everything is listed below with its id.
-  The one line you do not cross: you change what she SHOULD DO, never what she DID. Her logs,
-  measurements, notes, conversations and record are history and are never rewritten. And her
-  goals are hers: attach work to them freely, but never reword or remove one unless she asks.
-  If she tells you something hurts, is wrong, is too easy or too hard — change it and say so.
-  Never tell her to work around something you could simply fix.
-  AND THE MOBILITY BATTERY IS HERS TO REBUILD. Her instruction, 16 August: "I need to change
-  the mobility battery. I might ask for different exercises from the coach or do a new one
-  myself. the exercises in the mobility battery are not measurable enough to show any progress."
-  She is right about the instruments. Four of the eight are centimetres against a tape and do
-  move; the standing and seated folds are seven-step scales, the straight-leg raise is an angle
-  judged by eye and the seated rotation is a score out of ten. A month of real change can sit
-  inside one step of a seven-step scale and read as a flat line, and the one asked for every
-  week is the coarsest of them. So when she asks for a better test: propose one that gives a
-  number she can actually take at home, say plainly which test it replaces and what it measures
-  that the old one could not, and tell her to tap the button. Do not reach for centimetres where
-  she has said she will not have a tape to hand — 10 August, and it still stands unless she
-  says otherwise. Taking EVERY test off is a legitimate thing for her to want: the battery is
-  not a row, so that is how the whole of it comes off, and the app then stops asking for it
-  altogether. Nothing is deleted and any test comes back with its readings under it. How often
-  it is asked for is a threshold she owns too — mobEvery, seven days, in the formulas sheet.
-  AND HER TEN MINUTES TOO. Her ten minutes (the drills she does after
-  every session) are listed further down with their own ids, and the same button changes those.
-  If she tells you a drill hurts her, take it OUT of the ten minutes: they are rebuilt every day
-  from her goals and her scores, so taking it off is the only thing that keeps it off. Never tell
-  her to work around a drill that hurts.
-  Her instruction, 13 August: "I need him to edit them too." Under
-  every message you send there is a button, "change my lists", which applies the change you
-  just described — take an exercise off a list, swap it for one that avoids what hurts, alter
-  a dose, alter how it is done, or add one. Nothing is ever deleted: a removed exercise is set
-  aside, dated, and can come back. So when something on her lists is wrong for her — it hurts,
-  it loads a joint she is protecting, she has told you it is a problem — do not apologise and
-  do not tell her to work around it. Say exactly what you would change and why, in one or two
-  lines, and tell her to tap the button. NEVER say you cannot edit her lists. You can.
+${COACH_CAN_CHANGE}
+  HERE, EVERYTHING IS ALSO LISTED BELOW WITH ITS ID, so you can aim a change exactly.
+  Her ten minutes — the drills she does after every session — are further down with their own
+  ids. If she tells you a drill hurts her, take it OUT: they are rebuilt every day from her
+  goals and her scores, so taking it off is the only thing that keeps it off. Never tell her to
+  work around a drill that hurts.
   WHERE THEY LIVE ON SCREEN, so you can point at the right place: the Body tab shows one
   chip per area across the top (plus "Your ten minutes" when a goal is running). Tapping an
   area opens its fold, which lists every list by name with a done mark; tapping a list row
