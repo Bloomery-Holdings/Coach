@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 178";
+const BUILD = "16 August 2026 · 179";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -10833,7 +10833,7 @@ const drillSeconds = (d) => {
    is derived from the clock on the wall, not from ticks it happened to be
    awake for. */
 const TICKING = {};
-function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
+function Timer({ seconds = null, onStop = null, compact = false, label = "", sides = false }) {
   /* seconds: count DOWN from this. null: count UP. */
   const tid = (label || "t") + "|" + (seconds || "up");
   const remembered = TICKING[tid];
@@ -10884,7 +10884,13 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
   };
   const pause = () => { base.current = ms; setRunning(false); };
   const reset = () => { setRunning(false); setRang(false); const v = seconds ? seconds * 1000 : 0; base.current = v; setMs(v); };
-  const take = () => { const v = Math.round(ms / 1000); pause(); if (onStop) onStop(v); };
+  /* A countdown that has rung means she held it for the whole prescription,
+     so that is the number banked — not the nought left on the clock. */
+  const take = (side) => {
+    const v = seconds && (rang || ms <= 0) ? seconds : Math.round(ms / 1000);
+    pause();
+    if (onStop) onStop(v, side);
+  };
 
   const shown = Math.max(0, ms) / 1000;
   const face = shown >= 60
@@ -10902,12 +10908,28 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "" }) {
         padding: "7px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
         border: "none", background: running ? C.ink : C.signal, color: C.chalk,
         fontFamily: "inherit" }}>{running ? "Pause" : rang ? "Again" : "Start"}</button>
-      {onStop && !seconds && (
-        <button onClick={take} className="tap" style={{
+      {/* WHERE THE NUMBER GOES. On a two-sided exercise "Use it" had nowhere
+          honest to put it, so it went into the single box and the two sides
+          stayed empty (16 August). Two buttons, and she says which.
+          A countdown offers them once it has rung, because a completed hold
+          is a number worth keeping too. */}
+      {onStop && (!seconds || rang) && (sides ? (
+        <>
+          <button onClick={() => take("L")} className="tap" style={{
+            padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+            fontFamily: "inherit" }}>{seconds ? "log left" : "left"}</button>
+          <button onClick={() => take("R")} className="tap" style={{
+            padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
+            fontFamily: "inherit" }}>{seconds ? "log right" : "right"}</button>
+        </>
+      ) : (
+        <button onClick={() => take()} className="tap" style={{
           padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
           border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
           fontFamily: "inherit" }}>Use it</button>
-      )}
+      ))}
       <button onClick={reset} className="tap" style={{
         border: "none", background: "transparent", cursor: "pointer", padding: "7px 4px",
         fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>reset</button>
@@ -11141,6 +11163,52 @@ const exerciseSpec = (f) => {
      an exercise written before this build still says what it asks for */
   if (!out.length) put("", f.dose);
   return out;
+};
+
+/* WHAT THIS EXERCISE ASKS HER FOR.
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: "the fields are never accurate when the coach makes
+   the lists." They were guessed from `dose` and `how` with regular
+   expressions while the exercise was sitting right there saying what it was.
+
+   `prose` is the old guess, kept exactly as it was, and reached ONLY by an
+   exercise that declares nothing — anything written before build 171 (rule
+   20: an old row must keep working). */
+const asksFor = (ex) => {
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+  const e = ex || {};
+  const hold = num(e.hold), reps = num(e.reps), sets = num(e.sets), mins = num(e.mins);
+  const timer = String(e.timer || "").toLowerCase();
+  const declared = !!(hold || reps || sets || mins || timer);
+  const lr = sidesOf(e) === "lr";
+
+  let wantHold, wantReps;
+  if (declared) {
+    wantHold = hold > 0 || timer === "down" || (mins > 0 && !reps);
+    /* A SINGLE REP BESIDE A HOLD IS A PLACEHOLDER, NOT A REP SCHEME. Her
+       stretch came through as sets 1, reps 1, hold 30 — and the app asked her
+       for reps and never once for the hold. Reps are asked for when there are
+       really reps to count, or when there is no hold to ask about instead. */
+    wantReps = reps > 1 || (reps > 0 && !wantHold) || (!wantHold && (sets > 0 || timer === "up"));
+  }
+  if (!declared || (!wantHold && !wantReps)) {
+    const txt = `${e.dose || ""} ${e.how || ""} ${e.tool || ""}`.toLowerCase();
+    const holdish = /hold|sec\b|second|breath|minute/.test(txt);
+    const repish = /\brep|\bx\s*\d|\d+\s*x\b|each side|times/.test(txt) || !holdish;
+    wantHold = holdish; wantReps = repish;
+  }
+
+  /* WHAT THE CLOCK COUNTS. A declared hold is the number it counts down from;
+     a declared "timer counts up" is a stopwatch and must never be given a
+     ceiling. Only an exercise that declares nothing falls back to reading
+     seconds out of its own how-to. */
+  const secs = timer === "up" ? 0
+    : hold > 0 ? hold
+    : (mins > 0 && !reps) ? Math.round(mins * 60)
+    : declared ? 0
+    : (secondsFor({ how: `${e.dose || ""} ${e.how || ""}` }) || 0);
+
+  return { hold: !!wantHold, reps: !!wantReps, lr, secs: secs > 0 ? secs : 0 };
 };
 
 function HowTo({ f }) {
@@ -25943,19 +26011,21 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         </div>
         {(() => {
           /* AUDIT ITEM 20: every exercise asked for Weight, Reps AND Hold —
-             a stretch was asked for kilograms, a press for a hold. The asks
-             follow the exercise's own dose and how-to now; a box with
+             a stretch was asked for kilograms, a press for a hold.
+             16 AUGUST, HER REPORT: it then guessed from the prose while the
+             exercise itself declared sets, reps, hold, time, sides and timer
+             a few lines above. It reads what the exercise says now. A box with
              something already in it always stays (rule 20). */
-          const txt2 = `${ex.dose || ""} ${ex.how || ""} ${ex.tool || ""}`.toLowerCase();
-          const holdish = /hold|sec\b|second|breath|minute/.test(txt2);
-          const repish = /\brep|\bx\s*\d|\d+\s*x\b|each side|times/.test(txt2) || !holdish;
+          const asks = asksFor(ex);
+          const holdish = asks.hold;
+          const repish = asks.reps;
           /* WHAT IT IS LOADED WITH, and what that box is therefore called. Her
              report of 16 August: a band exercise was asking her for kilograms.
              A box she has already written in always stays, whatever the label
              says now (rule 20). */
           const box = LOAD_BOX[loadKindOf(ex)];
           const showW = !!box || String(did.w ?? "").trim() !== "";
-          const lr = sidesOf(ex) === "lr";
+          const lr = asks.lr;
           const filled = (k) => String(did[k] ?? "").trim() !== "";
           /* Two boxes when the exercise is logged left and right, one when it
              is not — and a box she has already written in always stays,
@@ -25988,9 +26058,16 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
             </div>
           );
         })()}
+        {/* HER REPORT, 16 August: "the counter counts once and when you tap
+            use it it says hold." It counted UP because the seconds were being
+            read out of prose that did not contain them, and its answer went
+            into the one un-split Hold box even on an exercise measured left
+            and right. It counts down from the declared hold now, and on a
+            two-sided exercise it asks which side the number belongs to. */}
         <Timer key={ex.id + ":t"} compact label={ex.name}
-          seconds={secondsFor({ how: `${ex.dose} ${ex.how}` })}
-          onStop={(v) => putDid("secs", String(v))} />
+          seconds={asksFor(ex).secs || undefined}
+          sides={asksFor(ex).lr}
+          onStop={(v, side) => putDid(side === "L" ? "secsL" : side === "R" ? "secsR" : "secs", String(v))} />
         {/* AUDIT ITEM 20: every battery exercise carries an explanation, a
             photo and a video to find — these carried none of it. */}
         <div style={{ marginTop: 6 }}>
