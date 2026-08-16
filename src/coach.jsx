@@ -4090,7 +4090,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 170";
+const BUILD = "16 August 2026 · 171";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7558,7 +7558,26 @@ function useCoach(data, day, clock) {
        finished monthly taken THIS week leaves the weekly nothing to add. It
        satisfies the week it was actually taken in — an old monthly with no
        day stamp cannot name its week and satisfies nothing (rule 23). */
-    const monthlyDone = sittingFinished(monthly[mk]);
+    /* A SITTING WITH EVERY ROW IN IT IS DONE, WHETHER OR NOT SHE PRESSED THE
+       BUTTON. Her report, 16 August.
+
+       "Finished" was only ever the button, on the reasoning that the first
+       digit typed must not end the battery. That reasoning is right and it is
+       kept — what is wrong is the other end of it. When every row the sitting
+       ASKS FOR has a reading in it, the app's own count says 100% and its own
+       row says "0 still to enter", and it went on chasing her for it anyway.
+       That is the app disagreeing with itself, which is the same fault as a
+       calendar chip staying white on a day she trained.
+
+       It is computed, never implied (rule 23): `sittingProgress` is the count
+       the Needs you row and the battery screen already show her, so all three
+       now agree by construction (rule 33). A sitting with nothing in it has a
+       total of zero and is not "complete" — it has not been started. */
+    const sittingFull = (which, key) => {
+      const p = sittingProgress(data, which, key);
+      return p.total > 0 && p.done >= p.total;
+    };
+    const monthlyDone = sittingFinished(monthly[mk]) || sittingFull("monthly", mk);
     /* "Done" was too strict a bar (her report, 11 August): she was partway
        through the benchmark — every row of it feeds the weekly — and the
        weekly kept asking anyway. A monthly with real values in it, taken
@@ -7570,7 +7589,7 @@ function useCoach(data, day, clock) {
       && mEntry[k] !== undefined && String(mEntry[k]).trim() !== "");
     const mDay = mEntry && (mEntry.on || mEntry.started);
     const monthlyCoversWeek = mHasValues && !!mDay && weekStart(mDay, startOn) === ws;
-    const weeklyDone = sittingFinished(weekly[ws]) || monthlyCoversWeek;
+    const weeklyDone = sittingFinished(weekly[ws]) || monthlyCoversWeek || sittingFull("weekly", ws);
     const weeklyDue = !weeklyDone && t >= weeklyFrom;
     const monthlyDue = !monthlyDone && t >= monthlyFrom;
     const weeklyToday = !weeklyDone && t === weeklyFrom;
@@ -10004,10 +10023,35 @@ function useCoach(data, day, clock) {
     };
     const exempt = leadingRaw.length && leadingRaw[0].lead === 1;
     const fresh = leadingRaw.filter(cooledOff);
-    const leading = (exempt || !fresh.length
+    const cooled = (exempt || !fresh.length
       ? leadingRaw
-      : [...fresh, ...leadingRaw.filter((a) => !cooledOff(a))]
-    ).slice(0, 3);
+      : [...fresh, ...leadingRaw.filter((a) => !cooledOff(a))]);
+
+    /* AND IT HAS TO VARY ON DAY ONE, NOT DAY TWO. Her report, 16 August, on
+       the build that added the cooldown: "the card of the coach still shows a
+       fixed sentence. Either make it variable or remove it."
+
+       She was right and the cooldown alone could never have satisfied her.
+       It works by remembering what led YESTERDAY — so on the first morning
+       after it shipped there was nothing to remember, and the same sentence
+       came up exactly as before. A fix that needs a day of history before it
+       does anything is not a fix she can see.
+
+       So the order also turns. Among the things that could lead today, which
+       one actually leads is stepped by the date — the same answer all day,
+       a different one tomorrow, and no memory required. The cooldown still
+       does its job on top: it pushes anything said in the last week to the
+       back of the queue before the step is taken.
+
+       RULE 4 IS STILL THE EXEMPTION. A mood tap keeps the top slot outright.
+       If she has said she is low, the morning starts with how she is — not
+       with whatever is next in a rotation. */
+    const step = (a) => {
+      if (exempt || a.length < 2) return a;
+      const n = Math.floor(parse(t).getTime() / 86400000) % a.length;
+      return [...a.slice(n), ...a.slice(0, n)];
+    };
+    const leading = step(cooled).slice(0, 3);
     /* what today ended up leading with, so tomorrow can stand it down. Written
        by Today when it renders the card — the engine stays pure. */
     const ledToday = leading.length ? leadKeyOf(leading[0]) : null;
@@ -10831,6 +10875,47 @@ function ExercisePhoto({ id }) {
   );
 }
 
+/* ============================================================================
+   HER INSTRUCTION, 16 August: "I don't need the how it is done paragraph on
+   any exercise. I just need the video link. Update the whole app to reflect
+   that."
+
+   So the paragraph stops being shown and stops being sent. It is NOT deleted
+   from her data (rule 20) and it is not dead weight either: the timer reads
+   its wording to work out how many seconds a hold is, and it is one of the
+   things that tells the app whether a movement is loaded with a weight or a
+   band. It simply stops being a wall of text she has to open and read when
+   what she actually wants is thirty seconds of somebody doing it.
+
+   What an exercise IS gets said in named fields instead — sets, reps, hold,
+   tool, machine, the timer — which is her second instruction the same day and
+   the honest way to say it.
+   ==========================================================================*/
+/* Every variable an exercise can carry, written out for reading. Only what is
+   actually set appears — a movement with no machine does not get a row saying
+   it has no machine (rule 23). */
+const exerciseSpec = (f) => {
+  if (!f) return [];
+  const out = [];
+  const put = (label, v, unit) => {
+    const val = String(v ?? "").trim();
+    if (val === "") return;
+    out.push(`${label} ${val}${unit ? " " + unit : ""}`);
+  };
+  put("sets", f.sets);
+  put("reps", f.reps);
+  put("hold", f.hold, "sec");
+  put("time", f.mins, "min");
+  if (f.side || f.bilateral) out.push("each side");
+  put("with", f.tool || f.machine);
+  if (f.timer === "up") out.push("timer counts up");
+  if (f.timer === "down") out.push("timer counts down");
+  /* the free-text dose still shows when nothing structured has been set, so
+     an exercise written before this build still says what it asks for */
+  if (!out.length) put("", f.dose);
+  return out;
+};
+
 function HowTo({ f }) {
   const [open, setOpen] = useState(false);
   /* HER REPORT, 11 August: "the mobility section is missing the how-to
@@ -10849,13 +10934,21 @@ function HowTo({ f }) {
         background: open ? C.signal : "transparent",
         color: open ? C.chalk : C.signal, cursor: "pointer",
         padding: "5px 12px", fontSize: 11, fontWeight: 600, fontFamily: "inherit" }}>
-        {open ? "hide" : "how it's done"}
+        {open ? "hide" : "what this is"}
       </button>
       {open && (
         <div style={{ background: C.chalk, borderRadius: 12, padding: "12px 14px", marginTop: 8 }}>
-          {f.how && <div style={{ fontSize: 12.5, lineHeight: 1.6, color: C.ink }}>{f.how}</div>}
+          {/* the named variables, in place of the paragraph (16 August) */}
+          {exerciseSpec(f).length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: f.why ? 9 : 0 }}>
+              {exerciseSpec(f).map((x) => (
+                <span key={x} className="mono" style={{ fontSize: 10, letterSpacing: "0.04em",
+                  padding: "4px 8px", borderRadius: 6, background: C.card, color: C.muted }}>{x}</span>
+              ))}
+            </div>
+          )}
           {f.why && (
-            <div style={{ fontSize: 12, lineHeight: 1.6, color: C.muted, marginTop: 9,
+            <div style={{ fontSize: 12, lineHeight: 1.6, color: C.muted,
               paddingTop: 9, borderTop: `1px solid ${C.line}` }}>{f.why}</div>
           )}
           <ExercisePhoto id={f.id} />
@@ -12621,7 +12714,17 @@ function BodyWorkCard({ log, write, isToday }) {
    It follows the day she is looking at, like everything else on this page —
    so stepping back to Tuesday shows Tuesday.
    ==========================================================================*/
+/* HER REPORT, 16 August, the same day it was built: "the card of what you did
+   today is very messy. Fold every set of related information under tabs or
+   arrows that I can click to see details."
+
+   Fair, and my fault: build 170 put every movement under every row, which is
+   what she asked for, and the result on a full day was a wall. A row that has
+   detail under it now says so and opens on a tap — closed by default, so the
+   card is one line per thing she did and the detail is one tap away. Rule 11
+   holds: it opens IN PLACE, not on another screen. */
 const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
+  const [open, setOpen] = useState(null);
   /* HER INSTRUCTION, 16 August: somewhere to log a movement that was not a
      class and not on a list. The door has to be here even on a day with
      nothing on it — that is exactly the day she has just done something the
@@ -12666,20 +12769,49 @@ const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
           );
           const line = { display: "flex", alignItems: "center", width: "100%", textAlign: "left",
             padding: "9px 0", borderTop: i === 0 ? "none" : `1px solid ${C.line}` };
-          /* HER INSTRUCTION, 16 August: the movements themselves, under the
-             row, so the day reads without her having to go and look. */
-          const under = r.lines && (
-            <div style={{ padding: "0 0 9px 2px" }}>
-              {r.lines.map((x) => (
-                <div key={x.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "2px 0" }}>
-                  <span style={{ flex: 1, fontSize: 12.5, color: C.muted, lineHeight: 1.4 }}>{x.what}</span>
-                  {x.detail && (
-                    <span className="mono" style={{ flexShrink: 0, fontSize: 10.5, color: C.muted }}>{x.detail}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          );
+          const folded = !!r.lines;
+          const isOpen = open === r.id;
+          /* A row with movements under it opens on a tap and is shut to begin
+             with. A row with nowhere to go and nothing under it is a line. */
+          if (folded) {
+            return (
+              <div key={r.id}>
+                <button onClick={() => setOpen(isOpen ? null : r.id)} className="tap"
+                  aria-label={`${isOpen ? "Hide" : "Show"} what you did in ${r.what}`}
+                  style={{ ...line, border: "none", borderTop: line.borderTop, background: "transparent",
+                    cursor: "pointer", fontFamily: "inherit" }}>
+                  <span style={{ display: "flex", alignItems: "baseline", gap: 10, width: "100%" }}>
+                    <span style={{ flexShrink: 0, fontSize: 11, color: C.muted, width: 12 }}>{isOpen ? "▾" : "▸"}</span>
+                    <span style={{ flex: 1, fontSize: 14.5, color: C.ink, lineHeight: 1.4 }}>{r.what}</span>
+                    {r.detail && (
+                      <span className="mono" style={{ flexShrink: 0, fontSize: 11, color: C.muted, letterSpacing: "0.04em" }}>
+                        {r.detail}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "0 0 9px 22px" }}>
+                    {r.lines.map((x) => (
+                      <div key={x.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "3px 0" }}>
+                        <span style={{ flex: 1, fontSize: 12.5, color: C.muted, lineHeight: 1.4 }}>{x.what}</span>
+                        {x.detail && (
+                          <span className="mono" style={{ flexShrink: 0, fontSize: 10.5, color: C.muted }}>{x.detail}</span>
+                        )}
+                      </div>
+                    ))}
+                    {r.go && (
+                      <button onClick={() => onGo && onGo(r.go)} className="tap" style={{
+                        border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 0",
+                        fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                        open it →
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          }
           return (
             <div key={r.id}>
               {r.go ? (
@@ -12691,7 +12823,6 @@ const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
               ) : (
                 <div style={line}>{inner}</div>
               )}
-              {under}
             </div>
           );
         })}
@@ -22185,13 +22316,17 @@ ${(() => {
     const lists = allLists.map((li, li2) => {
       const head = `      LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}`
         + `${doneIdx.has(li2) ? " [she has ticked this one done]" : ""}`;
+      /* HER INSTRUCTION, 16 August, looking at a payload where this section
+         was 27,485 words — 66% of everything sent on every message: "I don't
+         need the how it is done paragraph on any exercise."
+         The coach WROTE that text, so reading it back to itself on every
+         message bought nothing. What it needs is the movement, what it asks
+         for, and what it reaches. The paragraph is still in her data and still
+         editable; it just stops being relayed. */
       const exs = (li.exercises || []).map((x) => [
         `        - ${x.name || "exercise"}`,
-        x.dose ? `dose: ${x.dose}` : null,
-        x.tool ? `with: ${x.tool}` : null,
-        x.mins ? `${x.mins} min` : null,
+        exerciseSpec(x).join(" · ") || (x.dose ? `dose: ${x.dose}` : null),
         x.targets ? `reaches: ${x.targets}` : null,
-        x.how ? `how it is done: ${x.how}` : null,
       ].filter(Boolean).join(" · "));
       return [head, ...(exs.length ? exs : ["        (this list has no exercises in it)"])].join("\n");
     }).join("\n");
@@ -24484,19 +24619,36 @@ nothing after the }:
       "title": "what makes THIS list different, four or five words",
       "focus": "the specific tissue or quality this one is after",
       "exercises": [
-        { "name": "...", "tool": "what she needs for it, or 'nothing'",
-          "dose": "sets and reps or a hold, e.g. '3 x 12' or '3 x 30 seconds each side'",
+        { "name": "...",
+          "sets": 3, "reps": 12, "hold": 0,
           "mins": 2,
+          "side": false,
+          "loadKind": "weight | band | none — WHICH IT ACTUALLY IS. A resistance band is 'band', never 'weight'. Bodyweight is 'none'.",
+          "tool": "what she needs for it, or 'nothing'",
+          "machine": "the machine it needs, or empty — most need none",
+          "timer": "down for a hold, up for a rep test, empty for neither",
           "search": "the two or three words to search video for, the standard name of the movement",
-          "how": "how to do it, precise enough to do from the page",
           "targets": "the muscles, tendons or ligaments it reaches" }
       ]
     }
   ]
 }
 Return exactly the number of lists asked for. Each list's exercises must total roughly
-the minutes given. Keep every "how" to two or three sentences — she needs to be able to
-do it from the page, not read an essay.`;
+the minutes given.
+
+HOW AN EXERCISE IS DESCRIBED — her instruction, 16 August: "I don't need the how it is
+done paragraph on any exercise. I just need the video link." So do NOT write a how-to.
+Say what the movement ASKS FOR in the fields: sets, reps, hold, minutes, whether it is
+each side, what it is loaded with, the tool, the machine, and which way its timer runs.
+She watches the video for the technique.
+
+"loadKind" matters and it is the one that has been wrong. She reported an exercise whose
+own line said "light resistance band" being asked for kilograms. If it uses a band, say
+"band". If it uses a dumbbell, kettlebell, barbell or plate, say "weight". If it uses her
+own bodyweight, say "none". Never leave it to be guessed from the words.
+
+Set "hold" only for a movement that is held, and "reps" only for one that is counted.
+An exercise that is neither can have both at 0.`;
 
 /* ---- WHY NOTHING CAME OUT THE FIRST TIME -----------------------------
    Her report, 10 August: "I asked for ten lists and nothing came out."
@@ -24720,11 +24872,21 @@ Return ONLY a JSON object, no prose, no code fence:
   "title": "what this list is, four or five words",
   "focus": "the quality or tissue it is after",
   "exercises": [
-    { "name": "...", "tool": "what she needs, or nothing", "dose": "e.g. 3 x 12 or 3 x 30 seconds each side",
-      "mins": 2, "search": "standard name of the movement", "video": "a real URL or empty",
-      "how": "...", "targets": "..." }
+        { "name": "...",
+          "sets": 3, "reps": 12, "hold": 0,
+          "mins": 2,
+          "side": false,
+          "loadKind": "weight | band | none — WHICH IT ACTUALLY IS. A resistance band is 'band', never 'weight'. Bodyweight is 'none'.",
+          "tool": "what she needs for it, or 'nothing'",
+          "machine": "the machine it needs, or empty — most need none",
+          "timer": "down for a hold, up for a rep test, empty for neither",
+          "search": "standard name of the movement", "video": "a real URL or empty",
+          "targets": "the muscles, tendons or ligaments it reaches" }
   ]
-}`;
+}
+Do NOT write a how-to paragraph — she asked for the variables and the video, not prose.
+"loadKind" must be right: a band is "band", a dumbbell or barbell is "weight", her own
+bodyweight is "none".`;
 
 /* HER INSTRUCTION, 13 August: "I need him to edit them too." What the coach
    just said it would change, turned into exact operations against exact ids.
@@ -24992,6 +25154,20 @@ const designBatch = async ({ area, mins, apiKey, context, count, startAt, avoid,
   return out;
 };
 
+/* The old free-text dose, written from the new fields, so a screen or a timer
+   that still reads it keeps working. Never invented: an exercise that says
+   nothing gets nothing. */
+const doseFrom = (x) => {
+  const n = (v) => (v === undefined || v === null || v === "" || Number(v) === 0 ? null : String(v));
+  const sets = n(x.sets), reps = n(x.reps), hold = n(x.hold);
+  const side = x.side ? " each side" : "";
+  if (sets && reps) return `${sets} x ${reps}${side}`;
+  if (sets && hold) return `${sets} x ${hold} seconds${side}`;
+  if (hold) return `${hold} seconds${side}`;
+  if (reps) return `${reps} reps${side}`;
+  return "";
+};
+
 const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
   id: newId(), n: startAt + i,
   title: String(l.title || `List ${startAt + i}`),
@@ -25000,7 +25176,16 @@ const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
     id: newId(),
     name: String(x.name || "Exercise"),
     tool: String(x.tool || ""),
-    dose: String(x.dose || ""),
+    /* the named variables (16 August). `dose` is still written, from them
+       where they exist, because older screens and the timer read it. */
+    sets: x.sets === undefined || x.sets === null || x.sets === "" ? "" : String(x.sets),
+    reps: x.reps === undefined || x.reps === null || x.reps === "" || Number(x.reps) === 0 ? "" : String(x.reps),
+    hold: x.hold === undefined || x.hold === null || x.hold === "" || Number(x.hold) === 0 ? "" : String(x.hold),
+    machine: String(x.machine || ""),
+    timer: x.timer === "up" || x.timer === "down" ? x.timer : "",
+    side: !!x.side,
+    loadKind: ["weight", "band", "none"].includes(x.loadKind) ? x.loadKind : undefined,
+    dose: String(x.dose || doseFrom(x)),
     mins: Number(x.mins) || 2,
     how: String(x.how || ""),
     targets: String(x.targets || ""),
@@ -25263,9 +25448,17 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 3,
           letterSpacing: "0.06em", textTransform: "uppercase" }}>{ex.tool}</div>
       )}
-      <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginTop: 6 }}>{ex.how}</div>
+      {/* 16 August: the paragraph goes, the variables stay, the video stays. */}
+      {exerciseSpec(ex).length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>
+          {exerciseSpec(ex).map((x) => (
+            <span key={x} className="mono" style={{ fontSize: 10, letterSpacing: "0.04em",
+              padding: "4px 8px", borderRadius: 6, background: C.chalk, color: C.muted }}>{x}</span>
+          ))}
+        </div>
+      )}
       {ex.targets && (
-        <div style={{ fontSize: 11.5, color: C.moss, marginTop: 4 }}>{ex.targets}</div>
+        <div style={{ fontSize: 11.5, color: C.moss, marginTop: 6 }}>{ex.targets}</div>
       )}
       {/* "I want the ten lists to include also a link for a video to show me
           how the exercise is done, like all the other exercises." The search
@@ -25322,8 +25515,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
         {/* AUDIT ITEM 20: every battery exercise carries an explanation, a
             photo and a video to find — these carried none of it. */}
         <div style={{ marginTop: 6 }}>
-          <HowTo f={{ id: ex.id, label: ex.name,
-            how: [ex.dose, ex.how].filter(Boolean).join(" — "),
+          <HowTo f={{ ...ex, id: ex.id, label: ex.name,
             why: ex.targets ? `Reaches: ${ex.targets}` : undefined,
             search: ex.search || ex.name, video: ex.video }} />
         </div>
@@ -25354,7 +25546,29 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
       ) : (
         <div style={{ marginTop: 8, padding: "10px 12px", background: C.card, borderRadius: 10 }}>
           <Field label="Name" unit="" type="text" value={ex.name} onChange={(v) => patch({ name: v })} />
-          <Field label="What you need" unit="" type="text" value={ex.tool} onChange={(v) => patch({ tool: v })} />
+
+          {/* HER INSTRUCTION, 16 August: "editing exercises or adding
+              exercises needs to give me all the needed variables to define the
+              exercise properly including tools, timer up or down, reps, sets,
+              machine, time, hold and so on."
+
+              This is the same instruction as "I don't need the how it is done
+              paragraph", seen from the other side. What a movement asks for
+              was a sentence somebody had to read and the app had to guess at —
+              which is why a band exercise ended up with a kilogram box. It is
+              named fields now, and every one of them is hers. Nothing is
+              required: an exercise with only a name is still an exercise. */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <span style={{ flex: 1 }}><Field label="Sets" unit="" value={ex.sets ?? ""} onChange={(v) => patch({ sets: v })} /></span>
+            <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={ex.reps ?? ""} onChange={(v) => patch({ reps: v })} /></span>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={ex.hold ?? ""} onChange={(v) => patch({ hold: v })} /></span>
+            <span style={{ flex: 1 }}><Field label="Time" unit="min" value={ex.mins ?? ""} onChange={(v) => patch({ mins: v })} /></span>
+          </div>
+          <Field label="What you need" unit="tool, band, mat" type="text" value={ex.tool} onChange={(v) => patch({ tool: v })} />
+          <Field label="Machine" unit="if it needs one" type="text" value={ex.machine ?? ""} onChange={(v) => patch({ machine: v })} />
+
           {/* HER INSTRUCTION, 16 August: "weight should be band". The app
               guesses this from the exercise's own words and gets it right most
               of the time; when it does not, this is where she says so, and it
@@ -25371,8 +25585,25 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                 color: loadKindOf(ex) === k ? C.chalk : C.muted }}>{lbl}</button>
             ))}
           </div>
-          <Field label="Sets and reps" unit="" type="text" value={ex.dose} onChange={(v) => patch({ dose: v })} />
-          <Note label="How it's done" value={ex.how} onChange={(v) => patch({ how: v })} />
+
+          {/* "timer up or down" — a hold counts down to a target, a rep test
+              counts up from nothing. The exercise says which. */}
+          <div style={{ fontSize: 12.5, fontWeight: 500, marginBottom: 6 }}>Its timer</div>
+          <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
+            {[["up", "Counts up"], ["down", "Counts down"], ["", "No timer"]].map(([k, lbl]) => (
+              <button key={lbl} onClick={() => patch({ timer: k })} className="tap mono" style={{
+                flex: 1, padding: "8px 0", borderRadius: 7, cursor: "pointer", fontSize: 10.5,
+                fontWeight: 500, fontFamily: "inherit",
+                border: `1.5px solid ${(ex.timer || "") === k ? C.signal : C.line}`,
+                background: (ex.timer || "") === k ? C.signal : "transparent",
+                color: (ex.timer || "") === k ? C.chalk : C.muted }}>{lbl}</button>
+            ))}
+          </div>
+
+          {/* Kept, because it is what the app reads to work out how long a
+              hold is and it is what older exercises still carry — but it is no
+              longer the place any of this is said. */}
+          <Field label="Sets and reps, in words" unit="older exercises" type="text" value={ex.dose} onChange={(v) => patch({ dose: v })} />
           <Note label="What it reaches" value={ex.targets} onChange={(v) => patch({ targets: v })} />
           <Field label="Video link" unit="" type="text" value={ex.video || ""}
             onChange={(v) => patch({ video: v.trim() })} />
