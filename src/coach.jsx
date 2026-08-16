@@ -164,6 +164,18 @@ const FORMULA_DEFAULTS = {
      something she has not just been told. */
   leadCooldown: 7,         /* days a line stands down after it has led */
 
+  /* ---- HOW FAR BACK THE COACH CAN SEE HER MOVEMENTS ---------------------
+     HER CASE, 16 August: she asked the coach for exercises she had not done
+     yesterday, and it could not answer, because the summary carried her lists
+     as one line — "Hips (2 lists)" — and not one movement. She solved it by
+     switching to everything and paying for two days of full history.
+
+     This is the cheap answer to that: which movements she did, on which days,
+     with what she logged. Seven days answers "what have I not touched this
+     week" and stops there — it is a rolling window, so it does not accumulate
+     however many months pile up. Hers to move. */
+  briefBodyDays: 7,        /* days of body work the coach is told about */
+
   /* ---- THE RETEST CLOCK --------------------------------------------------
      A pause is not a removal, so every paused measure carries the date it is
      worth trying again. The waits are the published time-courses for the
@@ -4078,7 +4090,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 169";
+const BUILD = "16 August 2026 · 170";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4545,9 +4557,13 @@ const restIsFinal = (logs) => {
    still reads as itself rather than as a raw id. */
 const bwHomeOf = (data, exId) => {
   for (const pg of (data.bodywork || [])) {
+    /* archived rounds are searched too, so a movement she did in June still
+       reads as itself rather than as a raw id (rule 20) */
     const lists = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
-    const hit = lists.find((l) => (l.exercises || []).some((x) => x && x.id === exId));
-    if (hit) return { area: pg.area || "body work", list: hit.title || "" };
+    for (const l of lists) {
+      const ex = (l.exercises || []).find((x) => x && x.id === exId);
+      if (ex) return { area: pg.area || "body work", list: l.title || "", ex, own: !!pg.own };
+    }
   }
   return null;
 };
@@ -4621,7 +4637,10 @@ const batteryMinsOn = (sit, list, date) => {
 const doneOnDay = (data, date) => {
   if (!data || !date) return [];
   const rows = [];
-  const add = (id, what, detail, go) => rows.push({ id, what, detail: detail || "", go: go || null });
+  /* `lines` is what is UNDER a row — the individual movements behind
+     "Shoulders · List 2", so she can read the day without opening it. */
+  const add = (id, what, detail, go, lines) => rows.push({ id, what,
+    detail: detail || "", go: go || null, lines: lines && lines.length ? lines : null });
 
   const LG = restIsFinal(data.logs || {});
   const l = LG[date] || null;
@@ -4681,7 +4700,15 @@ const doneOnDay = (data, date) => {
       { kind: "sheet", sheet: { kind: "goals" } });
   }
 
-  /* ---- the lists off the Body page ------------------------------------- */
+  /* ---- the lists off the Body page -------------------------------------
+     HER INSTRUCTION, 16 August: "when it tells me, for example, that I did
+     some exercises for the shoulder and I tap it, it just takes me to the
+     page, but it doesn't tell me which exercises I did... I need to have like
+     a log for each day, which exercises I did, how many reps."
+
+     It said "2 exercises" and made her go and look. The names and what she
+     logged against each were already in the store; nothing was reading them
+     back to her. They are the row's own lines now. */
   const bw = (data.bwlog || {})[date] || {};
   const byList = {};
   Object.keys(bw).forEach((exId) => {
@@ -4689,11 +4716,14 @@ const doneOnDay = (data, date) => {
     if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return;
     const home = bwHomeOf(data, exId);
     const name = home ? (home.list ? home.area + " · " + home.list : home.area) : "Body work";
-    byList[name] = (byList[name] || 0) + 1;
+    (byList[name] = byList[name] || []).push({ id: exId,
+      what: (home && home.ex && home.ex.name) || "an exercise",
+      detail: bwSay(e, home && home.ex) });
   });
   Object.keys(byList).sort().forEach((name) => {
-    add("bw:" + name, name, byList[name] + (byList[name] === 1 ? " exercise" : " exercises"),
-      { kind: "tab", tab: "body" });
+    const done = byList[name];
+    add("bw:" + name, name, done.length + (done.length === 1 ? " exercise" : " exercises"),
+      { kind: "tab", tab: "body" }, done);
   });
 
   /* ---- the ten minutes after a session ---------------------------------- */
@@ -5000,6 +5030,51 @@ const briefReads = (data) => {
     }).join("\n");
 };
 
+/* WHAT SHE HAS ACTUALLY BEEN DOING, MOVEMENT BY MOVEMENT.
+   ---------------------------------------------------------------------------
+   HER CASE, 16 August: "I told the coach to make me a list of exercises that I
+   did not do yesterday. So he told me the summary does not include your lists
+   and what you did yesterday."
+
+   It could not answer because her lists reached it as `BODY WORK RUNNING: Hips
+   (2 lists, 0 done this round)` — the shape of the programme and not one thing
+   she had done. Four logged sessions of a movement were invisible.
+
+   THIS IS RECALL, NOT MEASUREMENT, and the difference is the whole design.
+   Her decision the same day: measured progress belongs to the batteries, which
+   are real tests with real protocols and comparable numbers. A list is
+   training — the dose changes between lists and the coach rewrites them every
+   round — so trending its rep counts would be asserting progress nobody
+   measured (rules 23, 24). What the coach needs daily is simply what she did
+   and when. Judgement about the lists belongs at the monthly read, where it
+   has everything in front of it.
+
+   So: names, dates and what she logged, over a rolling window she sets. It
+   does not grow as the months accumulate. */
+const briefBody = (data, coach) => {
+  const F = formulas(data.settings);
+  const days = Object.keys(data.bwlog || {}).filter((d) => d <= coach.t)
+    .sort().slice(-F.briefBodyDays);
+  const rows = days.map((d) => {
+    const day = data.bwlog[d] || {};
+    const bits = Object.keys(day).map((exId) => {
+      const e = day[exId] || {};
+      if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return null;
+      const home = bwHomeOf(data, exId);
+      const nm = (home && home.ex && home.ex.name) || "an exercise";
+      const said = bwSay(e, home && home.ex);
+      return `${nm}${said ? ` (${said})` : ""}${home && home.list ? ` [${home.area} · ${home.list}]` : ""}`;
+    }).filter(Boolean);
+    return bits.length ? `  ${d}: ${bits.join(", ")}` : null;
+  }).filter(Boolean);
+  if (!rows.length) return `WHAT SHE DID OFF HER LISTS: nothing logged in the last ${F.briefBodyDays} days.`;
+  return `WHAT SHE DID OFF HER LISTS — the last ${F.briefBodyDays} days, movement by movement. This is a\n`
+    + `RECORD of what she did, not a measure of progress: the dose changes between lists, so do not\n`
+    + `read a trend into these numbers. Her measured progress is the batteries above. Use this to\n`
+    + `answer what she has and has not done, and to avoid asking for something she did yesterday.\n`
+    + rows.join("\n");
+};
+
 /* WHAT SHE ACTUALLY PUT ON THE BAR. The battery says what she can do on a test
    day; this is what she did in the sessions themselves, and they are not the
    same number. A day she logged as rest is not part of the lifting record
@@ -5124,6 +5199,7 @@ const briefText = (data, coach, opts) => {
 
   const bw = (data.bodywork || []).filter((p) => p && p.status !== "removed");
   lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
+  lines.push(briefBody(data, coach));
 
   const lib = (data.library || []).filter((w) => w && w.status !== "removed");
   lines.push(`CLASSES SHE OWNS — the only ones you may ever name: ${lib.map((w) => w.name).join(", ") || "none"}`);
@@ -12546,7 +12622,32 @@ function BodyWorkCard({ log, write, isToday }) {
    so stepping back to Tuesday shows Tuesday.
    ==========================================================================*/
 const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
-  if (!rows || !rows.length) return null;
+  /* HER INSTRUCTION, 16 August: somewhere to log a movement that was not a
+     class and not on a list. The door has to be here even on a day with
+     nothing on it — that is exactly the day she has just done something the
+     app has never heard of. So the card still does not draw an empty list of
+     what she did (rules 24, 25); it draws the two ways in. */
+  const doors = (
+    <div style={{ display: "flex", gap: 8, marginTop: rows && rows.length ? 12 : 0 }}>
+      <button onClick={() => onGo && onGo({ kind: "sheet", sheet: { kind: "ownwork" } })}
+        className="tap" style={{ flex: 1, padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+          border: `1.5px solid ${C.line}`, background: C.card, color: C.ink,
+          fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+        + Log something you did
+      </button>
+      <button onClick={() => onGo && onGo({ kind: "sheet", sheet: { kind: "daylog" } })}
+        className="tap" style={{ flex: 1, padding: "9px 10px", borderRadius: 9, cursor: "pointer",
+          border: `1.5px solid ${C.line}`, background: C.card, color: C.ink,
+          fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>
+        Your whole log →
+      </button>
+    </div>
+  );
+  if (!rows || !rows.length) {
+    return isToday ? (
+      <div style={{ display: "flex", gap: 8 }}>{doors.props.children}</div>
+    ) : null;
+  }
   return (
     <Card style={{ background: C.pist }}>
       <Eyebrow color={C.moss}>{isToday ? "What you did today" : `What you did on ${dayLabel}`}</Eyebrow>
@@ -12565,17 +12666,37 @@ const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
           );
           const line = { display: "flex", alignItems: "center", width: "100%", textAlign: "left",
             padding: "9px 0", borderTop: i === 0 ? "none" : `1px solid ${C.line}` };
-          return r.go ? (
-            <button key={r.id} onClick={() => onGo && onGo(r.go)} className="tap"
-              style={{ ...line, border: "none", borderTop: line.borderTop, background: "transparent",
-                cursor: "pointer", fontFamily: "inherit" }}>
-              {inner}
-            </button>
-          ) : (
-            <div key={r.id} style={line}>{inner}</div>
+          /* HER INSTRUCTION, 16 August: the movements themselves, under the
+             row, so the day reads without her having to go and look. */
+          const under = r.lines && (
+            <div style={{ padding: "0 0 9px 2px" }}>
+              {r.lines.map((x) => (
+                <div key={x.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "2px 0" }}>
+                  <span style={{ flex: 1, fontSize: 12.5, color: C.muted, lineHeight: 1.4 }}>{x.what}</span>
+                  {x.detail && (
+                    <span className="mono" style={{ flexShrink: 0, fontSize: 10.5, color: C.muted }}>{x.detail}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+          return (
+            <div key={r.id}>
+              {r.go ? (
+                <button onClick={() => onGo && onGo(r.go)} className="tap"
+                  style={{ ...line, border: "none", borderTop: line.borderTop, background: "transparent",
+                    cursor: "pointer", fontFamily: "inherit" }}>
+                  {inner}
+                </button>
+              ) : (
+                <div style={line}>{inner}</div>
+              )}
+              {under}
+            </div>
           );
         })}
       </div>
+      {doors}
     </Card>
   );
 };
@@ -16399,6 +16520,7 @@ function Formulas({ data, setData, close }) {
       rows: [["aimStep", "How far past your last result the battery aims (0.15 = 15%)"],
              ["batterySessionMins", "Minutes of battery work in a day before the day counts as trained"],
              ["leadCooldown", "Days a line the coach has led stands down before it may lead again"],
+             ["briefBodyDays", "Days of your own movements the coach is told about"],
              ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
              ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
              ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
@@ -20261,6 +20383,187 @@ function ScopePicker({ scope, onPick }) {
    conversation.
 --------------------------------------------------------------------------- */
 /* ============================================================================
+   YOUR LOG — WHAT YOU DID, DAY BY DAY
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "I need to have like a log for each day, which
+   exercises I did, how many reps, something like that. So I would have an idea
+   about what I did each week — for me, not for the coach... I need to be able
+   to follow up on what I've done and not rely on my memory."
+
+   The app had no view that showed more than one day. The card on Today follows
+   whichever day she picks, which is per-day recall — but reading a week meant
+   tapping seven days one at a time and holding the answer in her head, which
+   is the exact thing she is saying she should not have to do.
+
+   It stores nothing. It is the same function the card uses, run once per day,
+   so the log and the card can never disagree about what a day held (rule 33).
+   A day with nothing in it says so plainly and is not scored (rules 23, 24).
+   ==========================================================================*/
+function DayLogSheet({ data, coach, setSheet, close }) {
+  const F = formulas(data.settings);
+  const [days, setDays] = useState(7);
+  const list = Array.from({ length: days }, (_, i) => addDays(coach.t, -i));
+  const total = list.filter((d) => doneOnDay(data, d).length).length;
+
+  return (
+    <div>
+      <Eyebrow color={C.ochre}>Your log</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        What you did
+      </h1>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 14 }}>
+        Every movement, every day, exactly as you logged it — so you never have to remember it.
+        {total ? ` ${total} of the last ${days} days have something on them.` : ""}
+      </div>
+
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {[7, 14, 30].map((n) => (
+          <button key={n} onClick={() => setDays(n)} className="tap mono" style={{
+            flex: 1, padding: "9px 0", borderRadius: 9, cursor: "pointer", fontSize: 11.5,
+            fontWeight: 600, fontFamily: "inherit",
+            border: `1.5px solid ${days === n ? C.signal : C.line}`,
+            background: days === n ? C.signal : "transparent",
+            color: days === n ? C.chalk : C.muted }}>{n} days</button>
+        ))}
+      </div>
+
+      <Btn kind="signal" onClick={() => setSheet({ kind: "ownwork" })}>
+        + Log something you did
+      </Btn>
+      <div style={{ height: 14 }} />
+
+      {list.map((d) => {
+        const rows = doneOnDay(data, d);
+        return (
+          <Card key={d} style={{ marginBottom: 10, background: rows.length ? C.card : "transparent",
+            boxShadow: rows.length ? undefined : "none", padding: rows.length ? 20 : "8px 20px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+              <Eyebrow color={rows.length ? C.moss : C.muted}>
+                {d === coach.t ? "Today" : d === addDays(coach.t, -1) ? "Yesterday" : prettyDate(d)}
+              </Eyebrow>
+              <span className="mono" style={{ fontSize: 9.5, color: C.muted }}>{dayAndMonth(d)}</span>
+            </div>
+            {!rows.length ? (
+              <div style={{ fontSize: 12, color: C.muted }}>nothing logged</div>
+            ) : rows.map((r) => (
+              <div key={r.id} style={{ paddingTop: 6 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                  <span style={{ flex: 1, fontSize: 14, color: C.ink }}>{r.what}</span>
+                  {r.detail && (
+                    <span className="mono" style={{ flexShrink: 0, fontSize: 10.5, color: C.muted }}>{r.detail}</span>
+                  )}
+                </div>
+                {r.lines && r.lines.map((x) => (
+                  <div key={x.id} style={{ display: "flex", alignItems: "baseline", gap: 8, padding: "2px 0 2px 10px" }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: C.muted }}>{x.what}</span>
+                    {x.detail && (
+                      <span className="mono" style={{ flexShrink: 0, fontSize: 10.5, color: C.muted }}>{x.detail}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </Card>
+        );
+      })}
+      <div style={{ height: 20 }} />
+      <Btn kind="quiet" onClick={close}>Back</Btn>
+      <div style={{ height: 28 }} />
+    </div>
+  );
+}
+
+/* ============================================================================
+   LOGGING SOMETHING YOU DID ON YOUR OWN
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August, and her choice of the two designs: a movement
+   she logs is REMEMBERED, so the second time is a tap.
+   ==========================================================================*/
+function OwnWorkSheet({ data, setData, coach, close }) {
+  const [name, setName] = useState("");
+  const [w, setW] = useState("");
+  const [reps, setReps] = useState("");
+  const [secs, setSecs] = useState("");
+  const [saved, setSaved] = useState(null);
+  const known = ownMovements(data);
+  const today = coach.t;
+  const doneToday = (data.bwlog || {})[today] || {};
+
+  const save = () => {
+    const clean = name.trim();
+    if (!clean) return;
+    setData((d) => logOwn(d, clean, { w, reps, secs }, today));
+    setSaved(clean);
+    setName(""); setW(""); setReps(""); setSecs("");
+  };
+
+  return (
+    <div>
+      <Eyebrow color={C.ochre}>Your own work</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        Log something you did
+      </h1>
+      <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 }}>
+        Anything that was not a class and was not on a list — press-ups in the kitchen, a set of
+        squats, a stretch you like. It goes on today with everything else, and the movement is kept
+        so next time it is one tap.
+      </div>
+
+      {saved && (
+        <Card style={{ marginBottom: 14, background: C.mint }}>
+          <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>
+            <strong>{saved}</strong> is on today, and it is in your movements from now on.
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ marginBottom: 14 }}>
+        <Eyebrow>What you did</Eyebrow>
+        <Field label="Movement" unit="" type="text" value={name} onChange={setName} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <span style={{ flex: 1 }}><Field label="Weight or band" unit="" type="text" value={w} onChange={setW} /></span>
+          <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={reps} onChange={setReps} /></span>
+          <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={secs} onChange={setSecs} /></span>
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "-4px 0 12px" }}>
+          Fill in whatever fits it. A movement with only a name still counts as done.
+        </div>
+        <Btn kind={name.trim() ? "signal" : "quiet"} onClick={save}>
+          {name.trim() ? `Log ${name.trim()}` : "Name it first"}
+        </Btn>
+      </Card>
+
+      {known.length > 0 && (
+        <Card style={{ marginBottom: 14 }}>
+          <Eyebrow>Movements you have logged before</Eyebrow>
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "2px 0 8px" }}>
+            Tap one to put its name in the box above. Everything you have ever logged against it
+            is kept under it on the Body page.
+          </div>
+          {known.map((x) => (
+            <button key={x.id} onClick={() => setName(x.name)} className="tap" style={{
+              display: "flex", alignItems: "baseline", gap: 10, width: "100%", textAlign: "left",
+              border: "none", borderTop: `1px solid ${C.line}`, background: "transparent",
+              cursor: "pointer", padding: "9px 0", fontFamily: "inherit" }}>
+              <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>{x.name}</span>
+              {doneToday[x.id] && (
+                <span className="mono" style={{ fontSize: 10, color: C.moss }}>today</span>
+              )}
+              <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                {x.last ? dayAndMonth(x.last) : "not yet"}
+              </span>
+            </button>
+          ))}
+        </Card>
+      )}
+
+      <Btn kind="quiet" onClick={close}>Back</Btn>
+      <div style={{ height: 28 }} />
+    </div>
+  );
+}
+
+/* ============================================================================
    THE SUMMARY, AS TABLES
    ---------------------------------------------------------------------------
    HER REPORT, 16 August: "the summary does not seem to include calculations
@@ -23795,6 +24098,10 @@ function CoachApp() {
             <MobilitySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "review" ? (
             <ReviewSheet data={data} setData={setData} coach={coach} setSheet={setSheet} show={sheet.show} close={() => setSheet(null)} />
+          ) : sheet.kind === "daylog" ? (
+            <DayLogSheet data={data} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
+          ) : sheet.kind === "ownwork" ? (
+            <OwnWorkSheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "summary" ? (
             <SummarySheet data={data} setData={setData} coach={coach} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "search" ? (
@@ -24757,6 +25064,101 @@ const bodyworkState = (prog) => {
 
 /* Everything she has ever logged against one body-work exercise, newest
    first — so "last time" is a real number rather than a memory. */
+/* ============================================================================
+   WHAT SHE DID ON HER OWN
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "either through a session I do and I pick from
+   my library, or through some exercises I do on my own, which is something
+   else I want to be able to input. Just input this exercise that I did today."
+
+   Until now the app could record four things: a class from her library, a
+   battery measure, an exercise off a coach-written list, and an extra session
+   — which takes a class name and a duration, not movements. Twenty press-ups
+   she did in the kitchen had nowhere to go at all. For an app whose whole
+   point is that she can see what she has done without relying on memory, that
+   is a hole in the middle of it.
+
+   HER CHOICE, asked and answered the same day: a movement she logs is
+   REMEMBERED. So this is not a scratch pad — it is her own area on the Body
+   page, and the second time she does a press-up it is one tap rather than
+   typing it again. A log she has to retype every session is one she stops
+   keeping.
+
+   It is deliberately the SAME SHAPE as a coach-written programme, so it
+   inherits everything already built rather than needing a parallel set of
+   wiring: the day card names it, the history under each movement works, the
+   summary carries it, and the store sweep that fails on an unwired store
+   stays satisfied. `own: true` is what keeps it out of the coach's rotation —
+   these are hers, and nothing rewrites them at the end of a round.
+   ==========================================================================*/
+const OWN_AREA = "On your own";
+
+const ownProgramme = (data) => (data.bodywork || []).find((pg) => pg && pg.own) || null;
+
+/* Every movement she has ever logged herself, most recently used first, so the
+   second time is a tap. */
+const ownMovements = (data) => {
+  const pg = ownProgramme(data);
+  if (!pg) return [];
+  const seen = new Set();
+  const out = [];
+  [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))]
+    .forEach((l) => (l.exercises || []).forEach((x) => {
+      if (!x || seen.has(x.id)) return;
+      seen.add(x.id); out.push(x);
+    }));
+  const lastUsed = (id) => {
+    const days = Object.keys(data.bwlog || {}).filter((d) => (data.bwlog[d] || {})[id]).sort();
+    return days.length ? days[days.length - 1] : "";
+  };
+  return out.map((x) => ({ ...x, last: lastUsed(x.id) }))
+    .sort((a, b) => (a.last < b.last ? 1 : a.last > b.last ? -1 : 0));
+};
+
+/* Log a movement on a date. A name she has used before is the SAME movement —
+   matched case-insensitively on the name she typed, so her history joins up
+   instead of splitting into one row per occasion. Everything is added; nothing
+   she has logged before is touched (rule 20). */
+const logOwn = (d, name, entry, date) => {
+  const clean = String(name || "").trim();
+  if (!clean) return d;
+  const list = (d.bodywork || []);
+  let pg = list.find((x) => x && x.own);
+  let ex = pg && [...(pg.lists || [])].flatMap((l) => l.exercises || [])
+    .find((x) => x && String(x.name || "").toLowerCase() === clean.toLowerCase());
+
+  let bodywork = list;
+  if (!pg) {
+    ex = { id: newId(), name: clean, tool: "", dose: "", mins: 2, how: "", targets: "",
+      label: clean, search: clean, video: "", loadKind: "none" };
+    bodywork = [...list, { id: newId(), area: OWN_AREA, own: true,
+      line: "Everything you have logged yourself.", mins: 0, created: date,
+      lists: [{ id: newId(), n: 1, title: "Your movements", focus: "", exercises: [ex] }],
+      log: {}, rounds: [], status: "active" }];
+  } else if (!ex) {
+    ex = { id: newId(), name: clean, tool: "", dose: "", mins: 2, how: "", targets: "",
+      label: clean, search: clean, video: "", loadKind: "none" };
+    bodywork = list.map((x) => (x !== pg ? x : { ...x,
+      lists: (x.lists || []).length
+        ? x.lists.map((l, i) => (i ? l : { ...l, exercises: [...(l.exercises || []), ex] }))
+        : [{ id: newId(), n: 1, title: "Your movements", focus: "", exercises: [ex] }] }));
+  }
+
+  const day = (d.bwlog || {})[date] || {};
+  const keep = {};
+  ["w", "reps", "secs"].forEach((k) => {
+    if (String((entry || {})[k] ?? "").trim() !== "") keep[k] = entry[k];
+  });
+  /* A day with real work on it counts, the same rule every other logged
+     movement follows — and rest still wins (rule 33). */
+  const l = (d.logs || {})[date] || {};
+  const logs = (l.completed || l.rest || !Object.keys(keep).length) ? (d.logs || {})
+    : { ...(d.logs || {}), [date]: { ...l, completed: true, type: l.type || "Body work" } };
+
+  return { ...d, bodywork, logs,
+    bwlog: { ...(d.bwlog || {}), [date]: { ...day, [ex.id]: { ...(day[ex.id] || {}), ...keep } } } };
+};
+
 const bwHistory = (data, exId, skip) => {
   const out = [];
   Object.keys(data.bwlog || {}).forEach((date) => {
