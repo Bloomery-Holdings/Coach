@@ -305,6 +305,7 @@ const FORMULA_DEFAULTS = {
   mobStrong: 75,           /* overall mobility percent: strong                        */
   mobOk: 50,               /* ...adequate. Under it, needs work                       */
   mobFlag: 60,             /* under this the coach raises it                          */
+  mobEvery: 7,             /* days between mobility batteries — hers to move           */
   mobOverdueDays: 10,      /* days since the battery before it is chased              */
   mobGapFlag: 10,          /* left-right gap, percent, worth naming                   */
 
@@ -4090,7 +4091,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 174";
+const BUILD = "16 August 2026 · 175";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6729,12 +6730,36 @@ function useCoach(data, day, clock) {
     })();
     const mobDaysAgo = mobLastDay
       ? Math.max(0, Math.round((parse(t) - parse(mobLastDay)) / 86400000)) : null;
-    const mobDue = mobDaysAgo === null || mobDaysAgo >= 7;
+
+    /* WHAT IS STILL BEING ASKED FOR, AND WHAT IS ONLY HISTORY NOW.
+       ---------------------------------------------------------------------
+       HER QUESTION, 16 August: "Why can't the coach remove my mobility
+       battery from my body page?" It could. It set the test aside, dated,
+       with the reason — and then every mobility screen in the app carried on
+       rendering it, because `isLive` was wired into the strength battery and
+       nowhere else. The removal was recorded and ignored, which is worse than
+       refusing it.
+
+       Same split the strength battery already uses: the FULL list is what
+       history, charts, labels and the payload read, so nothing she ever
+       measured disappears (rule 20). The LIVE list is what she is asked for
+       and what gets scored. */
+    const mobTests = data.mobTests?.length ? data.mobTests : SEED_MOBILITY;
+    const mobLive = mobTests.filter(isLive);
+
+    /* HER INSTRUCTION, 16 August. Set every test aside and the battery stops
+       asking — that is how a whole battery comes off, since it is not a row
+       and never was. Nothing is deleted and one test put back brings it
+       straight back.
+       The seven days was a literal sitting in this line, the one number
+       deciding how often this interrupts her and the only one neither she nor
+       the coach could reach (rule 12). It is a threshold now. */
+    const mobDue = mobLive.length > 0
+      && (mobDaysAgo === null || mobDaysAgo >= (Number(FX.mobEvery) || 7));
 
     /* every test, scored, with its asymmetry and its direction of travel */
-    const mobTests = data.mobTests?.length ? data.mobTests : SEED_MOBILITY;
     const drills = data.drills?.length ? data.drills : SEED_DRILLS;
-    const mobRows = mobTests.map((m) => {
+    const mobRows = mobLive.map((m) => {
       const cur = lastMob?.[m.id] || null;
       const old = prevMob?.[m.id] || null;
       const val = (o) => {
@@ -10164,7 +10189,7 @@ function useCoach(data, day, clock) {
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
       planned, session, hasPlan, pos, themes, prescribed, themeGoal, bet, betNeedsStamp, betCarried, betCarriedDays, betsWon, betsTaken, phase, season, seasonTarget, themesAuto, auto,
-      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, goalBattery, goalMinutes, goalsAchieved, testsMaxed, wonGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, drills, lapseState, daysSinceSession, missedThisWeek,
+      verdict, confidence, health, recBaseline, analysis, improving, declining, holding, overall, nudge, nudges, agenda, block, bodywork, easiest, moodToday, learned, swaps, writing, restarts, byDuration, blockCurve, domsLag, costByClass, extraDays, byTimeOfDay, voice, voicePatterns, thisSeason, seasonPast, issues, openIssues, historyFor, priorSessions, issueFollowUp, recurring, tagIssue, goals, openGoals, goalBattery, goalMinutes, goalsAchieved, testsMaxed, wonGoals, mobRows, mobScored, mobWeakest, mobAsym, mobScore, mobDue, mobDaysAgo, dailyDrills, goalCheckDue, MOBILITY_TESTS: mobTests, DRILLS: drills, mobTests, mobLive, drills, lapseState, daysSinceSession, missedThisWeek,
       ladder, ladderWhy, physicalSignal, smallerDoor, movedOn, touched,
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
@@ -11761,7 +11786,21 @@ function MobilitySheet({ data, setData, coach, close, setSheet }) {
         or the numbers won't compare. Tap any test for how to do it and why it matters.
       </div>
 
-      {(coach.mobTests || []).map((m) => (
+      {/* Only what is still being asked for. A test she or the coach set
+          aside keeps every reading it ever had — they are in the charts and
+          in what the coach is told — but it is not a box asking for a number
+          any more (her question, 16 August). */}
+      {!(coach.mobLive || []).length && (
+        <Card style={{ background: C.mint, marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6, color: C.ink }}>
+            Every test in this battery is set aside, so there is nothing to measure and the app
+            has stopped asking for it. Nothing is lost — every reading you have taken is still
+            here and still in your charts. Put any test back, or write a new one, from
+            "Edit the tests and drills" below.
+          </div>
+        </Card>
+      )}
+      {(coach.mobLive || []).map((m) => (
         <MobRow key={m.id} m={m} e={entry[m.id] || {}} put={put}
           history={noteHistory(data, "mobility", m.id, wk)}
           seeAll={setSheet ? () => setSheet({ kind: "written" }) : undefined}
@@ -11775,6 +11814,24 @@ function MobilitySheet({ data, setData, coach, close, setSheet }) {
       </div>
       <Btn kind="signal" onClick={save}>Done — close this week's mobility</Btn>
       <div style={{ marginTop: 8 }}><Btn kind="quiet" onClick={close}>Close and come back to it</Btn></div>
+
+      {/* HER INSTRUCTION, 16 August: "I need to change the mobility battery...
+          the exercises in the mobility battery are not measurable enough to
+          show any progress." This is where she is standing when she decides
+          that, and from here the editor was unreachable — it lived in Settings
+          and on a chip inside the weekly battery. Rule 11. */}
+      {setSheet && (
+        <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 12, lineHeight: 1.55, color: C.muted, marginBottom: 9 }}>
+            A test that cannot show a month's work is not worth taking. Change what these measure,
+            set one aside, or write your own — nothing you have measured is ever lost, and a test
+            put back brings its readings with it.
+          </div>
+          <Btn kind="quiet" onClick={() => setSheet({ kind: "edit-mobility" })}>
+            Edit the tests and drills
+          </Btn>
+        </div>
+      )}
     </div>
   );
 }
@@ -12087,13 +12144,30 @@ function GoalsCard({ data, setData, coach, setSheet }) {
 /* The way in to the seven mobility tests, which used to exist only as a row
    in Needs you on the days it was due. */
 function MobilityDoor({ coach, setSheet }) {
-  const n = (coach.mobTests || []).length;
-  const both = (coach.mobTests || []).filter((t) => t.side).length;
+  const live = (coach.mobLive || []);
+  const n = live.length;
+  const both = live.filter((t) => t.side).length;
+  /* HER INSTRUCTION, 16 August: taking the whole battery off is taking every
+     test off, and when there is none left this must say so rather than
+     announce "0 tests" (rule 23). */
+  if (!n) return (
+    <Card>
+      <Eyebrow>Mobility, flexibility and balance</Eyebrow>
+      <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, margin: "4px 0 12px" }}>
+        This battery is off — every test in it is set aside, so nothing is being asked for and
+        nothing here is chasing you. Your readings are all still there. Whenever you want it back,
+        put a test back or write a new one.
+      </div>
+      <Btn kind="quiet" onClick={() => setSheet({ kind: "edit-mobility" })}>
+        Edit the tests
+      </Btn>
+    </Card>
+  );
   return (
     <Card>
       <Eyebrow>Mobility, flexibility and balance</Eyebrow>
       <div style={{ fontSize: 13, lineHeight: 1.6, color: C.muted, margin: "4px 0 12px" }}>
-        {n} tests, about ten minutes, {both} of them measured left and right. These are what choose
+        {n} test{n === 1 ? "" : "s"}, about ten minutes, {both} of them measured left and right. These are what choose
         your ten minutes of drills after each session — so a stale battery aims the drills at where
         you were rather than where you are.
         {coach.mobDaysAgo === null
@@ -16907,6 +16981,7 @@ function Formulas({ data, setData, close }) {
       rows: [["mobStrong", "Overall mobility at or above: strong"],
              ["mobOk", "…adequate"],
              ["mobFlag", "…under this, raised with you"],
+             ["mobEvery", "Days between mobility batteries"],
              ["mobOverdueDays", "Days since the battery before it is chased"],
              ["mobGapFlag", "Left-right gap, %, worth naming"],
              ["shoulderClear", "Morning score at or above: clear to load"],
@@ -19735,26 +19810,49 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
     setDrills((l) => [...l, x]); setOpenId(x.id);
   };
 
-  /* Rule 20: a reading is never deleted with the test it belonged to. The
-     history stays in `data.mobility` keyed by id, so putting the test back
-     brings its numbers with it. */
-  const removeTest = (id) => setTests((l) => l.filter((m) => m.id !== id));
-  const removeDrill = (id) => setDrills((l) => l.filter((x) => x.id !== id));
+  /* A REMOVAL IS A PAUSE (rule 35), AND REMOVING MUST NOT ORPHAN HER NUMBERS
+     (rule 20).
+     ------------------------------------------------------------------------
+     The comment that stood here said the readings survive, and they did —
+     `data.mobility` is keyed by test id and was never touched. But the ROW
+     was dropped out of the list, and with no row left to render them the
+     readings went invisible with no way back. That is exactly the fault her
+     field editor had, found and fixed on 15 August; this editor still had it.
+
+     So: set aside, dated, still listed, still in every chart, one tap from
+     coming back with its numbers under it. Her instruction, 16 August, asked
+     for the drills to be fixed on the same terms. */
+  const removeTest = (id) => patchTest(id, { status: "removed", removedOn: coach.t });
+  const removeDrill = (id) => patchDrill(id, { status: "removed", removedOn: coach.t });
+  const restoreTest = (id) => patchTest(id, { status: undefined, removedOn: undefined, removedWhy: undefined });
+  const restoreDrill = (id) => patchDrill(id, { status: undefined, removedOn: undefined, removedWhy: undefined });
 
   const row = (item, isTest) => (
     <div key={item.id} style={{ borderTop: `1px solid ${C.line}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 6px" }}>
         <button onClick={() => setOpenId(openId === item.id ? null : item.id)} className="tap" style={{
           flex: 1, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 500 }}>{item.label || "Untitled"}</div>
+          <div style={{ fontSize: 14, fontWeight: 500,
+            color: isLive(item) ? C.ink : C.muted,
+            textDecoration: isLive(item) ? "none" : "line-through" }}>{item.label || "Untitled"}</div>
           <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-            {isTest
+            {!isLive(item)
+              ? `SET ASIDE${item.removedOn ? " " + item.removedOn : ""} · your readings are kept`
+              : isTest
               ? `${item.unit || "—"} · ${item.better === "lower" ? "lower is better" : "higher is better"}${item.side ? " · left/right" : ""}`
               : `${item.mins} min${item.targets ? ` · ${item.targets}` : ""}`}
           </div>
         </button>
-        <button onClick={() => (isTest ? removeTest(item.id) : removeDrill(item.id))} className="tap" style={{
-          border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px" }}>×</button>
+        {isLive(item) ? (
+          <button onClick={() => (isTest ? removeTest(item.id) : removeDrill(item.id))} className="tap"
+            aria-label={`Set aside ${item.label || "this"}`} style={{
+            border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px" }}>×</button>
+        ) : (
+          <button onClick={() => (isTest ? restoreTest(item.id) : restoreDrill(item.id))} className="tap" style={{
+            border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+            color: C.signal, fontSize: 11, fontWeight: 600, fontFamily: "inherit",
+            padding: "5px 10px", borderRadius: 8, whiteSpace: "nowrap" }}>put it back</button>
+        )}
       </div>
 
       {openId === item.id && (
@@ -22476,6 +22574,21 @@ ${(() => {
   goals are hers: attach work to them freely, but never reword or remove one unless she asks.
   If she tells you something hurts, is wrong, is too easy or too hard — change it and say so.
   Never tell her to work around something you could simply fix.
+  AND THE MOBILITY BATTERY IS HERS TO REBUILD. Her instruction, 16 August: "I need to change
+  the mobility battery. I might ask for different exercises from the coach or do a new one
+  myself. the exercises in the mobility battery are not measurable enough to show any progress."
+  She is right about the instruments. Four of the eight are centimetres against a tape and do
+  move; the standing and seated folds are seven-step scales, the straight-leg raise is an angle
+  judged by eye and the seated rotation is a score out of ten. A month of real change can sit
+  inside one step of a seven-step scale and read as a flat line, and the one asked for every
+  week is the coarsest of them. So when she asks for a better test: propose one that gives a
+  number she can actually take at home, say plainly which test it replaces and what it measures
+  that the old one could not, and tell her to tap the button. Do not reach for centimetres where
+  she has said she will not have a tape to hand — 10 August, and it still stands unless she
+  says otherwise. Taking EVERY test off is a legitimate thing for her to want: the battery is
+  not a row, so that is how the whole of it comes off, and the app then stops asking for it
+  altogether. Nothing is deleted and any test comes back with its readings under it. How often
+  it is asked for is a threshold she owns too — mobEvery, seven days, in the formulas sheet.
   AND HER TEN MINUTES TOO. Her ten minutes (the drills she does after
   every session) are listed further down with their own ids, and the same button changes those.
   If she tells you a drill hurts her, take it OUT of the ten minutes: they are rebuilt every day
@@ -23626,7 +23739,7 @@ function Assessment({ which, periodKey, data, setData, coach, close, setSheet })
   /* Mobility is the end of this battery, not a separate errand. It keeps its
      own store because every mobility calculation reads that shape — and it
      saves itself as it is typed, for exactly the same reason. */
-  const mobTests = (coach.mobTests || []).filter((m) => (isWeekly ? m.inWeekly !== false : true));
+  const mobTests = (coach.mobLive || []).filter((m) => (isWeekly ? m.inWeekly !== false : true));
   const mob = (data.mobility && data.mobility[coach.ws]) || {};
   const putMob = (id, patch) => setData((d) => {
     const week = (d.mobility || {})[coach.ws] || {};
