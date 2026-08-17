@@ -4203,7 +4203,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 196";
+const BUILD = "17 August 2026 · 197";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -22907,10 +22907,28 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
   const todayChats = (data.chats || []).filter((c) => c.date === coach.t);
   const earlier = (data.chats || []).filter((c) => c.date !== coach.t)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const [msgs, setMsgs] = useState(
-    todayChats.flatMap((c) => (c.messages || []).map((m) => ({ role: m.role, content: m.text,
-      ...(m.image ? { image: m.image } : {}) }))));
-  const sessionId = useRef(todayChats[0]?.id || newId());
+  /* De-duplicated on the way IN, which is where the old filter's worry
+     actually belonged. Two entries under today can no longer produce the same
+     exchange twice in front of her or twice in front of the coach — and
+     nothing has to be deleted to achieve it (rule 20). */
+  const seedMsgs = (() => {
+    const out = [];
+    const seen = new Set();
+    todayChats.forEach((c) => (c.messages || []).forEach((m) => {
+      const k = `${m.role}|${m.at || ""}|${String(m.text || "").slice(0, 200)}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push({ role: m.role, content: m.text, ...(m.at ? { at: m.at } : {}),
+        ...(m.image ? { image: m.image } : {}) });
+    }));
+    return out;
+  })();
+  const [msgs, setMsgs] = useState(seedMsgs);
+  /* THE SESSION ADOPTS WHAT TODAY ALREADY HOLDS. The LONGEST entry, not merely
+     the first — after a day of reloads the first one written may be the stub,
+     and continuing the day means continuing the real conversation. */
+  const sessionId = useRef((todayChats.slice().sort((a, b) =>
+    ((b.messages || []).length - (a.messages || []).length))[0] || {}).id || newId());
   const [showOld, setShowOld] = useState(false);
   /* HER INSTRUCTION, 16 August. `showOld` opened every earlier day together;
      this is which ONE of them is open. */
@@ -23829,11 +23847,29 @@ Two or three sentences unless she asks for more.`;
       saved: (prev.saved || 0) + (spent ? centsSaved(spent, formulas(d.settings)) : 0),
       messages: all.map((m) => ({ role: m.role, text: m.content,
         ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) })) };
-    /* Everything said today lives in ONE entry. The other same-day entries
-       are already gathered into `all` above, so dropping them here loses no
-       word she has ever said — it stops the same exchange being stored twice
-       and read back to the coach twice. */
-    const chats = [...(d.chats || [])].filter((c) => c.date !== coach.t || c.id === sessionId.current);
+    /* HER REPORT, 17 August: "everything is there except today!!!!! and it
+       disappeared while i was in the middle of a talk, more than once today."
+
+       This line used to be:
+
+         .filter((c) => c.date !== coach.t || c.id === sessionId.current)
+
+       — which DELETED every conversation dated today that was not the one
+       currently open. Its own comment claimed it lost no word she had ever
+       said. It was wrong. Every earlier day survived because of the date
+       test, which is precisely the shape of what she photographed: 8 to 16
+       August intact, 17 August gone.
+
+       It bit whenever the sheet mounted without today's conversation in the
+       data it was handed — a reload, a cold start, the sheet being restored —
+       because it then took a NEW id and the first save threw the real one
+       away. She reloaded this app twenty times today.
+
+       NOTHING IS DELETED NOW. The entry with this id is updated in place and
+       every other row is left where it is, whatever its date (rule 20). The
+       duplication the old line was afraid of is a READING problem, and it is
+       solved where the chat reads itself back in, not by destroying rows. */
+    const chats = [...(d.chats || [])];
     const idx = chats.findIndex((c) => c.id === sessionId.current);
     if (idx >= 0) chats[idx] = entry; else chats.push(entry);
     /* No cap. Conversations were capped at the last 200 and older ones
