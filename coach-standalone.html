@@ -4304,7 +4304,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 183";
+const BUILD = "16 August 2026 · 185";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5461,6 +5461,15 @@ numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REP
 a battery and the old rows stay until you take each of them off in the same breath. You can also
 choose whether a measure is asked weekly or monthly — say which you have chosen.
 
+WHAT SHE SAYS IN CONVERSATION DOES NOT REACH THE NEXT ONE. Her report, 16 August: she had told
+you about her hips and it was nowhere in her summary. The summary is rebuilt from her STORES
+every message — the record, her goals, her batteries, her body work — and a conversation is not
+one of them. So when she tells you about a pain, a niggle, or something to come back to: say you
+are writing it into her RECORD, and use where="record" op="add" in her own words. Then it
+travels, is chased in two days, and is matched against every earlier time she said it. Do not
+promise to remember it; you will not. You may add to the record and mark a thing settled — never
+remove one.
+
 THE MOBILITY BATTERY IS HERS TO REBUILD (her instruction, 16 August). She is right that it is
 too coarse: four of the eight are centimetres against a tape and do move, but the two folds are
 seven-step scales, the straight-leg raise is an angle judged by eye and the rotation is a score
@@ -6541,7 +6550,7 @@ const leadKeyOf = (a) => (!a ? null
     : `${a.scope || ""}|${a.tone || ""}|${String(a.text || "").replace(/\d+/g, "#").slice(0, 80)}`);
 function useCoach(data, day, clock) {
     return useMemo(() => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
         const { settings, weekly, monthly } = data;
         /* Rule 33, and the reason her battery kept asking for the squat: the
            engine reads the LIVE lists. Anything paused or removed is out of every
@@ -6869,13 +6878,25 @@ function useCoach(data, day, clock) {
            records it, chases what is missing, and says what it notices. It knows
            what today WOULD have been (below, unused) only so that at the end of
            the month it can see how close its instincts were to her real month. */
-        const restDay = block ? block.id === "rest" : !isScheduled(t);
+        /* WHAT THE PROGRAMME PUT IN THE DIARY. Only that — it is not a verdict
+           on the day, and nothing should read it as one. */
+        const restBySchedule = block ? block.id === "rest" : !isScheduled(t);
+        /* AND WHETHER TODAY IS ACTUALLY A REST DAY, which is a different question.
+           HER REPORT, 16 August: "i logged the day as a Rest day, why in needs you
+           it tells me to mark the training done." Because every reader of
+           `restDay` — fourteen of them: every nudge to train, the class the coach
+           picks, the finisher, the line at the top of the day — meant "today is
+           rest" while the value meant "the plan said rest".
+           Rule 33: settled ONCE, here, in the view the engine reads. Her word
+           outranks the diary; a day she has declared is a rest day whatever the
+           block expected. */
+        const restDay = restBySchedule || !!((_c = logs[t]) === null || _c === void 0 ? void 0 : _c.rest);
         const loggedToday = logs[t] || null;
         /* recovery is entered in the morning and shapes the day before it happens */
         /* WHEN SHE WOKE, and how long ago. Typed by hand in the morning card, or
            filled from the WHOOP export's wake time when that lands. Everything the
            coach says about how she feels this early leans on it. */
-        const mgToday = ((_c = data.morning) === null || _c === void 0 ? void 0 : _c[t]) || {};
+        const mgToday = ((_d = data.morning) === null || _d === void 0 ? void 0 : _d[t]) || {};
         const wokeRaw = mgToday.wokeAt
             || (mgToday.wakeAt !== undefined && mgToday.wakeAt !== "" ? hhmm(Number(mgToday.wakeAt)) : "");
         const wokeMins = parseHHMM(wokeRaw);
@@ -6884,7 +6905,7 @@ function useCoach(data, day, clock) {
         const awakeLabel = minsAwake === null ? null
             : minsAwake < 60 ? `${minsAwake} minutes`
                 : `${Math.floor(minsAwake / 60)}h ${String(minsAwake % 60).padStart(2, "0")}m`;
-        const recValue = (_g = (_f = (_e = (_d = data.morning) === null || _d === void 0 ? void 0 : _d[t]) === null || _e === void 0 ? void 0 : _e.recovery) !== null && _f !== void 0 ? _f : loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.whoopRecovery) !== null && _g !== void 0 ? _g : "";
+        const recValue = (_h = (_g = (_f = (_e = data.morning) === null || _e === void 0 ? void 0 : _e[t]) === null || _f === void 0 ? void 0 : _f.recovery) !== null && _g !== void 0 ? _g : loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.whoopRecovery) !== null && _h !== void 0 ? _h : "";
         const F = formulas(settings);
         const recBaseline = recoveryBaseline(data.morning, t) || Number(settings.recoveryBaseline) || F.recBaselineFallback;
         const recovery = recoveryBand(recValue, recBaseline, F);
@@ -6915,14 +6936,14 @@ function useCoach(data, day, clock) {
         /* the coach writes the themes; anything typed in Workouts wins */
         const auto = autoThemes(t, themePos, phase.key, season.key);
         const themes = {
-            week: ((_h = plan.themes.week) === null || _h === void 0 ? void 0 : _h[pos.week]) || auto.week,
-            month: ((_j = plan.themes.month) === null || _j === void 0 ? void 0 : _j[pos.month]) || auto.month,
-            quarter: ((_k = plan.themes.quarter) === null || _k === void 0 ? void 0 : _k[pos.quarter]) || auto.quarter,
+            week: ((_j = plan.themes.week) === null || _j === void 0 ? void 0 : _j[pos.week]) || auto.week,
+            month: ((_k = plan.themes.month) === null || _k === void 0 ? void 0 : _k[pos.month]) || auto.month,
+            quarter: ((_l = plan.themes.quarter) === null || _l === void 0 ? void 0 : _l[pos.quarter]) || auto.quarter,
         };
         const themesAuto = {
-            week: !((_l = plan.themes.week) === null || _l === void 0 ? void 0 : _l[pos.week]),
-            month: !((_m = plan.themes.month) === null || _m === void 0 ? void 0 : _m[pos.month]),
-            quarter: !((_o = plan.themes.quarter) === null || _o === void 0 ? void 0 : _o[pos.quarter]),
+            week: !((_m = plan.themes.week) === null || _m === void 0 ? void 0 : _m[pos.week]),
+            month: !((_o = plan.themes.month) === null || _o === void 0 ? void 0 : _o[pos.month]),
+            quarter: !((_p = plan.themes.quarter) === null || _p === void 0 ? void 0 : _p[pos.quarter]),
         };
         const seasonTarget = season.key === "maintain" ? Math.max(2, target - 1) : target;
         /* ---- what the coach picks for today ---- */
@@ -7113,10 +7134,12 @@ function useCoach(data, day, clock) {
         const standing = (data.liveBet && data.liveBet.text) ? data.liveBet : null;
         /* on a rest day it shows nothing and loses nothing — it is simply not
            today's business, and it is there again tomorrow */
-        /* HER WORDS: "if I MARK the day as rest day". That is the day she
-           declared, which is logs[t].rest — not `restDay`, which is only what
-           the programme had scheduled. Rest wins here too (rule 33). */
-        const restDeclared = !!((_p = logs[t]) === null || _p === void 0 ? void 0 : _p.rest);
+        /* HER WORDS: "if I MARK the day as rest day". This was the ONE place that
+           distinguished her declaration from the diary, and on 16 August it turned
+           out to be the only one — everywhere else was still asking her to train
+           on a day she had called rest. `restDay` now carries both (rule 33), so
+           this reads it rather than working it out again. */
+        const restDeclared = !!((_q = logs[t]) === null || _q === void 0 ? void 0 : _q.rest);
         const bet = restDeclared ? null : (standing || freshBet);
         /* nothing stands yet, so the app should write one down (the card does
            the writing — a memo never writes) */
@@ -7211,7 +7234,7 @@ function useCoach(data, day, clock) {
            history, charts, labels and the payload read, so nothing she ever
            measured disappears (rule 20). The LIVE list is what she is asked for
            and what gets scored. */
-        const mobTests = ((_q = data.mobTests) === null || _q === void 0 ? void 0 : _q.length) ? data.mobTests : SEED_MOBILITY;
+        const mobTests = ((_r = data.mobTests) === null || _r === void 0 ? void 0 : _r.length) ? data.mobTests : SEED_MOBILITY;
         const mobLive = mobTests.filter(isLive);
         /* HER INSTRUCTION, 16 August. Set every test aside and the battery stops
            asking — that is how a whole battery comes off, since it is not a row
@@ -7223,7 +7246,7 @@ function useCoach(data, day, clock) {
         const mobDue = mobLive.length > 0
             && (mobDaysAgo === null || mobDaysAgo >= (Number(FX.mobEvery) || 7));
         /* every test, scored, with its asymmetry and its direction of travel */
-        const drills = ((_r = data.drills) === null || _r === void 0 ? void 0 : _r.length) ? data.drills : SEED_DRILLS;
+        const drills = ((_s = data.drills) === null || _s === void 0 ? void 0 : _s.length) ? data.drills : SEED_DRILLS;
         const mobRows = mobLive.map((m) => {
             const cur = (lastMob === null || lastMob === void 0 ? void 0 : lastMob[m.id]) || null;
             const old = (prevMob === null || prevMob === void 0 ? void 0 : prevMob[m.id]) || null;
@@ -8680,8 +8703,8 @@ function useCoach(data, day, clock) {
            months where muscle was never logged — overstating the age credit. */
         const mKeys = Object.keys(monthly).sort();
         const mMus = mKeys.filter((k) => { var _a; return Number((_a = monthly[k]) === null || _a === void 0 ? void 0 : _a.muscle) > 0; });
-        const muscleNow = mMus.length ? Number((_s = monthly[mMus[mMus.length - 1]]) === null || _s === void 0 ? void 0 : _s.muscle) : NaN;
-        const muscleFirst = mMus.length ? Number((_t = monthly[mMus[0]]) === null || _t === void 0 ? void 0 : _t.muscle) : NaN;
+        const muscleNow = mMus.length ? Number((_t = monthly[mMus[mMus.length - 1]]) === null || _t === void 0 ? void 0 : _t.muscle) : NaN;
+        const muscleFirst = mMus.length ? Number((_u = monthly[mMus[0]]) === null || _u === void 0 ? void 0 : _u.muscle) : NaN;
         const monthsSpan = mMus.length > 1
             ? Math.max(1, Math.round((parse(mMus[mMus.length - 1] + "-01") - parse(mMus[0] + "-01")) / 2592000000)) : 0;
         /* ~0.75%/yr untrained after 50 — a RELATIVE rate. It was being added to a
@@ -8798,9 +8821,9 @@ function useCoach(data, day, clock) {
            by the next morning. Same-or-better means progress the load; worse
            means step back one. The during-session score can't tell you this. */
         const yesterday = addDays(t, -1);
-        const trainedYesterday = !!((_u = logs[yesterday]) === null || _u === void 0 ? void 0 : _u.completed);
-        const shoulderAM = ((_v = morning === null || morning === void 0 ? void 0 : morning[t]) === null || _v === void 0 ? void 0 : _v.shoulderAM) || "";
-        const shoulderPM = ((_w = logs[yesterday]) === null || _w === void 0 ? void 0 : _w.shoulder) || "";
+        const trainedYesterday = !!((_v = logs[yesterday]) === null || _v === void 0 ? void 0 : _v.completed);
+        const shoulderAM = ((_w = morning === null || morning === void 0 ? void 0 : morning[t]) === null || _w === void 0 ? void 0 : _w.shoulderAM) || "";
+        const shoulderPM = ((_x = logs[yesterday]) === null || _x === void 0 ? void 0 : _x.shoulder) || "";
         const shoulderVerdict = (() => {
             if (!trainedYesterday || !shoulderAM)
                 return null;
@@ -9399,17 +9422,17 @@ function useCoach(data, day, clock) {
                     : voicePatterns.length ? null
                         : `${voice.length} entries read, and no theme repeats often enough to call a pattern. That is an honest nothing, not a gap — it fills in as you write more.` }),
             M({ group: "month", id: "learned", label: "What I've learned", scope: "patterns in you, not in training",
-                display: ((_x = learned.motivators) === null || _x === void 0 ? void 0 : _x.length) || ((_y = learned.brakes) === null || _y === void 0 ? void 0 : _y.length)
-                    ? String((((_z = learned.motivators) === null || _z === void 0 ? void 0 : _z.length) || 0) + (((_0 = learned.brakes) === null || _0 === void 0 ? void 0 : _0.length) || 0)) : "—",
+                display: ((_y = learned.motivators) === null || _y === void 0 ? void 0 : _y.length) || ((_z = learned.brakes) === null || _z === void 0 ? void 0 : _z.length)
+                    ? String((((_0 = learned.motivators) === null || _0 === void 0 ? void 0 : _0.length) || 0) + (((_1 = learned.brakes) === null || _1 === void 0 ? void 0 : _1.length) || 0)) : "—",
                 sub: !learned.base ? "needs a few weeks"
-                    : ((_1 = learned.brakes) === null || _1 === void 0 ? void 0 : _1.length) ? `${learned.brakes.length} thing${learned.brakes.length > 1 ? "s" : ""} slowing you`
+                    : ((_2 = learned.brakes) === null || _2 === void 0 ? void 0 : _2.length) ? `${learned.brakes.length} thing${learned.brakes.length > 1 ? "s" : ""} slowing you`
                         : "nothing slowing you",
-                color: ((_2 = learned.motivators) === null || _2 === void 0 ? void 0 : _2.length) ? C.signal : C.muted,
+                color: ((_3 = learned.motivators) === null || _3 === void 0 ? void 0 : _3.length) ? C.signal : C.muted,
                 plain: "The conditions that reliably precede you training, and the ones that precede you not.",
                 how: "Twelve weeks of scheduled days, split by what happened before each: which weekday, what your recovery said, how you slept, whether you'd had body work, whether you were coming off a rest day. Anything that lifts your completion rate by fifteen points or more gets named as something that helps; anything that drops it by twenty or more gets named as something that costs you.",
-                meaning: `This is the app learning you rather than learning training. ${((_3 = learned.motivators) === null || _3 === void 0 ? void 0 : _3.length) ? `What moves you: ${learned.motivators.join("; ")}.` : ""} ${((_4 = learned.brakes) === null || _4 === void 0 ? void 0 : _4.length) ? `What stops you: ${learned.brakes.join("; ")}.` : ""} None of it is a judgement — it is a description, and it corrects itself as you change. The point is that the coach stops guessing what works for you and starts knowing.`,
+                meaning: `This is the app learning you rather than learning training. ${((_4 = learned.motivators) === null || _4 === void 0 ? void 0 : _4.length) ? `What moves you: ${learned.motivators.join("; ")}.` : ""} ${((_5 = learned.brakes) === null || _5 === void 0 ? void 0 : _5.length) ? `What stops you: ${learned.brakes.join("; ")}.` : ""} None of it is a judgement — it is a description, and it corrects itself as you change. The point is that the coach stops guessing what works for you and starts knowing.`,
                 need: !learned.base ? "Needs a few weeks of scheduled days to find patterns."
-                    : (((_5 = learned.motivators) === null || _5 === void 0 ? void 0 : _5.length) || ((_6 = learned.brakes) === null || _6 === void 0 ? void 0 : _6.length)) ? null
+                    : (((_6 = learned.motivators) === null || _6 === void 0 ? void 0 : _6.length) || ((_7 = learned.brakes) === null || _7 === void 0 ? void 0 : _7.length)) ? null
                         : "Nothing has shifted your completion rate by fifteen points yet, so there is nothing worth naming. It fills in as more scheduled days accumulate — silence here is honest, not empty." }),
             M({ group: "month", id: "goals", label: "What you're chasing", scope: "your own goals",
                 display: openGoals.length ? String(openGoals.length) : "—",
@@ -10220,7 +10243,7 @@ function useCoach(data, day, clock) {
         /* The capture line above may already have said this. Two agenda items
            about the same missing number is how the coach starts sounding like a
            form rather than a person. */
-        if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && !loggedToday.rpe && ((_7 = capture.due[0]) === null || _7 === void 0 ? void 0 : _7.id) !== "rpe")
+        if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && !loggedToday.rpe && ((_8 = capture.due[0]) === null || _8 === void 0 ? void 0 : _8.id) !== "rpe")
             raise("day", "push", "Session's in — it needs an effort score to count properly. The tap is on this screen, just below; guessing at it tomorrow isn't the same thing.");
         if ((loggedToday === null || loggedToday === void 0 ? void 0 : loggedToday.completed) && loggedToday.rpe)
             raise("day", "warm", `Logged at ${loggedToday.rpe} out of 10. That's ${Math.round(Number(loggedToday.minutes || 0) * Number(loggedToday.rpe))} of load on the board, and it counts whether or not it felt like much at the time.`);
@@ -10317,7 +10340,7 @@ function useCoach(data, day, clock) {
             raise("day", "push", "Circuit work covers push, pull, squat, hinge and carry in one session — it's the most efficient thing in your library for whole-body coverage. Move well before you move fast; the clock isn't the point.");
         /* MOOD LEADS. If she has said she's struggling, nothing about training
            goes first. The session can wait; being heard cannot. */
-        const moodToday = ((_8 = logs[t]) === null || _8 === void 0 ? void 0 : _8.mood) || null;
+        const moodToday = ((_9 = logs[t]) === null || _9 === void 0 ? void 0 : _9.mood) || null;
         if (moodToday && moodToday !== "good") {
             const lines = {
                 flat: "You said you're flat today. That's worth taking at face value rather than pushing against — flat usually has a reason even when it won't name itself. Nothing is required of you today. If you want to talk it through rather than train, I'm here for that.",
@@ -10653,7 +10676,7 @@ function useCoach(data, day, clock) {
             profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
             WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
             daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
-            batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+            batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
             weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
             monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
             tracked, morningSeries,
@@ -22035,7 +22058,13 @@ const applyRegistryEdits = (data, changes, today) => {
                rather than rendering half a row. Anything the coach did state wins. */
             const shape = e.where === "mobility"
                 ? { unit: "cm", better: "higher", side: false, how: "", why: "", drills: [], needs: [] }
-                : {};
+                : e.where === "record"
+                    /* the same shape her own "Anything you've noticed" writes, so an entry
+                       the coach makes is indistinguishable from one she made herself —
+                       followed up in two days, matched against every earlier occurrence,
+                       and carried in every summary from now on */
+                    ? { date: today, status: "open", tried: [], tags: tagIssue(String(c.fields.text || "")) }
+                    : {};
             const made = { ...shape, ...c.fields, id: newId(), addedBy: "coach", addedOn: today };
             out = storeSet(out, e.store, [...rows, made]);
             done.push({ what: `added ${e.name(made) || "something"} — ${e.label}`, why: c.why || "" });
@@ -22044,6 +22073,15 @@ const applyRegistryEdits = (data, changes, today) => {
         if (i < 0)
             return;
         const row = rows[i];
+        /* RULE 20, AND IT IS ABSOLUTE. "The record in particular is never deleted
+           — a resolved issue is exactly what is needed when it returns." The coach
+           may write to her record and may mark a thing settled; it may not take
+           one off, however sure it is that the thing has gone. */
+        if (c.op === "remove" && e.neverRemove) {
+            done.push({ what: `left "${e.name(row)}" in your record — I can add to it and settle it, never remove it`,
+                why: c.why || "" });
+            return;
+        }
         if (c.op === "remove") {
             out = storeSet(out, e.store, rows.map((x, k) => (k !== i ? x
                 : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" })));
@@ -22085,6 +22123,12 @@ const COACH_EDITS = [
         seed: () => SEED_LIBRARY, name: (x) => x.name },
     { where: "goal", label: "something she wants to be able to do", store: "goals",
         name: (x) => x.text, hers: true },
+    /* HER REPORT, 16 August: she had told the coach about her hips and it was
+       nowhere in her summary, because a conversation is not a store the summary
+       reads. The RECORD is, and until now the coach could not write to it. It
+       can now — and it can never take one off again (rule 20). */
+    { where: "record", label: "your record — what you have noticed, and what was agreed",
+        store: "issues", name: (x) => x.text, hers: true, neverRemove: true },
 ];
 /* Read and write a dotted store path, so fields.weekly is one entry above
    rather than a special case (rule 13: adding must not require rewriting). */
