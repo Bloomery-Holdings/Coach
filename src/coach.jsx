@@ -251,6 +251,8 @@ const FORMULA_DEFAULTS = {
   briefDayRows: 21,        /* days of the day-by-day record the coach is given  */
   clockMinSession: 2,      /* minutes the session clock must run to log a session */
   nameSessionDays: 7,      /* days back the app will still ask what a session was  */
+  briefListsMax: 200,      /* exercises of her own lists the coach is given        */
+  briefBeliefsMax: 40,     /* beliefs about her the coach carries                  */
   briefNoteSittings: 8,    /* battery sittings her own wins are quoted from    */
 
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
@@ -4201,7 +4203,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 193";
+const BUILD = "17 August 2026 · 194";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5133,6 +5135,10 @@ const briefWords = (data, cut) => {
   Object.keys(data.logs || {}).filter(keep).sort().forEach((d) => {
     const l = data.logs[d] || {};
     if (l.note) said.push(`    ${d}: "${l.note}"`);
+    /* HER WORDS ABOUT THE SESSION ITSELF. The day-note travelled and this one
+       did not, though rule 15 makes no distinction between them — both are
+       things she wrote and neither is a summary of her. */
+    if (l.sessionNote) said.push(`    ${d} on the session: "${l.sessionNote}"`);
     const w = l.why;
     if (w && (w.words || w.reason)) said.push(`    ${d} (${w.reason || "changed the plan"}): "${w.words || ""}"`);
   });
@@ -5285,6 +5291,97 @@ const briefBody = (data, coach) => {
     + `read a trend into these numbers. Her measured progress is the batteries above. Use this to\n`
     + `answer what she has and has not done, and to avoid asking for something she did yesterday.\n`
     + rows.join("\n");
+};
+
+/* HER OWN LISTS, IN FULL — HER INSTRUCTION, 17 August: "why can't the coach see
+   inside my lists in the body page, everything needs to be visible to my
+   coach!!!!"
+
+   He could not. The summary sent the programme name, a count of lists, and
+   whatever she had LOGGED off them. So an exercise she had written but not yet
+   ticked did not exist to him, and the title of a second list she had not
+   touched was never mentioned. Proven by generating her payload from a
+   programme of four exercises in two lists: one exercise and one title arrived,
+   three exercises and one title did not.
+
+   This is what she is SUPPOSED to be doing. "WHAT SHE DID OFF HER LISTS" below
+   it is what she actually did. Both, so the coach can tell the difference —
+   which is the whole job. Dose comes from doseFrom, the same function her own
+   screen uses, so the page and the payload cannot disagree (rule 33). */
+const briefLists = (data, coach) => {
+  const F = formulas(data.settings);
+  const cap = Math.max(10, Number(F.briefListsMax) || 200);
+  const progs = (data.bodywork || []).filter((p) => p && p.status !== "removed" && p.status !== "retired");
+  if (!progs.length) return "HER OWN LISTS: none written yet.";
+  const out = [];
+  let n = 0;
+  progs.forEach((p) => {
+    (p.lists || []).forEach((l) => {
+      if (!l || l.status === "removed") return;
+      const exes = (l.exercises || []).filter((e) => e && e.status !== "removed");
+      out.push(`  ${p.area || "an area"} · list ${l.n ?? "?"} "${l.title || "untitled"}"${p.mins ? ` (${p.mins} min)` : ""}`);
+      if (!exes.length) { out.push("    (nothing in it yet)"); return; }
+      exes.forEach((e) => {
+        if (n >= cap) return;
+        n += 1;
+        const dose = doseFrom(e);
+        const kind = loadKindOf(e);
+        const tool = String(e.tool || e.machine || "").trim();
+        const bits = [dose, tool || (kind === "band" ? "band" : kind === "none" ? "bodyweight" : "")]
+          .filter(Boolean).join(", ");
+        out.push(`    ${e.name || "unnamed"}${bits ? ` — ${bits}` : ""}`);
+      });
+    });
+  });
+  const cut = n >= cap ? `\n  (${cap} exercises shown — the rest are on her Body page. Say so if you need them.)` : "";
+  return `HER OWN LISTS — the exercises she has written for herself, in full. THIS IS WHAT SHE IS MEANT\n`
+    + `TO BE DOING; the record below is what she actually did. You may read, judge and change these —\n`
+    + `she asks you to.\n`
+    + out.join("\n") + cut;
+};
+
+/* WHAT THE APP HAS COME TO BELIEVE ABOUT HER, AND WHAT SHE HAS TOLD IT.
+   Written for the monthly read at build 140-something and never carried to the
+   summary, so in her default mode the coach was working without any of it. Hers
+   first, because what she says about herself outranks what the app inferred. */
+const briefBeliefs = (data, coach) => {
+  const F = formulas(data.settings);
+  const cap = Math.max(5, Number(F.briefBeliefsMax) || 40);
+  const all = (coach.profile || []).filter((p) => p && p.status !== "retired");
+  if (!all.length) return "";
+  const hers = all.filter((p) => p.hers);
+  const held = all.filter((p) => !p.hers && (p.confidence === "believed" || p.computed === false));
+  const line = (p) => `  * ${p.claim || p.belief || "—"}${p.hers ? " (her own words)" : p.confidence ? ` (${p.confidence})` : ""}`;
+  const rows = [...hers, ...held].slice(0, cap).map(line);
+  if (!rows.length) return "";
+  return `WHAT IS BELIEVED ABOUT HER — hers first, then what you concluded. Every one of these is visible\n`
+    + `to her and correctable by her, so treat them as working beliefs and say so if the evidence has\n`
+    + `moved (rule 16):\n` + rows.join("\n");
+};
+
+/* THE DRILLS SHE OWNS, AND WHAT STANDS IN FOR ANYTHING PAUSED.
+   Rule 35 is explicit that a pause NAMES its replacement and the replacement is
+   visible where the work is. Both reached the monthly read and neither reached
+   the daily chat, so the coach could be told something was paused without ever
+   being told what was being trained instead. */
+const briefStandIns = (data, coach) => {
+  const bits = [];
+  const pool = [...((data.fields || {}).weekly || []), ...((data.fields || {}).monthly || [])];
+  const name = (id) => (pool.find((f) => f && f.id === id) || {}).label || id;
+  const si = data.standIns || {};
+  Object.keys(si).forEach((k) => {
+    const m = si[k] || {};
+    Object.keys(m).forEach((out) => bits.push(`${name(out)} → ${name(m[out])} in its place`));
+  });
+  const drills = (data.drills && data.drills.length ? data.drills : SEED_DRILLS)
+    .filter(isLive).map((d) => d.label).filter(Boolean);
+  const lines = [];
+  if (bits.length) lines.push(`  standing in: ${bits.join(" · ")}`);
+  if (drills.length) lines.push(`  drills she owns: ${drills.join(", ")}`);
+  if (!lines.length) return "";
+  return "WHAT STANDS IN, AND WHAT SHE HAS TO WORK WITH — a paused thing always names its replacement\n"
+    + "(rule 35), and the drills below are the whole roster, not just the ones that came round:\n"
+    + lines.join("\n");
 };
 
 /* WHAT SHE DID, DAY BY DAY.
@@ -5592,7 +5689,15 @@ const briefText = (data, coach, opts) => {
 
   const bw = (data.bodywork || []).filter((p) => p && p.status !== "removed");
   lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
+  /* HER INSTRUCTION, 17 August: "everything needs to be visible to my coach".
+     What she is MEANT to be doing goes immediately above what she actually did,
+     because the gap between the two is the thing worth reading. */
+  lines.push(briefLists(data, coach));
   lines.push(briefBody(data, coach));
+  const stand = briefStandIns(data, coach);
+  if (stand) { lines.push(""); lines.push(stand); }
+  const beliefs = briefBeliefs(data, coach);
+  if (beliefs) { lines.push(""); lines.push(beliefs); }
 
   const lib = (data.library || []).filter((w) => w && w.status !== "removed");
   lines.push(`CLASSES SHE OWNS — the only ones you may ever name: ${lib.map((w) => w.name).join(", ") || "none"}`);
@@ -13758,12 +13863,45 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   const dropSession = (id) => write({ extraSessions: extraSessions.filter((x) => x.id !== id) });
   /* Clears the session and everything that belongs to it, and NOTHING else.
      Written as an explicit list rather than a wipe so that a field added
-     later cannot start silently disappearing when she removes a class. */
-  const clearSession = () => write({
-    type: undefined, minutes: undefined, completed: false,
-    rpe: undefined, sets: undefined, during: undefined,
-    energyAfter: undefined, sessionNote: undefined, did: undefined, when: undefined,
-  });
+     later cannot start silently disappearing when she removes a class.
+
+     HER CORRECTION, 17 August: "I entered it by mistake, and there is no way
+     that I can delete it." She could, barely — and when she did, it was gone.
+     This set eight fields to undefined, which is a delete, and rule 20 does not
+     allow one: removing must not destroy history, and anything that removes
+     must be dated and reversible.
+
+     So it moves the session ASIDE, whole, into voidedSession — the same shape
+     the rest-day conflict has used since build 141 — and the day offers it
+     back. She still gets the row off her record instantly, which is what she
+     asked for; she just cannot lose it by accident on top of the accident. */
+  const clearSession = () => {
+    const cur = log || {};
+    write({
+      type: undefined, minutes: undefined, completed: false,
+      rpe: undefined, sets: undefined, during: undefined,
+      energyAfter: undefined, sessionNote: undefined, did: undefined, when: undefined,
+      voidedSession: {
+        type: cur.type, minutes: cur.minutes, completed: cur.completed,
+        rpe: cur.rpe, sets: cur.sets, during: cur.during,
+        energyAfter: cur.energyAfter, sessionNote: cur.sessionNote,
+        did: cur.did, when: cur.when,
+        voidedOn: coach.t, why: "she removed it from the day itself",
+      },
+    });
+  };
+  /* And back again, in one tap, from the day it came off. A removal she cannot
+     undo is a second accident waiting behind the first. */
+  const restoreSession = () => {
+    const v = (log && log.voidedSession) || null;
+    if (!v) return;
+    write({
+      type: v.type, minutes: v.minutes, completed: v.completed,
+      rpe: v.rpe, sets: v.sets, during: v.during,
+      energyAfter: v.energyAfter, sessionNote: v.sessionNote,
+      did: v.did, when: v.when, voidedSession: undefined,
+    });
+  };
   const totalMinutes = [Number(log?.minutes) || 0, ...extraSessions.map((x) => Number(x.minutes) || 0)]
     .reduce((a, b) => a + b, 0);
 
@@ -14354,6 +14492,25 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 : isToday && rx ? `${rx.minutes} min${rx.equipment ? " · " + rx.equipment : ""}` : ""}
             </div>
 
+            {/* A SESSION SET ASIDE COMES BACK. Rule 20: a removal is dated and
+                reversible, and it is only reversible in fact if the way back is
+                on the day it came off. */}
+            {log?.voidedSession && !log?.type && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginBottom: 6 }}>
+                  {log.voidedSession.type || "A session"}
+                  {log.voidedSession.minutes ? ` · ${log.voidedSession.minutes} min` : ""} was set aside
+                  {log.voidedSession.voidedOn ? ` on ${log.voidedSession.voidedOn}` : ""}. It is kept, not deleted.
+                </div>
+                <button onClick={restoreSession} className="tap" style={{
+                  border: `1px solid ${C.line}`, borderRadius: 8, background: "transparent",
+                  cursor: "pointer", padding: "6px 10px", fontSize: 11.5, color: C.signal,
+                  fontWeight: 600, fontFamily: "inherit" }}>
+                  Put it back
+                </button>
+              </div>
+            )}
+
             {/* A day marked as a rest day said nothing at all, hid the
                 rest-day button with no explanation, and gave no way back.
                 It reads as an empty day with a missing control. */}
@@ -14372,9 +14529,17 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                  It used to sit below every effort tap, half a page down —
                  findable only by someone who already knew it was there. It
                  belongs beside the thing it removes. Two taps, because it
-                 deletes something (rule 20), and it clears only the session:
-                 the mood, the sleep and anything else that day stay put. */}
-            {log?.type && (!log?.completed || sessionDetail) && (
+                 sets something aside (rule 20), and it touches only the
+                 session: the mood, the sleep and anything else that day stay.
+
+                 HER CORRECTION, 17 August: "there is no way that I can delete
+                 it." The gate here read (!log?.completed || sessionDetail) —
+                 so the instant a session was marked DONE this vanished, and
+                 the only way back to it was a small word called "details"
+                 inside a card that had folded itself away. A completed session
+                 entered by mistake is the exact case that needs this control,
+                 and it was the one case that could not see it. Rule 11. */}
+            {log?.type && (
               <div style={{ marginTop: 9 }}>
                 {clearing ? (
                   <div style={{ padding: "11px 13px", background: C.chalk, borderRadius: 11 }}>
@@ -14458,9 +14623,14 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                   <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: C.moss }}>
                     Session logged{log.minutes ? ` · ${log.minutes} min` : ""}{log.rpe ? ` · ${log.rpe}/10` : ""}
                   </span>
+                  {/* HER CORRECTION, 17 August. This said "details" — a noun
+                      for a place, when what she was looking for was a verb for
+                      the thing she wanted to do. Same control, same fold, and
+                      it now says what it is for. Her instruction of 10 August
+                      that this card folds away is untouched. */}
                   <button onClick={() => setSessionDetail(true)} className="tap" style={{
                     border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
-                    fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>details</button>
+                    fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>change it</button>
                 </div>
                 {/* The line that used to sit here — "the tick is the session —
                     the weekly check numbers are X% in, N still to enter" — is
@@ -17565,6 +17735,8 @@ function Formulas({ data, setData, close }) {
              ["briefDayRows", "Days of your day-by-day record your coach is given"],
              ["clockMinSession", "Minutes the session clock must run before it logs a session"],
              ["nameSessionDays", "Days back the app will still ask what a session was"],
+             ["briefListsMax", "Exercises from your own lists your coach is given"],
+             ["briefBeliefsMax", "Beliefs about you your coach carries"],
              ["briefLiftDays", "Sessions of real loads carried"],
              ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
 
