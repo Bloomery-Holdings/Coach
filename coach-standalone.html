@@ -2654,6 +2654,27 @@ const SCOPE_DEFAULT = { kind: "months", n: 6 };
    different questions: a read designs a month and wants the arc; a chat
    answers what she just asked. */
 const CHAT_SCOPE_DEFAULT = { kind: "months", n: 6 };
+/* HER INSTRUCTION, 16 August: how far back the running history keeps DETAIL.
+   Everything by default — she has months of it, not years, and the thing this
+   exists for is the year from now. */
+const MEMORY_SCOPE_DEFAULT = SCOPE_ALL;
+/* What the fold is told about her span. It is never an instruction to DROP
+   anything: older material is compressed into shape, and the previous version
+   of the memory is kept on her device either way (rule 20). */
+const memorySpanRule = (scope) => {
+    const s = scope || MEMORY_SCOPE_DEFAULT;
+    if (!s || s.kind === "all" || !Number(s.n))
+        return "";
+    return `
+
+HOW FAR BACK SHE HAS ASKED YOU TO KEEP DETAIL: ${scopeLabel(s)}.
+Everything inside that window keeps its detail — what she said, what moved, what you decided.
+Everything OLDER than it is compressed into a short arc: a few lines saying where she started,
+what changed and when, and anything still true about her that would be wrong to forget — an
+injury, a decision she made, something she will not do. Never DELETE the older period and never
+pretend it did not happen; make it shorter, not absent. If something old is still live — a
+constraint, a goal, an open thing — it stays in full however old it is.`;
+};
 const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
     if (!s || s.kind === "all")
@@ -4304,7 +4325,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 187";
+const BUILD = "16 August 2026 · 188";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4565,6 +4586,8 @@ const BLANK = {
            says. null means the summary only. She asked for this to be its own
            control with its own window, independent of everything else. */
         wordsScope: null,
+        /* how far back the running history keeps detail — hers, 16 August */
+        memoryScope: null,
         /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
            chose because it is the start of her week. A fixed cue rather than a
            rolling gap: the whole point is that it lands on the same day. */
@@ -18648,11 +18671,20 @@ function SummaryTables({ data, coach, setSheet }) {
         React.createElement(NumbersTable, { shown: shown, total: (coach.allMetrics || []).length, onAsk: (v) => setSheet && setSheet({ kind: "chat", about: v.id }) })));
 }
 function SummarySheet({ data, setData, coach, setSheet, close }) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const wordsOn = !!((_a = data.settings) === null || _a === void 0 ? void 0 : _a.wordsScope);
     const wordsScope = ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.wordsScope) || { kind: "days", n: 7 };
+    /* HER INSTRUCTION, 16 August: how far back the running history keeps
+       detail. Null means everything, which is where she starts. */
+    const memScope = ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.memoryScope) || MEMORY_SCOPE_DEFAULT;
+    const setMemScope = (sc) => setData((d) => ({ ...d,
+        settings: { ...(d.settings || {}), memoryScope: sc } }));
+    const memWords = (() => {
+        const b = memoryBlock(data);
+        return b.trim() ? b.trim().split(/\s+/).length : 0;
+    })();
     const cut = wordsOn && scopeReady(wordsScope) ? scopeCutoff(wordsScope, coach.t) : null;
-    const full = ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.payload) === "everything";
+    const full = ((_d = data.settings) === null || _d === void 0 ? void 0 : _d.payload) === "everything";
     let text = "";
     let failed = false;
     try {
@@ -18665,7 +18697,7 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
     /* what it costs to send this once, at her own prices — computed, never
        asserted, and only from numbers the app actually holds */
     const F = formulas(data.settings);
-    const cents = (words * 1.35 * ((_d = F.priceIn) !== null && _d !== void 0 ? _d : PRICE_IN)) / 10000;
+    const cents = (words * 1.35 * ((_e = F.priceIn) !== null && _e !== void 0 ? _e : PRICE_IN)) / 10000;
     const setWords = (sc) => setData((d) => ({ ...d,
         settings: { ...(d.settings || {}), wordsScope: sc } }));
     return (React.createElement("div", null,
@@ -18705,6 +18737,22 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
             wordsOn && (React.createElement("div", { style: { marginTop: 12 } },
                 React.createElement(ScopePicker, { scope: wordsScope, onPick: setWords }),
                 React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5 } }, "A month of your writing costs about 6c a message on top. Your words are not what makes this expensive \u2014 relaying everything else was.")))),
+        React.createElement(Card, { style: { marginBottom: 14 } },
+            React.createElement(Eyebrow, null, "How far back it remembers"),
+            React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "4px 0 10px" } },
+                "Everything you log, measure, import and say is folded into one running account after every conversation \u2014 by itself, with nothing for you to tap. It travels with every message.",
+                " ",
+                memWords
+                    ? `It is ${memWords} words today.`
+                    : "Nothing has been folded into it yet.",
+                " ",
+                "Your batteries, WHOOP and lists don't grow the summary \u2014 they are compressed into tables the same size every day. This is the only part that grows."),
+            React.createElement(ScopePicker, { scope: memScope, onPick: (sc) => setMemScope(sc && sc.kind === "all" ? null : sc) }),
+            React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5 } }, !memScope || memScope.kind === "all"
+                ? "Keeping all of it, in as much detail as it is worth. Set a span here when it starts feeling long, and anything older gets squeezed into a few lines rather than dropped."
+                : `Full detail for ${scopeLabel(memScope)}. Anything older becomes a short arc — where you started, what changed and when, and anything still true about you: an injury, a decision, something you will not do. Nothing is deleted, and every earlier version of it is still on your phone.`),
+            setSheet && (React.createElement("div", { style: { marginTop: 11 } },
+                React.createElement(Btn, { kind: "quiet", onClick: () => setSheet({ kind: "memory" }) }, "Read it, and every earlier version \u2192")))),
         React.createElement(Card, { style: { marginBottom: 14 } },
             React.createElement(Eyebrow, null, "When you want it to read everything"),
             React.createElement("div", { style: { fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "6px 0 10px" } }, "Every day in full, every entry, every conversation, every read \u2014 the way it worked before. It is the honest answer when you think it is missing something, and it is expensive: a ten message conversation ran to $3.44 on 15 August. Turn it back off when you are done."),
@@ -20178,7 +20226,7 @@ Two or three sentences unless she asks for more.`;
        never claims a fold that did not happen. */
     const folding = useRef(false);
     const foldMemory = async (allMsgs) => {
-        var _a;
+        var _a, _b;
         if (folding.current)
             return;
         const key = (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey;
@@ -20197,7 +20245,12 @@ Two or three sentences unless she asks for more.`;
                             messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
                 })() };
             const text = await askModel({
-                apiKey: key, system: MEMORY_SYSTEM, maxTokens: 3000, usage: spent,
+                apiKey: key, usage: spent, maxTokens: 3000,
+                secs: formulas(data.settings).callSecs,
+                /* HER INSTRUCTION, 16 August. The span rides with the system prompt so
+                   the memory is WRITTEN to it, rather than being cut on the way out —
+                   a cut would lose things; a compression keeps their shape. */
+                system: MEMORY_SYSTEM + memorySpanRule((_b = data.settings) === null || _b === void 0 ? void 0 : _b.memoryScope),
                 messages: [{ role: "user", content: memoryInput(withChat, coach) }],
             });
             if (!text || !String(text).trim())
