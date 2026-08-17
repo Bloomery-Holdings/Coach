@@ -329,6 +329,7 @@ const FORMULA_DEFAULTS = {
        other threshold here. */
     briefMornings: 14, /* mornings of WHOOP in each row                    */
     briefLiftDays: 10, /* sessions of real loads carried                   */
+    briefDayRows: 21, /* days of the day-by-day record the coach is given  */
     briefNoteSittings: 8, /* battery sittings her own wins are quoted from    */
     /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
        Her decision, 14 August. Every class in her library carries a cost from
@@ -4376,7 +4377,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 191";
+const BUILD = "17 August 2026 · 192";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5367,9 +5368,20 @@ const briefWhoop = (data, coach) => {
         ["day strain", row((d) => m(d).strain)],
         ["shoulder AM /5", row((d) => m(d).shoulderAM)],
     ].filter(([, r]) => /\d/.test(r));
+    /* HER SCREENSHOT, 17 August: "I can see Sunday 17 August in the WHOOP data,
+       strain 0.1, which is what I was reading as a rest day." At five in the
+       morning a day strain of 0.1 is a day that has not started. The block says
+       so about its own last column rather than leaving the coach to infer it
+       (rule 23) — and the day record above is what actually answers the
+       question. */
+    const live = days[days.length - 1] === coach.t
+        ? `\nTHE LAST COLUMN IS TODAY (${coach.t}) AND TODAY IS NOT FINISHED. Day strain accumulates through\n`
+            + `the day, so a low figure now means the day has not happened yet — never a rest day, never\n`
+            + `evidence she has not trained. The day-by-day record above answers that.`
+        : "";
     return `WHOOP — last ${days.length} mornings, oldest to newest. Dates: ${days.map((k) => k.slice(5)).join(" ")}\n`
         + `These are measured, not reported. Read them as drift, not as single days, and never prescribe from\n`
-        + `a number that is a dot.\n`
+        + `a number that is a dot.${live}\n`
         + rows.map(([l, r]) => `  ${l} ${r}`).join("\n");
 };
 /* WHAT THE APP ADDS UP ABOUT HER ADHERENCE. Rule 26 outranks every training
@@ -5463,6 +5475,77 @@ const briefBody = (data, coach) => {
         + `read a trend into these numbers. Her measured progress is the batteries above. Use this to\n`
         + `answer what she has and has not done, and to avoid asking for something she did yesterday.\n`
         + rows.join("\n");
+};
+/* WHAT SHE DID, DAY BY DAY.
+   ---------------------------------------------------------------------------
+   HER REPORT, 17 August: "how come the coach doesn't see yesterday's sessions
+   in the summary". Because there was no day-by-day record in it at all. The
+   summary carried counts per week, days-since-the-last-one, and a list of days
+   she typed LOADS on — so a session with no loads was invisible, and the most
+   recent day the coach could name was whichever day she last used the loads
+   box. Her coach said so plainly and was right.
+
+   It does not build its own idea of a day. It calls doneOnDay — the same
+   function behind the "what you did today" card — so the card she reads and
+   the record her coach reads cannot disagree (rule 33). Rest is settled
+   through restIsFinal before anything else, so a day she called rest can never
+   appear as a session, and where a rest flag and a session collide it says so
+   rather than choosing (rules 20 and 33).
+
+   TODAY ALWAYS GETS A LINE, even an empty one. "Today is not in the list" was
+   the exact ambiguity that produced her question, and an absent line reads as
+   an absent day. */
+const briefDays = (data, coach) => {
+    const F = formulas(data.settings);
+    const cap = Math.max(3, Number(F.briefDayRows) || Number(FORMULA_DEFAULTS.briefDayRows) || 21);
+    const LG = restIsFinal(data.logs || {});
+    const seen = new Set([...Object.keys(LG), ...Object.keys(data.bwlog || {})]);
+    const days = [...seen]
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t)
+        .sort().reverse().slice(0, cap);
+    if (!days.includes(coach.t))
+        days.unshift(coach.t);
+    const out = [];
+    days.forEach((d) => {
+        var _a;
+        const l = LG[d] || {};
+        const when = `  ${d} ${dayName(d) || ""}`.replace(/\s+$/, "");
+        if (l.rest) {
+            out.push(`${when} REST — she said so${l.conflict
+                ? " (a session was logged on this day too; rest wins and the session is set aside, rule 33)" : ""}`);
+            return;
+        }
+        /* The same third argument the Today card passes (build 181): for TODAY the
+           drills row may only claim drills that were actually on today's card. A
+           past day has no card left to check against, so it claims what she
+           ticked. Passing it here keeps the card and the coach identical. */
+        const onCard = d === coach.t && coach.dailyDrills
+            ? (coach.dailyDrills.list || []).map((x) => x && x.id).filter(Boolean)
+            : undefined;
+        const bits = doneOnDay(data, d, onCard)
+            .map((r) => `${r.what}${r.detail ? ` ${r.detail}` : ""}`)
+            .filter(Boolean);
+        const eff = String((_a = l.rpe) !== null && _a !== void 0 ? _a : "").trim() !== "" ? `effort ${l.rpe}/10` : null;
+        const felt = l.during === undefined || l.during === null || l.during === ""
+            ? null : `felt ${Number(l.during) > 0 ? "+" : ""}${l.during}`;
+        const tail = [...bits, eff, felt].filter(Boolean).join(" · ");
+        if (tail) {
+            out.push(`${when} ${tail}`);
+            return;
+        }
+        /* rule 23: an empty day is stated as empty, never as a rest day and never
+           as a day she failed at. Only today and a day she was scheduled to train
+           are worth a line of their own; the rest are named in the footer. */
+        if (d === coach.t)
+            out.push(`${when} TODAY — nothing logged yet. Today is not finished and this is not a rest day.`);
+        else
+            out.push(`${when} nothing logged`);
+    });
+    return `WHAT SHE DID, DAY BY DAY — ${days.length} day(s), most recent first. THIS IS THE RECORD ITSELF:\n`
+        + `if you want to know whether she trained on a day, this line answers it. REST outranks everything\n`
+        + `(rule 33). "nothing logged" means nothing was entered — not a rest day, and never held against\n`
+        + `her (rules 23, 24).\n`
+        + out.join("\n");
 };
 /* WHAT SHE ACTUALLY PUT ON THE BAR. The battery says what she can do on a test
    day; this is what she did in the sessions themselves, and they are not the
@@ -5639,6 +5722,12 @@ const briefText = (data, coach, opts) => {
     /* rule 26 is the one that outranks everything, so what predicts it goes
        high up rather than at the bottom where a long prompt loses things */
     lines.push(briefAdherence(coach));
+    lines.push("");
+    /* HER REPORT, 17 August. The one thing the summary could not answer was the
+       plainest question she asks of it — did she train yesterday, and what was
+       it. It goes above WHOOP because a logged session is her own word and a
+       strain figure is an inference. */
+    lines.push(briefDays(data, coach));
     lines.push("");
     lines.push(briefWhoop(data, coach));
     lines.push("");
@@ -15633,6 +15722,7 @@ function Formulas({ data, setData, close }) {
                 ["cacheMinGaps", "How many gaps before it trusts what it measured"]] },
         { title: "How much history your summary carries", note: "Your summary is what your coach is given every time you talk to it, and it stays the same size however many months you add — because each measure is one row that grows sideways by a number, not a new paragraph. These say how far back each row reaches. Longer rows see further and cost a few more words; shorter ones are cheaper and blinder.",
             rows: [["briefMornings", "Mornings of WHOOP in each row"],
+                ["briefDayRows", "Days of your day-by-day record your coach is given"],
                 ["briefLiftDays", "Sessions of real loads carried"],
                 ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
         { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
