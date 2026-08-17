@@ -4130,7 +4130,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 183";
+const BUILD = "16 August 2026 · 185";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5267,6 +5267,15 @@ REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes ba
 numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REPLACING: rebuild
 a battery and the old rows stay until you take each of them off in the same breath. You can also
 choose whether a measure is asked weekly or monthly — say which you have chosen.
+
+WHAT SHE SAYS IN CONVERSATION DOES NOT REACH THE NEXT ONE. Her report, 16 August: she had told
+you about her hips and it was nowhere in her summary. The summary is rebuilt from her STORES
+every message — the record, her goals, her batteries, her body work — and a conversation is not
+one of them. So when she tells you about a pain, a niggle, or something to come back to: say you
+are writing it into her RECORD, and use where="record" op="add" in her own words. Then it
+travels, is chased in two days, and is matched against every earlier time she said it. Do not
+promise to remember it; you will not. You may add to the record and mark a thing settled — never
+remove one.
 
 THE MOBILITY BATTERY IS HERS TO REBUILD (her instruction, 16 August). She is right that it is
 too coarse: four of the eight are centimetres against a tape and do move, but the two folds are
@@ -6495,7 +6504,19 @@ function useCoach(data, day, clock) {
        records it, chases what is missing, and says what it notices. It knows
        what today WOULD have been (below, unused) only so that at the end of
        the month it can see how close its instincts were to her real month. */
-    const restDay = block ? block.id === "rest" : !isScheduled(t);
+    /* WHAT THE PROGRAMME PUT IN THE DIARY. Only that — it is not a verdict
+       on the day, and nothing should read it as one. */
+    const restBySchedule = block ? block.id === "rest" : !isScheduled(t);
+    /* AND WHETHER TODAY IS ACTUALLY A REST DAY, which is a different question.
+       HER REPORT, 16 August: "i logged the day as a Rest day, why in needs you
+       it tells me to mark the training done." Because every reader of
+       `restDay` — fourteen of them: every nudge to train, the class the coach
+       picks, the finisher, the line at the top of the day — meant "today is
+       rest" while the value meant "the plan said rest".
+       Rule 33: settled ONCE, here, in the view the engine reads. Her word
+       outranks the diary; a day she has declared is a rest day whatever the
+       block expected. */
+    const restDay = restBySchedule || !!logs[t]?.rest;
     const loggedToday = logs[t] || null;
 
     /* recovery is entered in the morning and shapes the day before it happens */
@@ -6748,9 +6769,11 @@ function useCoach(data, day, clock) {
     const standing = (data.liveBet && data.liveBet.text) ? data.liveBet : null;
     /* on a rest day it shows nothing and loses nothing — it is simply not
        today's business, and it is there again tomorrow */
-    /* HER WORDS: "if I MARK the day as rest day". That is the day she
-       declared, which is logs[t].rest — not `restDay`, which is only what
-       the programme had scheduled. Rest wins here too (rule 33). */
+    /* HER WORDS: "if I MARK the day as rest day". This was the ONE place that
+       distinguished her declaration from the diary, and on 16 August it turned
+       out to be the only one — everywhere else was still asking her to train
+       on a day she had called rest. `restDay` now carries both (rule 33), so
+       this reads it rather than working it out again. */
     const restDeclared = !!logs[t]?.rest;
     const bet = restDeclared ? null : (standing || freshBet);
     /* nothing stands yet, so the app should write one down (the card does
@@ -10300,7 +10323,7 @@ function useCoach(data, day, clock) {
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
-      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
@@ -25561,6 +25584,12 @@ const applyRegistryEdits = (data, changes, today) => {
          rather than rendering half a row. Anything the coach did state wins. */
       const shape = e.where === "mobility"
         ? { unit: "cm", better: "higher", side: false, how: "", why: "", drills: [], needs: [] }
+        : e.where === "record"
+        /* the same shape her own "Anything you've noticed" writes, so an entry
+           the coach makes is indistinguishable from one she made herself —
+           followed up in two days, matched against every earlier occurrence,
+           and carried in every summary from now on */
+        ? { date: today, status: "open", tried: [], tags: tagIssue(String(c.fields.text || "")) }
         : {};
       const made = { ...shape, ...c.fields, id: newId(), addedBy: "coach", addedOn: today };
       out = storeSet(out, e.store, [...rows, made]);
@@ -25569,6 +25598,15 @@ const applyRegistryEdits = (data, changes, today) => {
     }
     if (i < 0) return;
     const row = rows[i];
+    /* RULE 20, AND IT IS ABSOLUTE. "The record in particular is never deleted
+       — a resolved issue is exactly what is needed when it returns." The coach
+       may write to her record and may mark a thing settled; it may not take
+       one off, however sure it is that the thing has gone. */
+    if (c.op === "remove" && e.neverRemove) {
+      done.push({ what: `left "${e.name(row)}" in your record — I can add to it and settle it, never remove it`,
+        why: c.why || "" });
+      return;
+    }
     if (c.op === "remove") {
       out = storeSet(out, e.store, rows.map((x, k) => (k !== i ? x
         : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" })));
@@ -25610,6 +25648,12 @@ const COACH_EDITS = [
     seed: () => SEED_LIBRARY, name: (x) => x.name },
   { where: "goal",      label: "something she wants to be able to do", store: "goals",
     name: (x) => x.text, hers: true },
+  /* HER REPORT, 16 August: she had told the coach about her hips and it was
+     nowhere in her summary, because a conversation is not a store the summary
+     reads. The RECORD is, and until now the coach could not write to it. It
+     can now — and it can never take one off again (rule 20). */
+  { where: "record",    label: "your record — what you have noticed, and what was agreed",
+    store: "issues", name: (x) => x.text, hers: true, neverRemove: true },
 ];
 /* Read and write a dotted store path, so fields.weekly is one entry above
    rather than a special case (rule 13: adding must not require rewriting). */
