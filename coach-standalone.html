@@ -4304,7 +4304,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 185";
+const BUILD = "16 August 2026 · 186";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5490,6 +5490,35 @@ desk, no developer to escalate to. It is her file, her phone and you. Naming a r
 not exist is worse than saying you cannot, because she goes looking for it. Never invent a
 button, a screen, a setting or a person. If you truly cannot do a thing, say what she can tap
 instead — and check first, because you can do more than you think.`;
+/* HER RUNNING HISTORY (build 145), CARRIED IN BOTH PAYLOADS (build 186).
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 16 August: "Everything in the app should automatically be
+   saved to my summary without my instruction to do so."
+
+   The app folds this after every conversation, by itself. It used to be sent
+   only in everything-mode, so on her own phone a thing she had told the coach
+   once — a hip — was folded, kept, and then left at home. */
+const memoryBlock = (data) => {
+    const m = (data && data.memory) || {};
+    const txt = String(m.text || "").trim();
+    const hers = String(m.hers || "").trim();
+    if (!txt && !hers)
+        return "";
+    return `
+=== HER HISTORY, AS YOU HAVE COME TO UNDERSTAND IT ===
+This is your own running account of her, kept on her device and folded forward after everything she
+says — automatically, without her asking. It carries the SHAPE of everything older than the window:
+what moved and when, what each class costs her, what her lists were for and whether they worked,
+what you concluded and what is still open. It is not a substitute for her actual numbers: anything
+inside the window is given to you exactly as she entered it, and where the two disagree, WHAT SHE
+ENTERED WINS.
+${txt || "(nothing folded yet)"}${hers ? `
+
+--- AND THIS PART SHE WROTE HERSELF. IT OUTRANKS EVERYTHING ABOVE, INCLUDING YOU. ---
+${hers}` : ""}
+${m.upto ? `(folded up to ${m.upto}.)` : ""}
+`;
+};
 const briefText = (data, coach, opts) => {
     var _a, _b;
     const o = opts || {};
@@ -5512,6 +5541,16 @@ const briefText = (data, coach, opts) => {
        that acts and one that apologises. */
     lines.push(COACH_CAN_CHANGE);
     lines.push("");
+    /* HER INSTRUCTION, 16 August: "Everything in the app should automatically be
+       saved to my summary without my instruction to do so." It already was —
+       into the memory, after every conversation, by itself. It just was not
+       sent. It is sent now, in both modes, from one function so they cannot
+       drift apart again. Never trimmed by her window: rule 15. */
+    const mem = memoryBlock(data);
+    if (mem) {
+        lines.push(mem);
+        lines.push("");
+    }
     lines.push(`WHO: ${s.name || "she"}${s.age ? `, ${s.age}` : ""}. Target ${s.weeklyTarget || "?"} sessions a week.`);
     lines.push(`NOW: block "${((_a = coach.livePhase) === null || _a === void 0 ? void 0 : _a.name) || "none"}" week ${coach.weeksIntoBlock} of ${((_b = coach.livePhase) === null || _b === void 0 ? void 0 : _b.weeks) || "?"}.`
         + ` This week ${coach.weekDone}/${coach.seasonTarget}. Consistency ${coach.consistency}% over 28 days.`
@@ -19526,31 +19565,7 @@ and follows filmed classes plus a real Pilates instructor who pushes her hard.
 
 Do not quote baseline figures from memory — every number you have is in the list below, computed from
 her own data. If a number is not there, say you don't have it rather than estimating.
-${(() => {
-            /* HER RUNNING HISTORY (build 145). Everything older than the window she set
-               is HERE rather than absent — the arc of her training in your own words,
-               folded forward as you go. It sits at the top because it is what you would
-               want to have read before answering her, and because it barely changes
-               between one message and the next, which is what makes it the cheap part. */
-            const m = data.memory || {};
-            const txt = String(m.text || "").trim();
-            const hers = String(m.hers || "").trim();
-            if (!txt && !hers)
-                return "";
-            return `
-=== HER HISTORY, AS YOU HAVE COME TO UNDERSTAND IT ===
-This is your own running account of her, kept on her device and folded forward after everything she
-says. It carries the SHAPE of everything older than the window below — what moved and when, what each
-class costs her, what her lists were for and whether they worked, what you concluded and what is
-still open. It is not a substitute for her actual numbers: anything inside the window below is given
-to you exactly as she entered it, and where the two disagree, WHAT SHE ENTERED WINS.
-${txt || "(nothing folded yet)"}${hers ? `
-
---- AND THIS PART SHE WROTE HERSELF. IT OUTRANKS EVERYTHING ABOVE, INCLUDING YOU. ---
-${hers}` : ""}
-${m.upto ? `(folded up to ${m.upto}.)` : ""}
-`;
-        })()}
+${memoryBlock(data)}
 
 === HOW FAR BACK SHE HAS ASKED YOU TO READ ===
 ${winLine}
