@@ -383,6 +383,7 @@ const FORMULA_DEFAULTS = {
     mobEvery: 7, /* days between mobility batteries — hers to move           */
     chatTail: 6, /* messages of today's talk left open; the rest folds       */
     callSecs: 120, /* seconds a call to the coach may hang before it gives up  */
+    placeMins: 90, /* minutes away before the app opens on Today again         */
     mobOverdueDays: 10, /* days since the battery before it is chased              */
     mobGapFlag: 10, /* left-right gap, percent, worth naming                   */
     /* Shoulder */
@@ -2644,6 +2645,45 @@ const parseReview = (text) => {
    summaries carry what the window no longer reaches, so nothing is missed
    and nothing is paid for twice. Anything still open — an issue she has not
    closed — is always sent too, however old it is. */
+/* WHERE SHE WAS WHEN SHE LEFT.
+   ---------------------------------------------------------------------------
+   HER REPORT, 16 August: a video takes her out of the app, and the phone
+   reclaims it. Everything about where she was lives in React state, so she
+   comes back to Today with every fold shut.
+
+   Deliberately NOT in her data file: this is not something she recorded, it
+   is where her thumb was. Keeping it out means it never rides along in a
+   backup, never reaches her coach, and can never corrupt anything that
+   matters if it is malformed. Every read is wrapped — a phone with storage
+   disabled loses the convenience, never the app. */
+const PLACE_KEY = "coach:place";
+const readPlace = () => {
+    try {
+        const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(PLACE_KEY);
+        const p = raw ? JSON.parse(raw) : null;
+        return p && typeof p === "object" ? p : {};
+    }
+    catch (e) {
+        return {};
+    }
+};
+const writePlace = (patch) => {
+    try {
+        if (typeof localStorage === "undefined")
+            return;
+        localStorage.setItem(PLACE_KEY, JSON.stringify({ ...readPlace(), ...patch, at: Date.now() }));
+    }
+    catch (e) { /* storage full or blocked — she loses the convenience, nothing else */ }
+};
+/* Still where she wants to be? Minutes, hers, in the formulas sheet. Coming
+   back from a video: yes. Opening it tomorrow morning: no — Today is what she
+   wants then, and landing inside Tuesday's hamstring list would be worse than
+   the thing this fixes. */
+const placeFresh = (mins) => {
+    const p = readPlace();
+    const m = Number(mins) > 0 ? Number(mins) : FORMULA_DEFAULTS.placeMins;
+    return !!p.at && (Date.now() - p.at) < m * 60000;
+};
 const SCOPE_ALL = { kind: "all" };
 /* HER INSTRUCTION, 14 August: "make it see up to the last 6 months and make the
    number of months editable and it show me how many months it will review
@@ -4325,7 +4365,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 189";
+const BUILD = "16 August 2026 · 190";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -15469,6 +15509,7 @@ function Formulas({ data, setData, close }) {
                 ["briefBodyDays", "Days of your own movements the coach is told about"],
                 ["chatTail", "Messages of today's conversation left open before the rest folds"],
                 ["callSecs", "Seconds a call to your coach may hang before it gives up"],
+                ["placeMins", "Minutes away before the app forgets where you were"],
                 ["retestKneeWeeks", "Weeks before a knee-limited measure is worth retrying"],
                 ["retestShoulderWeeks", "Weeks before a shoulder-limited measure is worth retrying"],
                 ["retestStrengthWeeks", "Weeks before a supporting muscle is retested"],
@@ -21240,8 +21281,17 @@ function CoachApp() {
     var _a, _b;
     const [data, setDataRaw] = useState(BLANK);
     const [ready, setReady] = useState(false);
-    const [stack, setStack] = useState(["today"]); // screen history
-    const [sheets, setSheets] = useState([]); // sheet history
+    /* HER REPORT, 16 August: back from a video, back to Today, everything shut.
+       The screen she was on and the sheet she had open are restored if she was
+       here recently — see placeFresh. */
+    const [stack, setStack] = useState(() => {
+        const p = placeFresh() ? readPlace() : {};
+        return Array.isArray(p.stack) && p.stack.length ? p.stack : ["today"];
+    });
+    const [sheets, setSheets] = useState(() => {
+        const p = placeFresh() ? readPlace() : {};
+        return Array.isArray(p.sheets) ? p.sheets : [];
+    });
     useEffect(() => {
         loadData().then((d) => {
             setDataRaw(d);
@@ -21349,6 +21399,10 @@ function CoachApp() {
     const tab = stack[stack.length - 1];
     const go = (t) => { if (t !== tab)
         setStack((s) => [...s.slice(-9), t]); };
+    /* HER REPORT, 16 August. Written on every move rather than on the way out:
+       a phone reclaiming a backgrounded app does not run anything on the way
+       out, which is exactly the case this exists for. */
+    useEffect(() => { writePlace({ stack, sheets }); }, [stack, sheets]);
     const goBack = () => setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
     /* ---- THE PHONE'S BACK BUTTON ---------------------------------------
        HER REPORT, twice: "When I press my mobile's back button it exits the
@@ -22776,8 +22830,26 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
        to opens with its area — she lands on the exercises with their boxes,
        not on a closed row she still has to find. */
     const sentHere = !!(data.bodyFocus && data.bodyFocus.pg === prog.id);
-    const [unfolded, setUnfolded] = useState(sentHere);
-    const [openIds, setOpenIds] = useState(sentHere && data.bodyFocus.list ? [data.bodyFocus.list] : []);
+    /* HER REPORT, 16 August. The AREA's own fold, which is a different thing
+       from which list is open inside it — restoring one without the other put
+       her back exactly where she started. */
+    const [unfolded, setUnfolded] = useState(() => sentHere
+        || !!(placeFresh() && (readPlace().unfolded || {})[prog.id]));
+    useEffect(() => {
+        writePlace({ unfolded: { ...(readPlace().unfolded || {}), [prog.id]: unfolded } });
+    }, [unfolded, prog.id]);
+    /* HER REPORT, 16 August: "to go back to my original lists it takes a
+       gazillion clicks". Which list was unfolded, per area, so coming back from
+       a video lands on the open list rather than on a shut accordion. */
+    const [openIds, setOpenIds] = useState(() => {
+        if (sentHere && data.bodyFocus.list)
+            return [data.bodyFocus.list];
+        const was = placeFresh() ? (readPlace().openLists || {})[prog.id] : null;
+        return Array.isArray(was) ? was : [];
+    });
+    useEffect(() => {
+        writePlace({ openLists: { ...(readPlace().openLists || {}), [prog.id]: openIds } });
+    }, [openIds, prog.id]);
     /* used once, then forgotten, so it never drags her back here again */
     useEffect(() => { if (sentHere)
         setData((d) => ({ ...d, bodyFocus: null })); }, [sentHere]);
@@ -23010,7 +23082,12 @@ function BodyWork({ data, setData, coach, setSheet }) {
     /* HER REPORT, 13 August: sent to a list, she arrived at the whole Body
        page with every area folded shut. The area she was sent to is the one
        that opens. */
-    const [pick, setPick] = useState(() => (data.bodyFocus && data.bodyFocus.pg) || "all");
+    /* HER REPORT, 16 August: the chip she was on. Being sent somewhere by the
+       coach still wins — that is a deliberate destination, and it is newer than
+       wherever she happened to be standing. */
+    const [pick, setPick] = useState(() => (data.bodyFocus && data.bodyFocus.pg)
+        || (placeFresh() ? readPlace().bodyPick : null) || "all");
+    useEffect(() => { writePlace({ bodyPick: pick }); }, [pick]);
     const progs = (data.bodywork || []).filter((pg) => pg && pg.status !== "removed");
     const hasTen = (((_a = coach.dailyDrills) === null || _a === void 0 ? void 0 : _a.list) || []).length > 0;
     /* everything that has a list for today: her goal ten minutes, and one list
