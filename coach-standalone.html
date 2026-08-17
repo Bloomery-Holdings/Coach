@@ -4381,7 +4381,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 194";
+const BUILD = "17 August 2026 · 195";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -4398,6 +4398,95 @@ const BUILD = "17 August 2026 · 194";
    already stuck as well as preventing it. Then: check on every open, check
    again whenever she comes back to the app, and reload exactly once when a
    new worker actually takes over. Guarded so it can never loop. */
+/* WHICH BUNDLE IS THIS PAGE ACTUALLY RUNNING, and which one does the server say
+   it should be. Vite hashes the bundle name into every build, so two different
+   answers is proof of a new build rather than a guess at one. Both return null
+   where there is no hashed bundle to read — the standalone file, or a dev
+   server — and a null means "cannot tell", which is never treated as "new". */
+const bundleHere = () => {
+    try {
+        const srcs = [...document.querySelectorAll("script[src]")].map((x) => x.getAttribute("src") || "");
+        const hit = srcs.map((x) => (x.match(/index-[A-Za-z0-9_-]+\.js/) || [])[0]).filter(Boolean)[0];
+        return hit || null;
+    }
+    catch (e) {
+        return null;
+    }
+};
+const bundleOnServer = async () => {
+    try {
+        const u = new URL("./index.html", location.href);
+        u.searchParams.set("ts", String(Date.now()));
+        const res = await fetch(u.toString(), { cache: "no-store" });
+        if (!res || !res.ok)
+            return null;
+        const html = await res.text();
+        return (html.match(/index-[A-Za-z0-9_-]+\.js/) || [])[0] || null;
+    }
+    catch (e) {
+        return null;
+    }
+};
+/* TAKE THE NEW ONE. Unregisters the service workers, deletes the caches they
+   own, and reloads once on an address the browser has not seen.
+
+   IT CANNOT REACH HER DATA. The cache store is where service workers keep
+   copies of files. Local storage is where her whole record lives. Deleting the
+   first does nothing whatever to the second, and there is a check asserting it
+   (rule 20 — her data is permanent, and "should be fine" is not a standard). */
+let freshening = false;
+const takeTheNewOne = async () => {
+    if (freshening)
+        return;
+    freshening = true;
+    try {
+        if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(regs.map((r) => { try {
+                return r.unregister();
+            }
+            catch (e) {
+                return null;
+            } }));
+        }
+    }
+    catch (e) { /* nothing registered, which is fine */ }
+    try {
+        if (typeof caches !== "undefined" && caches.keys) {
+            const ks = await caches.keys();
+            await Promise.all(ks.map((k) => { try {
+                return caches.delete(k);
+            }
+            catch (e) {
+                return null;
+            } }));
+        }
+    }
+    catch (e) { /* no cache store, which is also fine */ }
+    try {
+        const u = new URL(location.href);
+        u.searchParams.set("build", String(Date.now()));
+        location.replace(u.toString());
+    }
+    catch (e) {
+        try {
+            location.reload();
+        }
+        catch (e2) { }
+    }
+};
+/* Is the server holding something this page is not running? Null from either
+   side means the question cannot be answered here, and an unanswerable question
+   is never a yes (rule 23). */
+const newerOnServer = async () => {
+    const here = bundleHere();
+    if (!here)
+        return false;
+    const there = await bundleOnServer();
+    if (!there)
+        return false;
+    return there !== here;
+};
 let swReloaded = false;
 const keepCurrent = () => {
     try {
@@ -4434,6 +4523,17 @@ const keepCurrent = () => {
         });
     }
     catch (e) { /* an app that cannot update itself must still run */ }
+    /* HER INSTRUCTION, 17 August: "fix the update problem." Asking the service
+       worker is not enough on a phone that has no service worker registered —
+       which is exactly what hers reported. This asks the SERVER, once, quietly,
+       and only acts on a difference it can actually see. */
+    try {
+        if (typeof location !== "undefined" && /[?&]build=/.test(location.search))
+            return;
+        newerOnServer().then((yes) => { if (yes)
+            takeTheNewOne(); }).catch(() => { });
+    }
+    catch (e) { /* never let the version check stop the app loading */ }
 };
 const KEY = "coach:data";
 /* Set when the store existed but could not be read. While true the app refuses
@@ -15391,34 +15491,47 @@ function Settings({ data, setData, coach, setSheet }) {
    It never touches stored data. */
 function VersionRow() {
     const [state, setState] = useState("idle"); /* idle | checking | fresh | found | cannot */
+    /* HER INSTRUCTION, 17 August: "fix the update problem."
+       This used to ask the SERVICE WORKER, and said "could not ask from here"
+       when there wasn't one — which is what she got, and which left her with no
+       way forward at all. It asks the SERVER now: which bundle does the server
+       say this app is, and which one am I running. Two different answers is a
+       new build, and it takes it. */
     const check = async () => {
         setState("checking");
         try {
-            if (!("serviceWorker" in navigator)) {
-                setState("cannot");
-                return;
-            }
-            const regs = await navigator.serviceWorker.getRegistrations();
-            if (!regs.length) {
-                setState("cannot");
-                return;
-            }
-            let found = false;
-            for (const r of regs) {
-                await r.update();
-                if (r.installing || r.waiting)
-                    found = true;
-            }
-            if (found) {
-                setState("found");
-                setTimeout(() => { try {
-                    window.location.reload();
+            const here = bundleHere();
+            const there = await bundleOnServer();
+            if (!here || !there) {
+                /* Still ask the service worker, because on a phone that HAS one this
+                   is a real answer rather than a fallback. */
+                if ("serviceWorker" in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    let found = false;
+                    for (const r of regs) {
+                        await r.update();
+                        if (r.installing || r.waiting)
+                            found = true;
+                    }
+                    if (found) {
+                        setState("found");
+                        setTimeout(() => takeTheNewOne(), 700);
+                        return;
+                    }
+                    if (regs.length) {
+                        setState("fresh");
+                        return;
+                    }
                 }
-                catch (e) { } }, 900);
+                setState("cannot");
+                return;
             }
-            else {
-                setState("fresh");
+            if (there !== here) {
+                setState("found");
+                setTimeout(() => takeTheNewOne(), 700);
+                return;
             }
+            setState("fresh");
         }
         catch (e) {
             setState("cannot");
@@ -15427,16 +15540,19 @@ function VersionRow() {
     const line = {
         idle: null,
         checking: "Asking…",
-        fresh: "This is the newest version. Nothing to fetch.",
-        found: "A newer version is here — reloading into it now.",
-        cannot: "Could not ask from here. Open the app in Chrome and add ?v=2 to the address; that forces a fresh copy without touching your data.",
+        fresh: "The server has nothing newer. This is the current build.",
+        found: "There is a newer build. Fetching it now — your data is not touched.",
+        /* The old line here told her to add ?v=2 to the address, which cannot work
+           against a service worker and did not work for her. Never give an
+           instruction that has not been shown to do the thing (rule 23). */
+        cannot: "I could not reach the server to ask. Check your signal and try again — nothing is wrong with the app or your data.",
     }[state];
     return (React.createElement("div", { style: { background: C.chalk, borderRadius: 12, padding: "11px 13px", marginBottom: 12 } },
         React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5 } },
             "This phone is running ",
             React.createElement("strong", { style: { fontWeight: 600 } }, BUILD),
             "."),
-        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 } }, "The app updates itself in the background and usually needs two opens to change over."),
+        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 } }, "It checks the server every time you open it and takes anything newer by itself. Your log, your measurements and your lists are never touched by an update."),
         React.createElement("div", { style: { marginTop: 10 } },
             React.createElement(Btn, { kind: "ghost", onClick: check }, state === "checking" ? "Checking…" : "Check for a newer version")),
         line && (React.createElement("div", { style: { fontSize: 12, color: state === "cannot" ? C.clay : C.moss,
