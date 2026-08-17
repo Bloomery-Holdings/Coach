@@ -249,6 +249,8 @@ const FORMULA_DEFAULTS = {
   briefMornings: 14,       /* mornings of WHOOP in each row                    */
   briefLiftDays: 10,       /* sessions of real loads carried                   */
   briefDayRows: 21,        /* days of the day-by-day record the coach is given  */
+  clockMinSession: 2,      /* minutes the session clock must run to log a session */
+  nameSessionDays: 7,      /* days back the app will still ask what a session was  */
   briefNoteSittings: 8,    /* battery sittings her own wins are quoted from    */
 
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
@@ -4199,7 +4201,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 192";
+const BUILD = "17 August 2026 · 193";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5333,11 +5335,23 @@ const briefDays = (data, coach) => {
     const bits = doneOnDay(data, d, onCard)
       .map((r) => `${r.what}${r.detail ? ` ${r.detail}` : ""}`)
       .filter(Boolean);
+    /* HER REPORT, 17 August: her coach was handed "Session 1 min" and had to
+       work out for itself that it was an artefact. It should not have to. An
+       unnamed session, or one shorter than she says a session can be, is
+       flagged HERE so the coach asks rather than counting it as training
+       (rule 23). */
+    const short = String(l.minutes ?? "").trim() !== ""
+      && Number(l.minutes) > 0
+      && Number(l.minutes) < (Number(F.clockMinSession) || 0);
+    const doubt = l.completed && (l.unnamed || String(l.type || "").trim() === "Session" || short)
+      ? ` <-- ${short ? `only ${l.minutes} min and ` : ""}not named. This is probably the session clock`
+        + ` being tapped, not a session. ASK HER what she did and do not count it as training.`
+      : "";
     const eff = String(l.rpe ?? "").trim() !== "" ? `effort ${l.rpe}/10` : null;
     const felt = l.during === undefined || l.during === null || l.during === ""
       ? null : `felt ${Number(l.during) > 0 ? "+" : ""}${l.during}`;
     const tail = [...bits, eff, felt].filter(Boolean).join(" · ");
-    if (tail) { out.push(`${when} ${tail}`); return; }
+    if (tail) { out.push(`${when} ${tail}${doubt}`); return; }
     /* rule 23: an empty day is stated as empty, never as a rest day and never
        as a day she failed at. Only today and a day she was scheduled to train
        are worth a line of their own; the rest are named in the footer. */
@@ -9828,8 +9842,9 @@ function useCoach(data, day, clock) {
          row saying "how hard was it" cannot say which one it means. Those
          are asked under each session instead. */
       const AT_SESSION = ["rpe", "sets", "during", "felt", "note"];
-      const add = (id, scope, label, done, why, say) =>
-        rows.push({ id, scope, label, done, why, say, atSession: AT_SESSION.includes(id) });
+      const add = (id, scope, label, done, why, say, opts) =>
+        rows.push({ id, scope, label, done, why, say, ...(opts || {}),
+          atSession: AT_SESSION.includes(id) });
 
       /* Before anything else: how often does she actually want to train? Every
          count in the app is a share of this, so guessing it makes every other
@@ -9987,6 +10002,41 @@ function useCoach(data, day, clock) {
           goalCheckDue.length === 1
             ? `Try "${goalCheckDue[0].text}" this week and tell me how close it is now.`
             : "A couple of your goals are due a score. Try them and tell me where they are.");
+
+      /* HER REPORT, 17 August. A day carrying a session the app named itself —
+         "Session", with no class and sometimes a single minute off the clock —
+         is a day where the app knows something happened and knows nothing about
+         it. It asks. Her answer settles it and nothing is rewritten in the
+         meantime (rules 20, 23, 33).
+
+         Past days only: today has its own row two hundred lines above, and two
+         rows asking about one day is rule 33's fault in miniature. */
+      const nameBack = Math.max(1, Number(FX.nameSessionDays) || 7);
+      const toName = Object.keys(logs).filter((d) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d >= t || d < addDays(t, -nameBack)) return false;
+        const dl = logs[d] || {};
+        if (!dl.completed || dl.rest) return false;
+        /* Once she has answered, the row is done — for good. Rule 4's failure
+           mode is persistence that reads as pressure, and a row that comes back
+           after she has answered it is nagging. */
+        if (dl.named) return false;
+        const mins = Number(dl.minutes);
+        const tooShort = String(dl.minutes ?? "").trim() !== "" && mins > 0
+          && mins < (Number(FX.clockMinSession) || 0);
+        return !!dl.unnamed || String(dl.type || "").trim() === "Session" || tooShort;
+      }).sort().reverse();
+      if (toName.length) {
+        const d0 = toName[0];
+        const nm = dayName(d0) || d0;
+        add("namesession", "day",
+          toName.length === 1 ? `What ${nm}'s session was` : `${toName.length} sessions I could not name`,
+          false,
+          "The app logged that something happened on this day but never got a name for it — usually the session clock being tapped, or a session marked done before there was a class to attach to it. Until it has a name it is a minute in your record that nobody can read, and it is the kind of thing the next month gets designed from. Tell me what it was and it becomes a real session; leave it and I will keep it as it is rather than guessing.",
+          toName.length === 1
+            ? `${nm} has a session on it that I could not name. What did you actually do?`
+            : `There are ${toName.length} sessions in your record I could not name. What was the most recent one?`,
+          { dates: toName });
+      }
 
       const due = rows.filter((r) => !r.done);
       const dueHere = due.filter((r) => !r.atSession);   /* what "Needs you" may show */
@@ -10516,6 +10566,10 @@ function useCoach(data, day, clock) {
       profile, profileBelieved, observed, whyEntries, confidenceOf, whyDue,
       WHY_TREES, whyTree, whyReason, whyLabel, whyTag,
       daysSinceMovement, movedDays28, touchedDays28, stillMoving, cueConsistency, habitStrength, weeksTraining, barrierWins, affectMean, afterMean, givesBack, affectByClass, therapy28, supportResponse, reactiveResponse, THERAPIES, importGap, importDue, lastImport, whoopDay, isWhoopDay, whoopDaysLate, nextWhoopDay, lastWhoopDay, trainedYesterday, shoulderAM, shoulderVerdict, shoulderAMTrend, program, programPhases, livePhase, nowMins, nowLabel, part, wokeRaw, wokeMins, minsAwake, justWoke, awakeLabel,
+      /* her thresholds, merged — FORMULA_DEFAULTS under settings.formulas.
+         Added at build 193 because SessionClock needs clockMinSession and takes
+         no data prop. Every threshold in the app is hers (rule 12). */
+      F: FX,
       batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
@@ -12820,18 +12874,47 @@ function SessionClock({ log, write, coach }) {
 
   const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
   const nevermind = () => write({ sessionClock: undefined });
+  /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
+     'Session 1 min.'" and called it a logging artefact. It was.
+
+     This line used to be `Math.max(1, Math.round(mins))`. Started and stopped
+     a few seconds apart — by accident, or to see what the button does — it
+     banked a MINUTE THAT DID NOT HAPPEN and stamped the day as a completed
+     session. Rule 23: a fallback that substitutes a plausible figure for a real
+     one is a bug, not a kindness.
+
+     So it banks what it measured, and under her own `clockMinSession` it writes
+     no session at all. The clock's own record is kept either way, so the seconds
+     are not lost and she can still say what it was. */
   const done = () => {
-    const m = Math.max(1, Math.round(mins));
+    /* SessionClock takes no data prop; the merged thresholds ride on coach.F,
+       which is FORMULA_DEFAULTS with her overrides already folded in. */
+    const F = (coach && coach.F) || FORMULA_DEFAULTS;
+    const floor = Math.max(0, Number(F.clockMinSession) || 0);
+    const m = Math.round(mins);
+    const startMins = new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes();
+    const slot = startMins < 690 ? "morning" : startMins < 990 ? "midday" : "evening";
+    const stopped = { ...clock, stoppedAt: Date.now(), ranSecs: Math.round(mins * 60) };
+
+    if (m < floor) {
+      /* NOT A SESSION, AND SAID SO. Nothing is written onto the day except the
+         clock's own record — no completed, no minutes, no invented name. */
+      write({ sessionClock: { ...stopped, tooShort: true } });
+      return;
+    }
     const already = Number(log?.minutes) || 0;
     /* Review card 30: the slot comes from when she pressed Start — no tap
        needed. Anything she sets by hand stays hers (the || keeps it). */
-    const startMins = new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes();
-    const slot = startMins < 690 ? "morning" : startMins < 990 ? "midday" : "evening";
     write({
-      sessionClock: { ...clock, stoppedAt: Date.now() },
+      sessionClock: stopped,
       completed: true,
       minutes: String(log?.completed ? already + m : m),
       type: log?.type || coach.prescribed?.name || "Session",
+      /* "Session" is not a name. During calibration nothing is prescribed by
+         design, so that fallback always lands on the bare word — and the app
+         then told her coach a session happened while knowing nothing about it.
+         The flag says so, the coach is told, and Needs you asks her. */
+      ...(log?.type || coach.prescribed?.name ? {} : { unnamed: true }),
       when: log?.when || slot,
     });
   };
@@ -12849,6 +12932,15 @@ function SessionClock({ log, write, coach }) {
                 opens every day. */}
             <span style={{ flex: 1, minWidth: 0 }}>
               <Eyebrow>Today's session</Eyebrow>
+              {/* HER REPORT, 17 August. Pressing Done after a few seconds used
+                  to log a one-minute session. It declines now, and a control
+                  that declines has to say so or it reads as broken (rule 11). */}
+              {clock && clock.tooShort && (
+                <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginTop: 3 }}>
+                  The clock only ran {clock.ranSecs || 0}s, so I have not logged that as a session.
+                  Start it again, or tell me below what you actually did.
+                </div>
+              )}
             </span>
             <Btn kind="signal" onClick={begin}>Start</Btn>
           </>
@@ -17471,6 +17563,8 @@ function Formulas({ data, setData, close }) {
     { title: "How much history your summary carries", note: "Your summary is what your coach is given every time you talk to it, and it stays the same size however many months you add — because each measure is one row that grows sideways by a number, not a new paragraph. These say how far back each row reaches. Longer rows see further and cost a few more words; shorter ones are cheaper and blinder.",
       rows: [["briefMornings", "Mornings of WHOOP in each row"],
              ["briefDayRows", "Days of your day-by-day record your coach is given"],
+             ["clockMinSession", "Minutes the session clock must run before it logs a session"],
+             ["nameSessionDays", "Days back the app will still ask what a session was"],
              ["briefLiftDays", "Sessions of real loads carried"],
              ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
 
@@ -19692,6 +19786,51 @@ function NeedsYou({ data, setData, coach, setSheet, write, log, openQuiet }) {
   /* the control that belongs to each row, actionable where it sits */
   const control = (r) => {
     switch (r.id) {
+      /* HER REPORT, 17 August: "Monday 17 August shows Session 1 min." The app
+         logged that something happened and never got a name for it. It asks
+         here, where the question is (rule 11), and her answer settles it
+         (rule 33). Nothing is rewritten without her (rule 20). */
+      case "namesession": {
+        const d0 = (r.dates || [])[0];
+        if (!d0) return null;
+        const dl = (data.logs || {})[d0] || {};
+        const nameless = !!dl.unnamed || String(dl.type || "").trim() === "Session";
+        const put = (patch) => setData((x) => ({ ...x, logs: { ...(x.logs || {}),
+          [d0]: { ...((x.logs || {})[d0] || {}), ...patch } } }));
+        if (doing !== "namesession")
+          return chip("say what it was", () => act("namesession"), true, "namesession");
+        return (
+          <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
+            <Field label={"What " + (dayName(d0) || d0) + " actually was"}
+              unit="the class, or what you did" type="text"
+              value={nameless ? "" : (dl.type || "")}
+              onChange={(v) => put({ type: v,
+                ...(String(v || "").trim() ? { unnamed: false, named: today() } : {}) })} />
+            <Field label="Minutes" unit="if you know them"
+              value={String(dl.minutes ?? "")}
+              onChange={(v) => put({ minutes: String(v) })} />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              {/* IT WASN'T A SESSION. Set aside, dated, reversible — never
+                  deleted (rule 20). */}
+              <button onClick={() => { put({ completed: false, named: today(),
+                voidedSession: { completed: true, type: dl.type, minutes: dl.minutes,
+                  voidedOn: today(), why: "she said this was not a session" } });
+                act("namesession"); }}
+                className="tap" aria-label="it was not a session — namesession"
+                style={{ padding: "7px 11px", borderRadius: 8, cursor: "pointer",
+                  fontSize: 11.5, fontWeight: 600, border: "1.5px solid " + C.line,
+                  background: C.chalk, color: C.muted, fontFamily: "inherit" }}>
+                it wasn't a session
+              </button>
+              <Btn kind="quiet" onClick={() => act("namesession")}>close</Btn>
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.5, color: C.muted }}>
+              Nothing is deleted either way. Set aside, it stays on your record, dated, and comes
+              back if you want it.
+            </div>
+          </div>
+        );
+      }
       case "rhythm":   return chip(doing === "rhythm" ? "close" : "set it", () => act("rhythm"), doing !== "rhythm", "rhythm");
       case "recovery": return (
         /* AUDIT ITEM 9 (rule 11): this committed on blur only — the same
