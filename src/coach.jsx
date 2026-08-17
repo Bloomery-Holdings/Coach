@@ -2541,6 +2541,27 @@ const SCOPE_DEFAULT = { kind: "months", n: 6 };
    different questions: a read designs a month and wants the arc; a chat
    answers what she just asked. */
 const CHAT_SCOPE_DEFAULT = { kind: "months", n: 6 };
+/* HER INSTRUCTION, 16 August: how far back the running history keeps DETAIL.
+   Everything by default — she has months of it, not years, and the thing this
+   exists for is the year from now. */
+const MEMORY_SCOPE_DEFAULT = SCOPE_ALL;
+
+/* What the fold is told about her span. It is never an instruction to DROP
+   anything: older material is compressed into shape, and the previous version
+   of the memory is kept on her device either way (rule 20). */
+const memorySpanRule = (scope) => {
+  const s = scope || MEMORY_SCOPE_DEFAULT;
+  if (!s || s.kind === "all" || !Number(s.n)) return "";
+  return `
+
+HOW FAR BACK SHE HAS ASKED YOU TO KEEP DETAIL: ${scopeLabel(s)}.
+Everything inside that window keeps its detail — what she said, what moved, what you decided.
+Everything OLDER than it is compressed into a short arc: a few lines saying where she started,
+what changed and when, and anything still true about her that would be wrong to forget — an
+injury, a decision she made, something she will not do. Never DELETE the older period and never
+pretend it did not happen; make it shorter, not absent. If something old is still live — a
+constraint, a goal, an open thing — it stays in full however old it is.`;
+};
 const scopeReady = (s) => !s || s.kind === "all" || Number(s.n) > 0;
 const scopeLabel = (s) => {
   if (!s || s.kind === "all") return "everything";
@@ -4130,7 +4151,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 187";
+const BUILD = "16 August 2026 · 188";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4372,6 +4393,8 @@ const BLANK = {
        says. null means the summary only. She asked for this to be its own
        control with its own window, independent of everything else. */
     wordsScope: null,
+    /* how far back the running history keeps detail — hers, 16 August */
+    memoryScope: null,
     /* The weekday the WHOOP export gets asked for. 6 is Saturday, which she
        chose because it is the start of her week. A fixed cue rather than a
        rolling gap: the whole point is that it lands on the same day. */
@@ -21468,6 +21491,15 @@ function SummaryTables({ data, coach, setSheet }) {
 function SummarySheet({ data, setData, coach, setSheet, close }) {
   const wordsOn = !!data.settings?.wordsScope;
   const wordsScope = data.settings?.wordsScope || { kind: "days", n: 7 };
+  /* HER INSTRUCTION, 16 August: how far back the running history keeps
+     detail. Null means everything, which is where she starts. */
+  const memScope = data.settings?.memoryScope || MEMORY_SCOPE_DEFAULT;
+  const setMemScope = (sc) => setData((d) => ({ ...d,
+    settings: { ...(d.settings || {}), memoryScope: sc } }));
+  const memWords = (() => {
+    const b = memoryBlock(data);
+    return b.trim() ? b.trim().split(/\s+/).length : 0;
+  })();
   const cut = wordsOn && scopeReady(wordsScope) ? scopeCutoff(wordsScope, coach.t) : null;
   const full = data.settings?.payload === "everything";
 
@@ -21558,6 +21590,49 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
               A month of your writing costs about 6c a message on top. Your words are not what makes
               this expensive — relaying everything else was.
             </div>
+          </div>
+        )}
+      </Card>
+
+      {/* ---- HOW FAR BACK THE RUNNING HISTORY KEEPS DETAIL -----------------
+          HER INSTRUCTION, 16 August: "we need to work out a decision about how
+          far should the summary go backwards. if we keep saving everything to
+          the summary, a year from now will be too expensive."
+
+          She is right about the direction and wrong about the size, and both
+          are worth saying to her here rather than in a message she scrolls
+          past. Everything she LOGS is compressed into fixed tables — forty
+          extra battery sittings move the summary three per cent. The one
+          thing that grows is this: the coach's running account of her.
+
+          Her choice, asked: keep detail for a span, compress older into an
+          arc. Never a deletion — see memorySpanRule. */}
+      <Card style={{ marginBottom: 14 }}>
+        <Eyebrow>How far back it remembers</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.5, margin: "4px 0 10px" }}>
+          Everything you log, measure, import and say is folded into one running account after
+          every conversation — by itself, with nothing for you to tap. It travels with every
+          message.{" "}
+          {memWords
+            ? `It is ${memWords} words today.`
+            : "Nothing has been folded into it yet."}
+          {" "}Your batteries, WHOOP and lists don't grow the summary — they are compressed into
+          tables the same size every day. This is the only part that grows.
+        </div>
+        <ScopePicker scope={memScope} onPick={(sc) => setMemScope(sc && sc.kind === "all" ? null : sc)} />
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+          {!memScope || memScope.kind === "all"
+            ? "Keeping all of it, in as much detail as it is worth. Set a span here when it starts feeling long, and anything older gets squeezed into a few lines rather than dropped."
+            : `Full detail for ${scopeLabel(memScope)}. Anything older becomes a short arc — where you started, what changed and when, and anything still true about you: an injury, a decision, something you will not do. Nothing is deleted, and every earlier version of it is still on your phone.`}
+        </div>
+        {/* HER QUESTION, 16 August: "can I call it back from archive?" Yes —
+            and the answer belongs beside the control that raises the question,
+            not on a screen she has to go looking for (rule 11). */}
+        {setSheet && (
+          <div style={{ marginTop: 11 }}>
+            <Btn kind="quiet" onClick={() => setSheet({ kind: "memory" })}>
+              Read it, and every earlier version →
+            </Btn>
           </div>
         )}
       </Card>
@@ -23260,7 +23335,12 @@ Two or three sentences unless she asks for more.`;
           messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
       })() };
       const text = await askModel({
-        apiKey: key, system: MEMORY_SYSTEM, maxTokens: 3000, usage: spent,
+        apiKey: key, usage: spent, maxTokens: 3000,
+        secs: formulas(data.settings).callSecs,
+        /* HER INSTRUCTION, 16 August. The span rides with the system prompt so
+           the memory is WRITTEN to it, rather than being cut on the way out —
+           a cut would lose things; a compression keeps their shape. */
+        system: MEMORY_SYSTEM + memorySpanRule(data.settings?.memoryScope),
         messages: [{ role: "user", content: memoryInput(withChat, coach) }],
       });
       if (!text || !String(text).trim()) return;      /* rule 23: no fold is not an empty fold */
