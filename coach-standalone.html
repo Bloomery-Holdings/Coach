@@ -4325,7 +4325,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 188";
+const BUILD = "16 August 2026 · 189";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -13396,23 +13396,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                             fontSize: 11, color: C.muted,
                         } }, "undo")))));
         })(),
-        isToday && coach.leading.length > 0 && (React.createElement(Card, { style: {
-                background: coach.leading[0].tone === "firm" ? "rgba(194,84,47,0.07)"
-                    : coach.leading[0].tone === "warm" ? C.mint : C.pist,
-            } },
-            React.createElement("div", { style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 } },
-                React.createElement(Eyebrow, { color: coach.leading[0].tone === "firm" ? C.clay
-                        : coach.leading[0].tone === "warm" ? C.moss : C.signal }, "Your coach"),
-                React.createElement("span", { className: "mono", style: { fontSize: 9, letterSpacing: "0.11em",
-                        textTransform: "uppercase", color: C.muted } }, SCOPE_LABEL[coach.leading[0].scope] || "today")),
-            React.createElement("div", { style: { fontSize: 15.5, lineHeight: 1.5, color: C.ink } }, coach.leading[0].text),
-            React.createElement("div", { style: { marginTop: 14 } },
-                React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "chat" }) }, "Talk to your coach")),
-            coach.agenda.length > 1 && (React.createElement("div", { style: { marginTop: 8 } },
-                React.createElement(Btn, { kind: "quiet", onClick: () => setSheet({ kind: "briefing" }) },
-                    "Everything your coach is watching (",
-                    coach.agenda.length,
-                    ")"))))),
+        isToday && (React.createElement(Card, null,
+            React.createElement(Btn, { kind: "signal", onClick: () => setSheet({ kind: "chat" }) }, "Talk to your coach"))),
         isToday && React.createElement(AchievedCard, { data: data, setData: setData, coach: coach, setSheet: setSheet }),
         isToday && (() => {
             var _a;
