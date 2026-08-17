@@ -4203,7 +4203,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 197";
+const BUILD = "17 August 2026 · 198";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -19092,12 +19092,35 @@ function BackupNowButton({ data, label = "Back up now" }) {
   );
 }
 
-function MicButton({ onText, current }) {
+function MicButton({ onText, current, sentAt }) {
   const base = useRef("");
   const [showWhy, setShowWhy] = useState(false);
   const { listening, supported, toggle, problem } = useDictation((heard) => {
     onText((base.current ? base.current + " " : "") + heard);
   });
+
+  /* HER REPORT, 17 August: "when it is a long message it does not delete from
+     the text box after i send it."
+
+     Send clears the box, but a dictation she never stopped is still running,
+     and its next result writes the WHOLE transcript back — everything she just
+     sent, plus the next word out of her mouth. Long messages hit it because a
+     long dictation still has results in flight when her thumb reaches Send.
+
+     So sending consumes it: the mic stops and its accumulated text is dropped,
+     and text she has already sent can never be written back into the box
+     (rule 22 — dictation is idempotent). The effect sits above the early return
+     below so the hooks always run in the same order.
+
+     The sentAt prop is optional: every other box in the app passes nothing
+     and is completely unaffected (rule 2). */
+  const lastSent = useRef(sentAt);
+  useEffect(() => {
+    if (sentAt === undefined || sentAt === lastSent.current) return;
+    lastSent.current = sentAt;
+    base.current = "";
+    if (listening) toggle();
+  }, [sentAt, listening]);
 
   /* If dictation can't run, say so when tapped rather than silently vanishing.
      A missing button looks like a broken app. */
@@ -23922,6 +23945,9 @@ Two or three sentences unless she asks for more.`;
       folding.current = false;
     }
   };
+  /* HER REPORT, 17 August. Stamped on every send so the mic knows what she has
+     already said is spoken for. */
+  const [sentAt, setSentAt] = useState(0);
   const send = async () => {
     const text = draft.trim();
     if ((!text && !photo) || busy) return;
@@ -23930,6 +23956,8 @@ Two or three sentences unless she asks for more.`;
     const next = [...msgs, { role: "user", content: text, at: Date.now(), ...(photo ? { image: photo } : {}) }];
     setMsgs(next); setDraft(""); setPhoto(null); setBusy(true);
     setData((d) => ({ ...d, chatDraft: "" }));
+    /* the mic lets go of it at the same moment the box does */
+    setSentAt(Date.now());
     /* Save what SHE said — photo included — before anything can fail. */
     persist(next);
     try {
@@ -24472,7 +24500,8 @@ Two or three sentences unless she asks for more.`;
             placeholder="Say it, or hold the mic"
             style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45,
               maxHeight: "32vh", overflowY: "auto" }} />
-          <MicButton onText={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
+          <MicButton sentAt={sentAt}
+            onText={(v) => { setDraft(v); setData((d) => ({ ...d, chatDraft: v })); }}
             current={draft} />
           <button onClick={send} disabled={busy || (!draft.trim() && !photo)} className="tap" style={{
             padding: "13px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600,
