@@ -4151,7 +4151,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 188";
+const BUILD = "16 August 2026 · 189";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -13937,36 +13937,31 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           that, never before it. The order of this page is the order of her
           morning: how she is, then the coach answering it, then the long
           look back if she wants one. */}
-      {isToday && coach.leading.length > 0 && (
-        <Card style={{
-          background: coach.leading[0].tone === "firm" ? "rgba(194,84,47,0.07)"
-            : coach.leading[0].tone === "warm" ? C.mint : C.pist,
-        }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-            <Eyebrow color={coach.leading[0].tone === "firm" ? C.clay
-              : coach.leading[0].tone === "warm" ? C.moss : C.signal}>Your coach</Eyebrow>
-            <span className="mono" style={{ fontSize: 9, letterSpacing: "0.11em",
-              textTransform: "uppercase", color: C.muted }}>
-              {SCOPE_LABEL[coach.leading[0].scope] || "today"}
-            </span>
-          </div>
+      {/* THE SENTENCE IS GONE. Her instruction, 16 August: "remove the
+          sentence above talk to your coach. it didn't change and I don't want
+          it." She had asked once before for it to be made variable or removed;
+          build 164 gave it a rotation and it still read the same to her, so
+          she has taken the other option (rule 1).
 
-          {/* ONE line, not three. The rest is behind the button — her words:
-              "I just want a tab to talk to your coach. And if there is
-              something that I need to see that the coach needs to tell me,
-              that's when something comes up." */}
-          <div style={{ fontSize: 15.5, lineHeight: 1.5, color: C.ink }}>{coach.leading[0].text}</div>
+          The scope chip went with it — it said which horizon the sentence came
+          from, and there is no sentence. And the CARD no longer waits for a
+          line to exist: this is the only door into the chat anywhere on this
+          page, so gating it on something invisible would have taken her coach
+          off her landing page on a quiet day.
 
-          <div style={{ marginTop: 14 }}>
-            <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
-          </div>
-          {coach.agenda.length > 1 && (
-            <div style={{ marginTop: 8 }}>
-              <Btn kind="quiet" onClick={() => setSheet({ kind: "briefing" })}>
-                Everything your coach is watching ({coach.agenda.length})
-              </Btn>
-            </div>
-          )}
+          `coach.leading` is still computed, still rotated, still cooled off, and
+          still reaches the coach itself — nothing about what it knows changed.
+          Only this one line on this one card is gone. */}
+      {isToday && (
+        <Card>
+          {/* HER CLARIFICATION, 16 August: "keep only 'talk to your coach'
+              tab." Nothing above it — the sentence and the heading both go. */}
+          <Btn kind="signal" onClick={() => setSheet({ kind: "chat" })}>Talk to your coach</Btn>
+          {/* "Everything your coach is watching" removed on her instruction,
+              16 August. The agenda itself is untouched — still computed, still
+              what the coach leads from, still in every payload. Anything that
+              actually asks her something is in Needs you, and the conversation
+              opens with the coach already talking (rule 3). */}
         </Card>
       )}
 
