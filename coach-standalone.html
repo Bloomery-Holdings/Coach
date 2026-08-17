@@ -526,14 +526,25 @@ const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
     return { ...band, base, threshold: base + offs[i < 0 ? 3 : i] };
 };
 /* --- confidence: how she rates herself decides how ambitious to be --------- */
+/* HER REPORT, 16 August: "I am getting conflicting messages, pull back and
+   confident stay where u are."
+
+   These three lines used to end in instructions — "Good week to move a
+   variable", "Keep things where they are", "Simplify". But confidence is not
+   a verdict, it is one of the FIVE signals the week's call is computed from,
+   and the call has already weighed it. Printing it as a second instruction
+   let an ingredient contradict the dish, which is exactly what she saw.
+
+   They describe the signal now. What to DO about the week is said once, by
+   the verdict, which is the thing that has looked at all five. */
 const confidenceRule = (c, F = FORMULA_DEFAULTS) => {
     if (c === null || isNaN(c))
         return null;
     if (c >= F.confidenceHigh)
-        return { key: "up", line: "Confidence is high. Good week to move a variable." };
+        return { key: "up", line: "your confidence was high" };
     if (c >= F.confidenceSteady)
-        return { key: "hold", line: "Confidence is steady. Keep things where they are." };
-    return { key: "down", line: "Confidence is low. Simplify — fewer variables, cleaner sessions." };
+        return { key: "hold", line: "your confidence was steady" };
+    return { key: "down", line: "your confidence was low" };
 };
 /* --- trend: weekly averages only. Never compare one day to another. -------- */
 const trendOf = (series) => {
@@ -4365,7 +4376,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 190";
+const BUILD = "16 August 2026 · 191";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -13760,7 +13771,10 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement("div", { className: "disp", style: { fontSize: 17, fontWeight: 700, marginBottom: 4,
                             color: coach.verdict.key === "reduce" ? C.clay : coach.verdict.key === "advance" ? C.signal : C.ink } }, coach.verdict.label),
                     React.createElement("div", { style: { fontSize: 13, lineHeight: 1.5, color: C.muted } }, coach.verdict.line),
-                    coach.confidence && (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` } }, coach.confidence.line)),
+                    coach.confidence && (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` } },
+                        "One of the five signals behind that: ",
+                        coach.confidence.line,
+                        ".")),
                     coach.health && (React.createElement("div", { style: { marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}`, display: "flex", alignItems: "baseline", gap: 8 } },
                         React.createElement("span", { className: "mono", style: { fontSize: 22, color: C.ochre } }, coach.health.score),
                         React.createElement("span", { style: { fontSize: 12, color: C.muted, lineHeight: 1.4 } },
