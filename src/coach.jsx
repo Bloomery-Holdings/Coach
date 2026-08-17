@@ -464,11 +464,22 @@ const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
 };
 
 /* --- confidence: how she rates herself decides how ambitious to be --------- */
+/* HER REPORT, 16 August: "I am getting conflicting messages, pull back and
+   confident stay where u are."
+
+   These three lines used to end in instructions — "Good week to move a
+   variable", "Keep things where they are", "Simplify". But confidence is not
+   a verdict, it is one of the FIVE signals the week's call is computed from,
+   and the call has already weighed it. Printing it as a second instruction
+   let an ingredient contradict the dish, which is exactly what she saw.
+
+   They describe the signal now. What to DO about the week is said once, by
+   the verdict, which is the thing that has looked at all five. */
 const confidenceRule = (c, F = FORMULA_DEFAULTS) => {
   if (c === null || isNaN(c)) return null;
-  if (c >= F.confidenceHigh) return { key: "up",   line: "Confidence is high. Good week to move a variable." };
-  if (c >= F.confidenceSteady) return { key: "hold", line: "Confidence is steady. Keep things where they are." };
-  return { key: "down", line: "Confidence is low. Simplify — fewer variables, cleaner sessions." };
+  if (c >= F.confidenceHigh) return { key: "up",   line: "your confidence was high" };
+  if (c >= F.confidenceSteady) return { key: "hold", line: "your confidence was steady" };
+  return { key: "down", line: "your confidence was low" };
 };
 
 /* --- trend: weekly averages only. Never compare one day to another. -------- */
@@ -4187,7 +4198,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "16 August 2026 · 190";
+const BUILD = "16 August 2026 · 191";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -14778,9 +14789,13 @@ function Today({ data, setData, coach, setSheet, goTab }) {
             {coach.verdict.label}
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted }}>{coach.verdict.line}</div>
+          {/* HER REPORT, 16 August. This sat under the verdict with nothing
+              saying how the two related, so it read as a second opinion
+              arguing with the first. It is one of the five things the verdict
+              was computed FROM, and it says so. */}
           {coach.confidence && (
             <div style={{ fontSize: 12.5, lineHeight: 1.5, color: C.muted, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
-              {coach.confidence.line}
+              One of the five signals behind that: {coach.confidence.line}.
             </div>
           )}
           {coach.health && (
