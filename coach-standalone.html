@@ -4595,7 +4595,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 219";
+const BUILD = "18 August 2026 · 220";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -25320,7 +25320,7 @@ const bwOps = {
             }] }),
     putAreaBack: (d, pgId) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => (pg.id !== pgId ? pg : { ...pg, status: "active", removedOn: undefined })) }),
 };
-function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
+function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
     /* HER INSTRUCTION, 11 August: "put the lists under the area's tab — I
        don't want it loose, I keep scrolling. When I touch the tab it opens
        List one, List two, List three, with the name of the list, and it tells
@@ -25337,8 +25337,20 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
     /* HER REPORT, 16 August. The AREA's own fold, which is a different thing
        from which list is open inside it — restoring one without the other put
        her back exactly where she started. */
-    const [unfolded, setUnfolded] = useState(() => sentHere
+    /* AND A TAB SHE TAPPED IS A TAB SHE IS LOOKING AT (build 220). The chip row
+       and this card carry the same words, so tapping the chip filtered the page
+       to this area and left it shut — a title, a count, and every control she
+       asked for hidden behind a triangle. See the note on build 220. */
+    const [unfolded, setUnfolded] = useState(() => sentHere || !!alone
         || !!(placeFresh() && (readPlace().unfolded || {})[prog.id]));
+    /* she can still shut it; what this stops is it being shut when she has just
+       singled it out */
+    const wasAlone = useRef(alone);
+    useEffect(() => {
+        if (alone && !wasAlone.current)
+            setUnfolded(true);
+        wasAlone.current = alone;
+    }, [alone]);
     useEffect(() => {
         writePlace({ unfolded: { ...(readPlace().unfolded || {}), [prog.id]: unfolded } });
     }, [unfolded, prog.id]);
@@ -25468,7 +25480,8 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                 " of ",
                 lists.length,
                 " this round",
-                st.round > 0 ? ` · round ${st.round + 1}` : "")),
+                st.round > 0 ? ` · round ${st.round + 1}` : "",
+                React.createElement("span", { style: { display: "block", color: C.signal, fontWeight: 600 } }, unfolded ? "tap to close" : "tap to open · rename, add, move"))),
         unfolded && prog.line && (React.createElement("div", { style: { fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "8px 0 12px" } }, prog.line)),
         unfolded && (React.createElement("div", null,
             st.roundComplete && (React.createElement(Card, { style: { background: C.mint, marginBottom: 12 } },
@@ -25809,7 +25822,10 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
             React.createElement(DrillsCard, { coach: coach, setSheet: setSheet, data: data, setData: setData }))),
         progs
             .filter((prog) => showing === "all" || showing === prog.id)
-            .map((prog) => (React.createElement(BodyWorkProgramme, { key: prog.id, prog: prog, data: data, setData: setData, coach: coach, setSheet: setSheet }))),
+            .map((prog) => (React.createElement(BodyWorkProgramme, { key: prog.id, prog: prog, data: data, setData: setData, coach: coach, setSheet: setSheet, 
+            /* SHE SINGLED THIS ONE OUT, SO SHE IS LOOKING AT IT (build 220).
+               Tapping a chip used to filter the page and leave the card shut. */
+            alone: showing === prog.id || progs.length === 1 }))),
         showing === "all" && (React.createElement("button", { onClick: () => setData((d) => bwOps.addArea(d, coach.t)), className: "tap", style: {
                 border: `1.5px dashed ${C.line}`, borderRadius: 12, background: "transparent",
                 cursor: "pointer", padding: "12px 0", width: "100%", marginBottom: 14,
