@@ -2428,6 +2428,20 @@ const reviewPayload = (data, coach, cut) => {
                characters under a promise of "in full". Rule 15: no caps. */
             r.interpretation ? `  what you said her numbers were doing: ${String(r.interpretation)}` : null,
             r.reasoning ? `  your reasoning at the time: ${String(r.reasoning)}` : null,
+            /* AUDIT OF 18 AUGUST, FINDING 16. The window preamble tells the model
+               that what it concluded before is "always given to you in full", and
+               this block sent the interpretation, the reasoning and the profile and
+               DROPPED the four things rule 8 says every read must return and may
+               never cap: the conclusions, the advice, the focus and the rules.
+      
+               It was not trimming them. It had never sent them. So every read after
+               the first was told to build on judgements it could not see, and the
+               one sentence that would have made that visible asserted the opposite.
+               Uncapped, like everything else here. */
+            (r.conclusions || []).length ? `  WHAT YOU CONCLUDED: ${(r.conclusions || []).join(" | ")}` : null,
+            (r.advice || []).length ? `  what you advised her to do: ${(r.advice || []).join(" | ")}` : null,
+            (r.focus || []).length ? `  where you said the work should go: ${(r.focus || []).join(" | ")}` : null,
+            (r.rules || []).length ? `  the rules you set until the next read: ${(r.rules || []).join(" | ")}` : null,
             (r.profile || []).length ? `  what you concluded about her: ${(r.profile || []).map((p) => p.claim).join("; ")}` : null,
         ].filter(Boolean).join("\n")).join("\n");
     }));
@@ -2754,13 +2768,30 @@ const scopeCutoff = (s, t) => {
     if (!s || s.kind === "all")
         return "all";
     const n = Math.max(1, Number(s.n) || 1);
+    /* OFF BY ONE, EVERY WINDOW (build 203). Consumers test `date >= cut`, so
+       the cutoff has to be the FIRST day inside the window, not the day before
+       it. "The last 1 day" returned yesterday's date and therefore sent
+       yesterday AND today — two days under a label that said one. Every other
+       window was a day wide for the same reason.
+  
+       It matters most exactly where she cares most: she narrows the window to
+       cut cost, and the narrowest setting she can choose was doubling. */
     if (s.kind === "days")
-        return addDays(t, -n);
+        return addDays(t, -(n - 1));
     if (s.kind === "weeks")
-        return addDays(t, -7 * n);
+        return addDays(t, -(7 * n - 1));
+    /* AND MONTHS OVERFLOWED. setMonth on the 31st rolls forward into the next
+       month — 31 March minus one month is 3 March in JavaScript, not 28
+       February — so a month-end window silently reached the wrong way. Clamp to
+       the last valid day of the target month, then step in by one so the
+       boundary matches the day rule above. */
     const d = parse(t);
+    const dom = d.getDate();
+    d.setDate(1);
     d.setMonth(d.getMonth() - n);
-    return iso(d);
+    const lastOfTarget = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(dom, lastOfTarget));
+    return addDays(iso(d), 1);
 };
 const narrowTo = (data, scope, t) => {
     const cut = scopeCutoff(scope, t);
@@ -2778,12 +2809,31 @@ const narrowTo = (data, scope, t) => {
             out[k] = obj[k]; });
         return out;
     };
+    /* A SITTING IS KEYED BY THE DAY ITS WEEK STARTS, and byDate compared that
+       start against the cutoff — so the battery she took THIS WEEK vanished
+       from any window shorter than the distance back to the week's start. Ask
+       for the last two days on a Wednesday and Saturday's battery was gone,
+       which is precisely the measurement rule 15 says a window may never trim.
+       A week is inside the window if any of its seven days is. */
+    const byWeek = (obj) => {
+        const out = {};
+        Object.keys(obj || {}).forEach((k) => {
+            const start = String(k).slice(0, 10);
+            if (start >= cut || addDays(start, 6) >= cut)
+                out[k] = obj[k];
+        });
+        return out;
+    };
     return {
         ...data,
         logs: byDate(data.logs), morning: byDate(data.morning),
-        weekly: byDate(data.weekly), mobility: byDate(data.mobility),
+        /* week-keyed, not day-keyed — see byWeek above */
+        weekly: byWeek(data.weekly), mobility: byWeek(data.mobility),
         monthly: byMonth(data.monthly),
         bwlog: byDate(data.bwlog),
+        /* her kept daily notes were never narrowed by anything, so a one-day
+           window still sent every note she had ever kept */
+        notes: byDate(data.notes),
         chats: (data.chats || []).filter((c) => !c.date || String(c.date) >= cut),
         journal: (data.journal || []).filter((j) => !j.date || String(j.date) >= cut),
         /* open issues survive any window — a thing she has not closed is current */
@@ -4388,7 +4438,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 202";
+const BUILD = "18 August 2026 · 203";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -6108,6 +6158,16 @@ const briefText = (data, coach, opts) => {
     lines.push(COACH_VOICE);
     lines.push("");
     lines.push("=== HER SUMMARY ===");
+    /* WHICH WINDOW BUILT THIS (build 203). Rule 23: if the dated history below
+       stops somewhere, say where, so a window she chose is never read as an
+       absence and never guessed at. */
+    if (opts && opts.windowLabel) {
+        lines.push(`The dated history below covers ${opts.windowLabel} — HER INSTRUCTION, not a gap.`);
+        lines.push("Everything older is safe on her device and she has simply not asked you to read it here.");
+        lines.push("Her goals, her open record, anything paused and every stand-in are ALWAYS below whatever");
+        lines.push("window she sets. If an answer genuinely needs more history, say which and tell her she can");
+        lines.push("widen it under \"talk to your coach\".");
+    }
     lines.push("THIS IS A SUMMARY, AND YOU MUST TREAT IT AS ONE. It is her whole history compressed into");
     lines.push("numbers on purpose, because sending it all in full was costing her real money. Everything");
     lines.push("here is true and computed from what she entered. But it is not her exact words, and where");
@@ -20549,13 +20609,30 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
        breakdown she taps and the thing the coach receives can never be three
        different answers. */
     const payloadStable = () => {
-        var _a, _b;
+        var _a, _b, _c;
         if ((((_a = data.settings) === null || _a === void 0 ? void 0 : _a.payload) || "summary") === "everything")
             return context();
         const sc = (_b = data.settings) === null || _b === void 0 ? void 0 : _b.wordsScope;
         const cut = sc && scopeReady(sc) ? scopeCutoff(sc, coach.t) : null;
+        /* HER WINDOW GOVERNS THE SUMMARY TOO (build 203; audit finding 15).
+    
+           narrowTo was wired to the monthly read and to nothing else. So in
+           summary mode — her default, the thing she talks to every day — the
+           "how far back" picker changed the label and changed nothing else: one
+           day and Everything produced the identical payload. That is the fault
+           her instruction of 15 August named after the $3.44 conversation, fixed
+           then for the day list only.
+    
+           Everything rule 15 protects is protected by narrowTo itself: open items
+           in the record survive any window, her goals, stand-ins, paused items,
+           library, drills, tests, body-work lists and settings are untouched
+           because they carry no date, and previous reads are never narrowed. What
+           the window bounds is the dated history — which is what she is asking it
+           to bound. */
+        const win = ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.chatScope) || CHAT_SCOPE_DEFAULT;
+        const bounded = scopeReady(win) ? narrowTo(data, win, coach.t) : data;
         try {
-            return briefText(data, coach, { wordsCut: cut });
+            return briefText(bounded, coach, { wordsCut: cut, windowLabel: scopeLabel(win) });
         }
         catch (e) {
             /* rule 23: never silently send something other than what the page shows.
