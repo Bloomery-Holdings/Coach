@@ -2650,6 +2650,22 @@ const placeFresh = (mins) => {
   return !!p.at && (Date.now() - p.at) < m * 60000;
 };
 
+/* WHICH PAGES SHE IS SENDING (build 216). One reader, so the payload, the
+   summary screen and the switches themselves can never disagree about what is
+   on (rule 33). Anything not written yet reads as ON. */
+const PAGES = [
+  ["today", "Today",
+   "what you did each day, this morning's WHOOP, today's session, your mood, and what you wrote"],
+  ["plan", "Workouts",
+   "your class library — the only classes it is allowed to name — and the block you are in"],
+  ["body", "Body",
+   "your own lists, every exercise in them, and everything you logged or ticked off them"],
+  ["progress", "Progress",
+   "your batteries, your mobility tests, your calculations and what previous reads concluded"],
+];
+const pageOn = (settings, key) => ((settings || {}).pages || {})[key] !== false;
+const pagesOff = (settings) => PAGES.filter(([k]) => !pageOn(settings, k));
+
 const SCOPE_ALL = { kind: "all" };
 /* HER INSTRUCTION, 14 August: "make it see up to the last 6 months and make the
    number of months editable and it show me how many months it will review
@@ -4391,7 +4407,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 215";
+const BUILD = "18 August 2026 · 216";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4738,6 +4754,10 @@ const BLANK = {
        forward and charged again. She turns it on when she wants it, from the
        switch beside the coach. */
     webSearch: false,
+  /* HER INSTRUCTION, 18 August: a toggle per page, beside the internet switch.
+     All four ON, because a switch that shipped off would take things from her
+     coach she never asked to take (rule 34). Keys are the tab ids. */
+  pages: { today: true, plan: true, body: true, progress: true },
     /* WHAT THE COACH IS SENT (build 159, her instruction of 15 August).
        "summary" is the summary page and nothing else — about 850 words
        however many months accumulate. "everything" is the old behaviour,
@@ -5809,9 +5829,23 @@ const briefBeliefs = (data, coach) => {
    offered as a first answer to a woman who has a filmed class she likes.
 
    Module level, both builders, one definition (the drift rule). */
-const briefLadder = (coach) => {
-  const rungs = (coach && coach.ladder) || [];
-  if (!rungs.length) return "";
+const briefLadder = (coach, data) => {
+  const all = (coach && coach.ladder) || [];
+  /* WITH HER WORKOUTS PAGE OFF, A RUNG THAT NAMES A CLASS IS A CLASS NAMED
+     (build 216). See the note on this build: recognised by asking her library
+     rather than by a flag, so the two lists cannot drift. */
+  const libOff = !!data && !pageOn(data.settings, "plan");
+  const libNames = libOff
+    ? (data.library || []).filter((w) => w && w.status !== "removed")
+      .map((w) => String(w.name || "").trim().toLowerCase()).filter(Boolean)
+    : [];
+  const namesAClass = (r) => {
+    const l = String((r && r.label) || "").trim().toLowerCase();
+    return !!l && libNames.some((n) => l.includes(n));
+  };
+  const rungs = libOff ? all.filter((r) => !namesAClass(r)) : all;
+  const hidden = all.length - rungs.length;
+  if (!rungs.length && !hidden) return "";
   const out = ["THE LADDER FOR TODAY, BIGGEST FIRST — these are HER rungs, computed from her own"];
   out.push("library and how she is today. If she cannot face the session, offer the NEXT ONE DOWN, one");
   out.push("at a time. Never skip to the bottom, never repeat a rung she has declined, and never end");
@@ -5819,6 +5853,12 @@ const briefLadder = (coach) => {
   rungs.forEach((r, i) => {
     out.push(`  ${i + 1}. ${r.label || r.id}${r.mins ? ` — about ${r.mins} min` : ""}${r.load === false ? " (no load)" : ""}`);
   });
+  if (hidden) {
+    out.push(`  ${hidden} BIGGER RUNG(S) ARE NOT SHOWN, because she has her Workouts page switched off and`);
+    out.push("  those rungs are named classes. Do not invent them, and do not pretend the smallest rung is");
+    out.push("  all she has: if she is willing to train properly, say there is a bigger option and that");
+    out.push("  switching that page on — beside the internet switch — lets you name it.");
+  }
   if (coach && coach.physicalSignal) {
     out.push(`  A PHYSICAL SIGNAL IS UP: ${coach.physicalSignal}. The ladder continues, but the rungs`);
     out.push("  become mobility and walking, never load. Rest prescribed for a reason is not a day given away.");
@@ -6294,6 +6334,22 @@ const briefText = (data, coach, opts) => {
   lines.push("is not in here.");
   lines.push("");
 
+  /* WHICH PAGES SHE HAS TURNED OFF (build 216), said before anything else, so
+     a section that is absent is never read as a thing that did not happen
+     (rule 23). */
+  const off216 = pagesOff(data.settings);
+  if (off216.length) {
+    lines.push(`SHE HAS TURNED ${off216.length === 1 ? "A PAGE" : "PAGES"} OF HER APP OFF FOR THIS CONVERSATION: `
+      + off216.map(([, label]) => label).join(", ") + ".");
+    lines.push("That is her instruction and it is not a gap. What is on those pages is safe on her device");
+    lines.push("and she has simply not sent it this time. So: do NOT conclude she has not trained, has not");
+    lines.push("measured, or has no lists. Say plainly that you cannot see that page and that she can");
+    lines.push("switch it back on beside the internet switch under \"talk to your coach\".");
+    lines.push("Her goals, anything OPEN in her record, anything PAUSED and every stand-in are below");
+    lines.push("whatever she has switched off — those are her rule 15 and they always travel.");
+    lines.push("");
+  }
+
   /* HER REPORT, 16 August. Not trimmable by her window and not last: this is
      an instruction, not her data, and it is the difference between a coach
      that acts and one that apologises. */
@@ -6312,7 +6368,9 @@ const briefText = (data, coach, opts) => {
   lines.push(`NOW: block "${coach.livePhase?.name || "none"}" week ${coach.weeksIntoBlock} of ${coach.livePhase?.weeks || "?"}.`
     + ` This week ${coach.weekDone}/${coach.seasonTarget}. Consistency ${coach.consistencyKnown === false ? coach.consistencySay : `${coach.consistency}% over 28 days`}.`
     + ` Lapse state ${coach.lapseState}.`);
-  lines.push(`TODAY: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min` : "nothing prescribed"}.`
+  lines.push(`TODAY: ${!pageOn(data.settings, "plan")
+      ? "the class is on her Workouts page, which she has switched off — describe the KIND of session and do not name one"
+      : coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min` : "nothing prescribed"}.`
     + ` Recovery ${coach.recValue || "not entered"}.`
     + ` Shoulder: ${coach.shoulderFrozen ? "open and touched this week — no high shoulder load"
       : coach.shoulderSore ? "open — high shoulder load marked down" : "nothing open"}.`);
@@ -6327,10 +6385,12 @@ const briefText = (data, coach, opts) => {
      plainest question she asks of it — did she train yesterday, and what was
      it. It goes above WHOOP because a logged session is her own word and a
      strain figure is an inference. */
-  lines.push(briefDays(data, coach));
-  lines.push("");
-  lines.push(briefWhoop(data, coach));
-  lines.push("");
+  if (pageOn(data.settings, "today")) {
+    lines.push(briefDays(data, coach));
+    lines.push("");
+    lines.push(briefWhoop(data, coach));
+    lines.push("");
+  }
 
   lines.push(briefIssues(coach));
   lines.push("");
@@ -6339,18 +6399,22 @@ const briefText = (data, coach, opts) => {
 
   /* the rows each battery ASKS for, read from the store it writes to — so a
      measure she takes weekly is read weekly (16 August) */
-  lines.push(briefTable(batteryRows(data), data.weekly || {}, "WEEKLY BATTERY", F));
-  lines.push("");
-  lines.push(briefTable(batteryRows(data), data.monthly || {}, "MONTHLY BENCHMARK", F));
-  lines.push("");
+  const progressOn = pageOn(data.settings, "progress");
+  if (progressOn) {
+    lines.push(briefTable(batteryRows(data), data.weekly || {}, "WEEKLY BATTERY", F));
+    lines.push("");
+    lines.push(briefTable(batteryRows(data), data.monthly || {}, "MONTHLY BENCHMARK", F));
+    lines.push("");
+  }
   /* her own writing from the battery — the rows the trend table cannot read */
-  const notes = briefNotes(data);
+  const notes = progressOn ? briefNotes(data) : "";
   if (notes) { lines.push(notes); lines.push(""); }
 
   /* mobility keeps its own shape: the tests are not battery fields */
-  const mkAll = Object.keys(data.mobility || {}).sort();
+  const mkAll = progressOn ? Object.keys(data.mobility || {}).sort() : [];
   const mk = mkAll.slice(-briefColsOf(F));
-  if (mk.length) {
+  if (!progressOn) { /* her switch, not a gap — named at the top of the payload */ }
+  else if (mk.length) {
     const rows = (coach.mobTests || []).map((m) => {
       const vals = mk.map((k) => {
         const v = (data.mobility[k] || {})[m.id];
@@ -6430,14 +6494,16 @@ const briefText = (data, coach, opts) => {
   }).join("\n") : "  nothing paused");
 
   const bw = (data.bodywork || []).filter((p) => p && p.status !== "removed");
-  lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
+  if (pageOn(data.settings, "body")) lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
   /* HER INSTRUCTION, 17 August: "everything needs to be visible to my coach".
      What she is MEANT to be doing goes immediately above what she actually did,
      because the gap between the two is the thing worth reading. */
-  lines.push(briefLists(data, coach));
-  lines.push(briefBody(data, coach));
+  if (pageOn(data.settings, "body")) {
+    lines.push(briefLists(data, coach));
+    lines.push(briefBody(data, coach));
+  }
   /* rule 4's rungs, from her own data (build 207) */
-  const lad = briefLadder(coach);
+  const lad = briefLadder(coach, data);
   if (lad) { lines.push(lad); lines.push(""); }
   const stand = briefStandIns(data, coach);
   if (stand) { lines.push(""); lines.push(stand); }
@@ -6445,16 +6511,27 @@ const briefText = (data, coach, opts) => {
   if (beliefs) { lines.push(""); lines.push(beliefs); }
 
   const lib = (data.library || []).filter((w) => w && w.status !== "removed");
-  lines.push(`CLASSES SHE OWNS — the only ones you may ever name: ${lib.map((w) => w.name).join(", ") || "none"}`);
-  lines.push("The detail of each class — duration, intensity, recovery cost, shoulder load, what it reaches —");
-  lines.push("is in front of you at the monthly read, not here. Do not guess at it.");
-  lines.push("");
+  if (pageOn(data.settings, "plan")) {
+    lines.push(`CLASSES SHE OWNS — the only ones you may ever name: ${lib.map((w) => w.name).join(", ") || "none"}`);
+    lines.push("The detail of each class — duration, intensity, recovery cost, shoulder load, what it reaches —");
+    lines.push("is in front of you at the monthly read, not here. Do not guess at it.");
+    lines.push("");
+  } else {
+    lines.push("HER CLASS LIBRARY IS SWITCHED OFF for this conversation, so you cannot see which classes she");
+    lines.push("owns. NEVER name a class while it is off — you would be inventing one (rule 10). Describe the");
+    lines.push("KIND of session instead, and tell her you need the Workouts page on to name it.");
+    lines.push("");
+  }
 
-  lines.push(briefLifts(data, coach));
-  lines.push("");
-  lines.push(briefNumbers(coach, data));
-  lines.push("");
-  lines.push(briefReads(data));
+  if (pageOn(data.settings, "today")) {
+    lines.push(briefLifts(data, coach));
+    lines.push("");
+  }
+  if (progressOn) {
+    lines.push(briefNumbers(coach, data));
+    lines.push("");
+    lines.push(briefReads(data));
+  }
 
   const words = briefWords(data, wordsCut);
   if (words) lines.push(words);
@@ -25525,6 +25602,54 @@ Two or three sentences unless she asks for more.`;
             }}>{data.settings?.webSearch ? "On" : "Off"}</button>
         </div>
       </Card>
+
+      {/* WHICH PAGES OF HER APP THE COACH SEES — HER INSTRUCTION, 18 August:
+          "there should be a toggle for each page of my app... so I would show
+          the coach whatever I want instead of giving him access to a full day
+          with lots of data that I don't want included... Right under the
+          Internet toggles. So everything is there in front of me, and I give
+          it access when I want."
+
+          Under the internet switch, as she asked. Each row names what that
+          page sends in the same words the payload uses, so switching one off
+          is a decision she can see rather than a guess. */}
+      <Card style={{ marginBottom: 12 }}>
+        <Eyebrow>What your coach can see</Eyebrow>
+        <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.45, margin: "2px 0 10px" }}>
+          One switch per page of your app. Everything is on until you turn it off, and your coach is
+          told which pages you switched off — so it asks you rather than deciding you did not train.
+        </div>
+        {PAGES.map(([key, label, what], i) => {
+          const on = pageOn(data.settings, key);
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 12, padding: "9px 0", borderTop: i ? `1px solid ${C.line}` : "none" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: on ? C.ink : C.muted }}>{label}</div>
+                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4, marginTop: 1 }}>{what}</div>
+              </div>
+              <button
+                onClick={() => setData((d) => ({ ...d, settings: { ...(d.settings || {}),
+                  pages: { ...((d.settings || {}).pages || {}), [key]: !on } } }))}
+                className="tap" style={{
+                  flexShrink: 0, padding: "7px 14px", borderRadius: 999, cursor: "pointer",
+                  fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                  border: `1.5px solid ${on ? C.signal : C.line}`,
+                  background: on ? C.signal : "transparent",
+                  color: on ? C.chalk : C.ink,
+                }}>{on ? "On" : "Off"}</button>
+            </div>
+          );
+        })}
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginTop: 10,
+          borderTop: `1px solid ${C.line}`, paddingTop: 9 }}>
+          Four things go whatever these say: your goals, anything open in your record, anything paused,
+          and what stands in for it. Those are safety and promises, and they are a few lines rather than
+          the bulk. Your monthly read still sees everything — you start that one yourself and you can
+          read the whole of it before it is sent.
+        </div>
+      </Card>
+
       <ScopePicker scope={data.settings?.chatScope || CHAT_SCOPE_DEFAULT}
         onPick={(sc) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), chatScope: sc } }))} />
 
