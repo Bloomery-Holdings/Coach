@@ -1455,7 +1455,7 @@ const LADDER = [
      the ladder simply steps past. */
   { id: "gentlest", load: false, kind: "moved",
     make: (c) => {
-      const pool = (c.library || []).filter((w) => w.addon && w.goal === "mobility");
+      const pool = (c.library || []).filter((w) => isLive(w) && w.addon && w.goal === "mobility");
       if (!pool.length) return null;
       const w = pool.slice().sort((a, b) => (a.intensity || 9) - (b.intensity || 9))[0];
       if (!w || (c.easiest && w.name === c.easiest.name) || (c.prescribed && w.name === c.prescribed.name)) return null;
@@ -1539,6 +1539,22 @@ const sittingKey = (which, key) => which + ":" + key;
    being trained instead, and the date it is worth trying again.
    ==========================================================================*/
 const isLive = (x) => !!x && x.status !== "removed" && x.status !== "paused" && x.status !== "retired";
+/* THE CLASSES SHE CAN STILL BE OFFERED (build 209).
+
+   Removing a class used to delete the library row outright. Her logged
+   sessions kept their name and stayed true, so nothing was lost — but the row
+   was gone, and rule 20 says a removal is a pause, dated and reversible.
+
+   Marking it `removed` was the easy half. The reason this waited for its own
+   build is the other half: the library is read in a dozen places, and the ones
+   that OFFER her a class had no live/removed test at all, so marking without
+   filtering would have left a class she took off still being prescribed to
+   her. That is a worse fault than the one being fixed.
+
+   Settled once, here, so the next place that offers a class gets it right
+   without anyone remembering (rule 33). Everything that reads her HISTORY
+   keeps reading the whole list, because a session she did keeps its name. */
+const libLive = (data) => ((data && data.library) || []).filter(isLive);
 const liveFields = (data) => ({
   weekly: (((data || {}).fields || {}).weekly || []).filter(isLive),
   monthly: (((data || {}).fields || {}).monthly || []).filter(isLive),
@@ -4305,7 +4321,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 208";
+const BUILD = "18 August 2026 · 209";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7369,7 +7385,7 @@ function useCoach(data, day, clock) {
        regions, no weekly sets, no coverage — as though she had trained
        nothing. Historical lookups below use `allClasses` for exactly this
        reason. */
-    const allClasses = data.library || [];
+    const allClasses = libLive(data);
     const library = allClasses.filter((w) => {
       if (w.home && !phase.allowHome) return false;
       if (w.shoulderLoad === "high" && !phase.allowHighShoulder && shoulderGuard) return false;
@@ -8261,7 +8277,7 @@ function useCoach(data, day, clock) {
     })();
 
     /* the gentlest thing in the library, for coming back after a break */
-    const easiest = [...(data.library || [])]
+    const easiest = [...libLive(data)]
       .filter((w) => !w.home && !w.addon)
       .sort((a, b) => (a.recoveryCost || 9) - (b.recoveryCost || 9))[0] || null;
 
@@ -10461,7 +10477,7 @@ function useCoach(data, day, clock) {
       /* THE PLACE RULE. It sat in the list with no code path able to produce
          it. What it is actually about — classes in her library that this phase
          cannot use — is computable, so it says so now. */
-      const unreachable = (data.library || []).filter((w) => w.home && !phase.allowHome).length;
+      const unreachable = libLive(data).filter((w) => w.home && !phase.allowHome).length;
       if (unreachable > 0)
         fired.push({ id: "place", note: `${unreachable} of your classes need the home gym, and this block cannot use them yet — everything here works without equipment.` });
       /* Only speaks when counted work exists — filmed classes are invisible to
@@ -14480,8 +14496,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         minutes: 30,
         equipment: "full battery",
         reason: "it's the first session of the month, and the battery is a session in itself — every lift, every hold, every distance, measured under load. Anything after it is yours to decide",
-        addon: data.library.find((w) => w.addon && /stretch/i.test(w.name))
-          || data.library.find((w) => w.addon && w.goal === "mobility")
+        addon: libLive(data).find((w) => w.addon && /stretch/i.test(w.name))
+          || libLive(data).find((w) => w.addon && w.goal === "mobility")
           || null,
         benchmark: true,
       }
@@ -15518,7 +15534,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     border: "none", background: "transparent", cursor: "pointer", padding: 0,
                     fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>close</button>
                 </div>
-                {data.library.map((w) => (
+                {libLive(data).map((w) => (
                   <button key={w.id} onClick={() => choose(w)} className="tap" style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
                     padding: "12px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
@@ -15633,7 +15649,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                   textTransform: "uppercase", color: C.muted, marginBottom: 6 }}>
                   add-ons — short work you stack on a class
                 </div>
-                {[...data.library].sort((a, b) => (b.addon ? 1 : 0) - (a.addon ? 1 : 0)).map((w) => (
+                {[...libLive(data)].sort((a, b) => (b.addon ? 1 : 0) - (a.addon ? 1 : 0)).map((w) => (
                   <button key={w.id} onClick={() => addSession(w)} className="tap" style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, width: "100%",
                     padding: "11px 2px", border: "none", borderBottom: `1px solid ${C.line}`,
@@ -16006,11 +16022,19 @@ function Workouts({ data, setData, coach }) {
   /* Removing a class must not remove what she did with it. The library entry
      goes; the sessions stay exactly as logged. They keep their name, so the
      record still reads true — they simply stop being offered. */
+  /* SET ASIDE, NOT DELETED (rule 20, build 209). The row stays with its date,
+     stops being offered anywhere, and can come back with everything she ever
+     logged against it still attached. */
   const remove = (id) => {
     const w = lib.find((x) => x.id === id);
     const used = w ? Object.values(data.logs || {}).filter((l) => l?.type === w.name).length : 0;
-    save(lib.filter((x) => x.id !== id));
-    if (used) setRenameMsg(`Removed from the library. The ${used} session${used === 1 ? "" : "s"} you did stay in your record.`);
+    save(lib.map((x) => (x.id === id ? { ...x, status: "removed", removedOn: coach?.t || today() } : x)));
+    setRenameMsg(`Set aside — not deleted.${used ? ` The ${used} session${used === 1 ? "" : "s"} you did stay in your record.` : ""}`
+      + " You can put it back below whenever you want it.");
+  };
+  const putBackClass = (id) => {
+    save(lib.map((x) => (x.id === id ? { ...x, status: undefined, removedOn: undefined } : x)));
+    setRenameMsg("Back in your library.");
   };
   const add = () => {
     const w = { id: newId(), name: "New class", goal: "strength", intensity: 3, recoveryCost: 3, home: false,
@@ -16028,9 +16052,11 @@ function Workouts({ data, setData, coach }) {
   const setDurations = (id, str) =>
     patch(id, { durations: str.split(",").map((x) => parseInt(x.trim(), 10)).filter((x) => !isNaN(x)) });
 
-  const shown = filter === "all" ? lib.filter((w) => !w.addon)
-    : filter === "addons" ? lib.filter((w) => w.addon)
-    : lib.filter((w) => w.goal === filter && !w.addon);
+  const live = lib.filter(isLive);
+  const setAside = lib.filter((w) => w && w.status === "removed");
+  const shown = filter === "all" ? live.filter((w) => !w.addon)
+    : filter === "addons" ? live.filter((w) => w.addon)
+    : live.filter((w) => w.goal === filter && !w.addon);
   const plan = data.plan;
   const savePlan = (next) => setData({ ...data, plan: { ...plan, ...next } });
   const setTheme = (lvl, num, v) => savePlan({ themes: { ...plan.themes, [lvl]: { ...plan.themes[lvl], [num]: v } } });
@@ -16225,6 +16251,32 @@ function Workouts({ data, setData, coach }) {
           </Card>
         );
       })}
+
+      {/* SET ASIDE, AND ONE TAP BACK (build 209). Removing a class used to
+          delete the row. It is kept now, dated, out of everything that offers
+          her a class, and waiting here — because a removal she cannot see is a
+          deletion, and rule 20 says nothing is deleted. */}
+      {setAside.length > 0 && (
+        <div style={{ marginTop: 4, marginBottom: 12 }}>
+          <Eyebrow>Set aside</Eyebrow>
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, margin: "4px 0 8px" }}>
+            Kept, not deleted. They are not offered to you and your coach will not name them —
+            and the sessions you already did with them stay in your record exactly as they are.
+          </div>
+          {setAside.map((w) => (
+            <div key={w.id} style={{ display: "flex", alignItems: "center", gap: 8,
+              padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
+              <span style={{ flex: 1, fontSize: 13, color: C.muted }}>
+                {w.name}{w.removedOn ? ` — set aside ${w.removedOn}` : ""}
+              </span>
+              <button onClick={() => putBackClass(w.id)} className="tap" style={{
+                border: `1.5px solid ${C.moss}`, background: "transparent", color: C.moss,
+                borderRadius: 9, padding: "6px 11px", cursor: "pointer", fontSize: 11.5,
+                fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {renameMsg && (
         <div style={{ fontSize: 12.5, color: C.moss, lineHeight: 1.5, marginBottom: 10,
@@ -17027,12 +17079,23 @@ const mergeInto = (prev, incoming) => {
     ...p,
     ...inc,
     settings: { ...p.settings, ...(inc.settings || {}) },
-    logs:     { ...p.logs,     ...(inc.logs || {}) },
-    morning:  { ...p.morning,  ...(inc.morning || {}) },
-    weekly:   { ...p.weekly,   ...(inc.weekly || {}) },
-    monthly:  { ...p.monthly,  ...(inc.monthly || {}) },
-    mobility: { ...p.mobility, ...(inc.mobility || {}) },
-    notes:    { ...p.notes,    ...(inc.notes || {}) },
+    /* HER RULING, 18 August. Until now a day the backup and the phone BOTH
+       held resolved to the BACKUP's copy — the older one. Build 199 flagged it
+       rather than changing it, because it was not part of the fault being
+       fixed and it deserved her say-so.
+
+       Her phone's copy is the newer one in almost every real case: she trains,
+       logs it, and the laptop file is from last week. So the incoming keys go
+       down FIRST and hers overwrite them — which adds every day the backup has
+       that she does not, and never overwrites one she does.
+
+       Reversible in one line: swap the two spreads back. */
+    logs:     { ...(inc.logs || {}),     ...p.logs },
+    morning:  { ...(inc.morning || {}),  ...p.morning },
+    weekly:   { ...(inc.weekly || {}),   ...p.weekly },
+    monthly:  { ...(inc.monthly || {}),  ...p.monthly },
+    mobility: { ...(inc.mobility || {}), ...p.mobility },
+    notes:    { ...(inc.notes || {}),    ...p.notes },
     plan:     { ...p.plan,     ...(inc.plan || {}) },
     /* keyed by date, so a restore adds days it has and keeps days it does not */
     dayPlan:  { ...(p.dayPlan || {}), ...(inc.dayPlan || {}) },
