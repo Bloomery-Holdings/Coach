@@ -4595,7 +4595,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 217";
+const BUILD = "18 August 2026 · 218";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -21173,14 +21173,32 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
                entry the coach added to her record was built, reported to her as done,
                and thrown away. Undo could not have brought it back either, because
                Undo restores from this object. */
-            const before = JSON.parse(JSON.stringify({ bodywork: data.bodywork || [],
-                drills: data.drills || [], goals: data.goals || [], mobTests: data.mobTests || [],
-                fields: data.fields || {}, library: data.library || [], issues: data.issues || [] }));
+            /* APPLIED TO HER FILE AS IT IS NOW, NOT AS IT WAS WHEN SHE TAPPED
+               (build 218). HER REPORT: "it can't edit my body list properly. the app
+               override it."
+      
+               Everything below used to be computed from `data` — the props captured
+               when she tapped the button — and then written back over whatever was
+               in the store when the model finally answered. On her library that call
+               takes tens of seconds, and anything she did in the meantime was
+               overwritten: a list she ticked off, an exercise she edited, a goal she
+               added, a battery row she renamed.
+      
+               The comment directly above records this exact fault being found and
+               fixed FOR UNDO. It was left in the apply that Undo copies from.
+      
+               `dataRef.current` is the live store this component already keeps for
+               the memory fold. The model was asked about the snapshot, which is
+               right — what changes is only where its answer lands. */
+            const now218 = dataRef.current || data;
+            const before = JSON.parse(JSON.stringify({ bodywork: now218.bodywork || [],
+                drills: now218.drills || [], goals: now218.goals || [], mobTests: now218.mobTests || [],
+                fields: now218.fields || {}, library: now218.library || [], issues: now218.issues || [] }));
             const legacy = (out.changes || []).filter((c) => !c.where);
             const registry = (out.changes || []).filter((c) => c.where);
-            const { bodywork, drills, goals, mobTests, done } = applyListEdits(data, legacy, coach.t);
+            const { bodywork, drills, goals, mobTests, done } = applyListEdits(now218, legacy, coach.t);
             /* HER INSTRUCTION, 13 August: everything, not just the lists. */
-            const after = applyRegistryEdits({ ...data, bodywork, drills, goals, mobTests }, registry, coach.t);
+            const after = applyRegistryEdits({ ...now218, bodywork, drills, goals, mobTests }, registry, coach.t);
             done.push(...after.done);
             if (!done.length) {
                 /* HER REPORT, 16 August, and proved against the engine the same day:
@@ -21226,6 +21244,10 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     };
     const [listing, setListing] = useState(null); /* index being turned into a list */
     const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
+    /* THIS ONE WAS ALREADY RIGHT, and it is worth saying why (build 218).
+       makeList reads `d.bodywork` INSIDE the setData updater, so it builds on
+       her file as it is when the answer lands. That is the pattern applyEdits
+       above was missing, in the same component, for the same kind of call. */
     const makeList = async (i) => {
         var _a, _b, _c;
         if (listing !== null)
