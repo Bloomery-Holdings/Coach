@@ -4026,8 +4026,17 @@ const WHOOP_UNREAD = ["light", "awake", "cycles", "calories", "inBed", "sleepPer
    headline on her landing page — a number she can see must never be one her
    coach has not been told about. */
 const coachMetricIds = (settings) => {
+  /* AUDIT OF 18 AUGUST, FINDING 30. `hers.length` treated an EMPTY choice as
+     NO choice, so unticking all twenty put the default twenty straight back
+     and the control read as broken. An empty list is an answer: she has said
+     she wants none of the optional ones.
+
+     The five headlines still travel whatever she picks — metricsForCoach keeps
+     anything with a `key` — because rule 14 says a number on her landing page
+     should never be one her coach has not been told about. So the floor is
+     five, and it is stated rather than smuggled in by ignoring her. */
   const hers = settings && Array.isArray(settings.coachMetrics) ? settings.coachMetrics : null;
-  return hers && hers.length ? hers : COACH_METRICS;
+  return hers ? hers : COACH_METRICS;
 };
 const metricsForCoach = (all, settings) => {
   const want = coachMetricIds(settings);
@@ -4277,7 +4286,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 206";
+const BUILD = "18 August 2026 · 207";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5582,6 +5591,32 @@ const briefBeliefs = (data, coach) => {
    visible where the work is. Both reached the monthly read and neither reached
    the daily chat, so the coach could be told something was paused without ever
    being told what was being trained instead. */
+/* THE LADDER, NAMED, SO RULE 4 CAN ACTUALLY BE WALKED.
+
+   ladderFor already builds this from her own library, her own recovery and her
+   own shoulder state, and smallerDoor already steps down it. Neither reached
+   the coach in either mode, so the rule said "walk down a ladder" and the
+   coach had to invent the rungs — which is how "go for a walk" ends up being
+   offered as a first answer to a woman who has a filmed class she likes.
+
+   Module level, both builders, one definition (the drift rule). */
+const briefLadder = (coach) => {
+  const rungs = (coach && coach.ladder) || [];
+  if (!rungs.length) return "";
+  const out = ["THE LADDER FOR TODAY, BIGGEST FIRST — these are HER rungs, computed from her own"];
+  out.push("library and how she is today. If she cannot face the session, offer the NEXT ONE DOWN, one");
+  out.push("at a time. Never skip to the bottom, never repeat a rung she has declined, and never end");
+  out.push("with \"see you tomorrow\". Reaching ANY rung means the day was not missed (rule 4).");
+  rungs.forEach((r, i) => {
+    out.push(`  ${i + 1}. ${r.label || r.id}${r.mins ? ` — about ${r.mins} min` : ""}${r.load === false ? " (no load)" : ""}`);
+  });
+  if (coach && coach.physicalSignal) {
+    out.push(`  A PHYSICAL SIGNAL IS UP: ${coach.physicalSignal}. The ladder continues, but the rungs`);
+    out.push("  become mobility and walking, never load. Rest prescribed for a reason is not a day given away.");
+  }
+  return out.join("\n");
+};
+
 const briefStandIns = (data, coach) => {
   const bits = [];
   const pool = [...((data.fields || {}).weekly || []), ...((data.fields || {}).monthly || [])];
@@ -6098,6 +6133,9 @@ const briefText = (data, coach, opts) => {
      because the gap between the two is the thing worth reading. */
   lines.push(briefLists(data, coach));
   lines.push(briefBody(data, coach));
+  /* rule 4's rungs, from her own data (build 207) */
+  const lad = briefLadder(coach);
+  if (lad) { lines.push(lad); lines.push(""); }
   const stand = briefStandIns(data, coach);
   if (stand) { lines.push(""); lines.push(stand); }
   const beliefs = briefBeliefs(data, coach);
@@ -24036,6 +24074,7 @@ and follows filmed classes plus a real Pilates instructor who pushes her hard.
 Do not quote baseline figures from memory — every number you have is in the list below, computed from
 her own data. If a number is not there, say you don't have it rather than estimating.
 ${memoryBlock(data)}
+${briefLadder(coach)}
 
 === HOW FAR BACK SHE HAS ASKED YOU TO READ ===
 ${winLine}
