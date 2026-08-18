@@ -4413,7 +4413,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 219";
+const BUILD = "18 August 2026 · 220";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -28959,7 +28959,7 @@ const bwOps = {
     (pg.id !== pgId ? pg : { ...pg, status: "active", removedOn: undefined })) }),
 };
 
-function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
+function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
   /* HER INSTRUCTION, 11 August: "put the lists under the area's tab — I
      don't want it loose, I keep scrolling. When I touch the tab it opens
      List one, List two, List three, with the name of the list, and it tells
@@ -28976,8 +28976,19 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
   /* HER REPORT, 16 August. The AREA's own fold, which is a different thing
      from which list is open inside it — restoring one without the other put
      her back exactly where she started. */
-  const [unfolded, setUnfolded] = useState(() => sentHere
+  /* AND A TAB SHE TAPPED IS A TAB SHE IS LOOKING AT (build 220). The chip row
+     and this card carry the same words, so tapping the chip filtered the page
+     to this area and left it shut — a title, a count, and every control she
+     asked for hidden behind a triangle. See the note on build 220. */
+  const [unfolded, setUnfolded] = useState(() => sentHere || !!alone
     || !!(placeFresh() && (readPlace().unfolded || {})[prog.id]));
+  /* she can still shut it; what this stops is it being shut when she has just
+     singled it out */
+  const wasAlone = useRef(alone);
+  useEffect(() => {
+    if (alone && !wasAlone.current) setUnfolded(true);
+    wasAlone.current = alone;
+  }, [alone]);
   useEffect(() => {
     writePlace({ unfolded: { ...(readPlace().unfolded || {}), [prog.id]: unfolded } });
   }, [unfolded, prog.id]);
@@ -29103,6 +29114,11 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
         </span>
         <span className="mono" style={{ fontSize: 10, color: C.muted }}>
           {st.doneCount} of {lists.length} this round{st.round > 0 ? ` · round ${st.round + 1}` : ""}
+          {/* build 220: the triangle alone was not telling her there was
+              anything under here, let alone that renaming lived in it */}
+          <span style={{ display: "block", color: C.signal, fontWeight: 600 }}>
+            {unfolded ? "tap to close" : "tap to open · rename, add, move"}
+          </span>
         </span>
       </button>
       {unfolded && prog.line && (
@@ -29582,7 +29598,10 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
         .filter((prog) => showing === "all" || showing === prog.id)
         .map((prog) => (
           <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
-            coach={coach} setSheet={setSheet} />
+            coach={coach} setSheet={setSheet}
+            /* SHE SINGLED THIS ONE OUT, SO SHE IS LOOKING AT IT (build 220).
+               Tapping a chip used to filter the page and leave the card shut. */
+            alone={showing === prog.id || progs.length === 1} />
         ))}
 
       {/* AN AREA OF HER OWN, WITHOUT ASKING THE COACH FOR ONE (build 219).
