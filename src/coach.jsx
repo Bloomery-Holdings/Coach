@@ -2321,12 +2321,12 @@ const reviewPayload = (data, coach, cut) => {
     if (!pgs.length) out.push("no programmes built yet");
     pgs.forEach((pg) => {
       out.push(`Programme: ${pg.area || "area"}${pg.mins ? ` — about ${pg.mins} min a list` : ""}${pg.line ? ` — ${pg.line}` : ""}`);
-      const doneIdx = new Set(Object.values(pg.log || {}).map(Number).filter((n) => !isNaN(n)));
+      const doneIds = tickedListIds(pg, pg.lists || []);
       [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))].forEach((li, li2) => {
         /* HER REPORT, 13 August: the coach could see list names and not what
            was inside them. Everything it wrote when it designed them now
            travels into the read that designs her month too. */
-        out.push(`  LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}${doneIdx.has(li2) ? " [ticked done]" : ""}`);
+        out.push(`  LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}${doneIds.has(li.id) ? " [ticked done]" : ""}`);
         (li.exercises || []).forEach((x) => out.push(`    - ${[
           x.name || "exercise",
           x.dose ? `dose: ${x.dose}` : null,
@@ -4413,7 +4413,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 218";
+const BUILD = "18 August 2026 · 219";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5109,6 +5109,48 @@ const bwNameOf = (data, exId, entry) => {
    round she has since closed still resolves to the movements it meant.
 
    Returns one entry per list ticked on that date, with the exercises in it. */
+/* WHICH LISTS A PROGRAMME'S TICKS POINT AT (build 219).
+   ---------------------------------------------------------------------------
+   Ticks were stored by POSITION — log["<date>#2"] = 2 — so a list that moved
+   took every tick ever made with it. New ticks name their list instead, and
+   this reads both: a number is a position against the lists as they are now,
+   a string is a list id. One function, because four places ask and rule 33
+   says they settle it once rather than eighty times. */
+const tickedListIds = (pg, lists) => {
+  const out = new Set();
+  const all = lists || (pg && pg.lists) || [];
+  Object.values((pg && pg.log) || {}).forEach((v) => {
+    if (typeof v === "string" && v) { out.add(v); return; }
+    const i = Number(v);
+    if (isFinite(i) && i >= 0 && all[i]) out.add(all[i].id);
+  });
+  return out;
+};
+
+/* THE LAST MOMENT THE POSITIONS ARE STILL TRUE (build 219). Called before a
+   programme is restructured — a list renamed is harmless, a list moved,
+   reordered, added or set aside is not. Every position-based entry becomes an
+   id-based one against the order as it is right now. Nothing is deleted; an
+   entry that points nowhere is kept exactly as it was rather than guessed at
+   (rules 20, 23). */
+const freezeTicks = (pg) => {
+  if (!pg) return pg;
+  const lists = pg.lists || [];
+  const log = {};
+  let moved = 0;
+  Object.keys(pg.log || {}).forEach((k) => {
+    const v = (pg.log || {})[k];
+    if (typeof v === "string") { log[k] = v; return; }
+    const i = Number(v);
+    const l = isFinite(i) && i >= 0 ? lists[i] : null;
+    if (!l) { log[k] = v; return; }
+    const day = String(k).split("#")[0];
+    log[`${day}#${l.id}`] = l.id;
+    moved += 1;
+  });
+  return moved ? { ...pg, log } : pg;
+};
+
 const listsTickedOn = (data, date) => {
   if (!data || !date) return [];
   const out = [];
@@ -5116,9 +5158,11 @@ const listsTickedOn = (data, date) => {
     Object.keys(log || {}).forEach((k) => {
       const day = String(k).split("#")[0];
       if (day !== date) return;
-      const i = Number(log[k]);
-      if (!isFinite(i) || i < 0) return;
-      const l = (lists || [])[i];
+      /* build 219: a string names its list, a number is a legacy position */
+      const v = log[k];
+      const l = typeof v === "string"
+        ? (lists || []).find((x) => x && x.id === v)
+        : (isFinite(Number(v)) && Number(v) >= 0 ? (lists || [])[Number(v)] : null);
       if (!l) return;
       out.push({ area: pg.area || "body work", n: l.n ?? (i + 1), title: l.title || "",
         round: roundN,
@@ -24330,7 +24374,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
            only single exercises and single battery, mobility, class or goal
            rows can be reached. Saying "nothing matched" and stopping left her
            to guess which of those it was. */
-        setEditsMade({ error: "Nothing changed. I can take off, swap or add an individual exercise, drill, measure, mobility test or class — but not a whole list or a whole body area. Those two you have to do yourself, from the Body page. Nothing has been touched." });
+        /* BUILD 219: this sentence has always sent her to the Body page to do
+           the thing herself, and until this build the Body page could not do
+           it — no rename, no add, no move, no set-aside for a list or an area.
+           Rule 32: never name a route that does not exist. It exists now, and
+           this says where it is rather than just where it is not. */
+        setEditsMade({ error: "Nothing changed. I can take off, swap or add an individual exercise, drill, measure, mobility test or class — but not a whole list or a whole body area. Those two are yours, on the Body page: open the area, open the list, and there is rename, move up, move down, move to another area and take this list off. Nothing here has been touched." });
         return;
       }
       setData((d) => ({ ...d, bodywork,
@@ -24849,10 +24898,10 @@ ${(() => {
        against a knee rule — so everything the coach wrote when it designed
        them travels now: dose, tool, targets and the how. No caps (rule 15). */
     const allLists = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
-    const doneIdx = new Set(Object.values(pg.log || {}).map(Number).filter((n) => !isNaN(n)));
+    const doneIds = tickedListIds(pg, pg.lists || []);
     const lists = allLists.map((li, li2) => {
       const head = `      LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}`
-        + `${doneIdx.has(li2) ? " [she has ticked this one done]" : ""}`;
+        + `${doneIds.has(li.id) ? " [she has ticked this one done]" : ""}`;
       /* HER INSTRUCTION, 16 August, looking at a payload where this section
          was 27,485 words — 66% of everything sent on every message: "I don't
          need the how it is done paragraph on any exercise."
@@ -28340,11 +28389,14 @@ const bodyworkState = (prog) => {
      list can be done on the same day. */
   const log = prog.log || {};
   const lists = prog.lists || [];
-  const doneSet = new Set(Object.values(log).map(Number).filter((v) => !isNaN(v) && v >= 0 && v < Math.max(lists.length, 1)));
-  const doneCount = doneSet.size;
+  /* build 219: by list id, so a list that moves keeps its own history. The
+     old position-based set is still answered — see tickedListIds. */
+  const doneIds = tickedListIds(prog, lists);
+  const doneSet = new Set(lists.map((l, i) => (l && doneIds.has(l.id) ? i : -1)).filter((i) => i >= 0));
+  const doneCount = doneIds.size;
   const dates = Object.keys(log).map((k) => String(k).split("#")[0]).sort();
   const round = (prog.rounds || []).length;
-  return { doneCount, doneSet, round, inRound: doneCount, total: lists.length, dates,
+  return { doneCount, doneSet, doneIds, round, inRound: doneCount, total: lists.length, dates,
            roundComplete: lists.length > 0 && doneCount >= lists.length };
 };
 
@@ -28808,6 +28860,105 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
   );
 }
 
+/* EVERY STRUCTURAL CHANGE SHE CAN MAKE TO HER OWN LISTS (build 219).
+   ---------------------------------------------------------------------------
+   One place, so the screen cannot do something the rest of the app does not
+   understand. Each takes the whole store and gives it back changed — and each
+   FREEZES the programme's ticks first, because a tick used to name a position
+   and moving anything would otherwise rewrite what she trained (build 219a).
+
+   Nothing is ever deleted. A list taken off is marked removed, dated,
+   with its exercises and everything logged against them intact (rule 20). */
+const bwOps = {
+  renameArea: (d, pgId, name) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== pgId ? pg : { ...pg, area: name })) }),
+
+  renameList: (d, pgId, listId, title) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== pgId ? pg : { ...pg, lists: (pg.lists || []).map((l) =>
+      (l.id !== listId ? l : { ...l, title })) })) }),
+
+  /* renumber so the numbers she reads follow the order she put them in. The
+     id never changes, which is what keeps her history attached. */
+  renumber: (lists) => (lists || []).map((l, i) => ({ ...l, n: i + 1 })),
+
+  addList: (d, pgId, today) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+    if (pg.id !== pgId) return pg;
+    const frozen = freezeTicks(pg);
+    return { ...frozen, lists: bwOps.renumber([...(frozen.lists || []),
+      { id: newId(), title: "New list", focus: "", exercises: [], created: today }]) };
+  }) }),
+
+  setListAside: (d, pgId, listId, today) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+    if (pg.id !== pgId) return pg;
+    const frozen = freezeTicks(pg);
+    return { ...frozen, lists: (frozen.lists || []).map((l) =>
+      (l.id !== listId ? l : { ...l, status: "removed", removedOn: today })) };
+  }) }),
+
+  putListBack: (d, pgId, listId) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+    if (pg.id !== pgId) return pg;
+    const frozen = freezeTicks(pg);
+    return { ...frozen, lists: (frozen.lists || []).map((l) =>
+      (l.id !== listId ? l : { ...l, status: undefined, removedOn: undefined })) };
+  }) }),
+
+  /* up is -1, down is +1, and it moves within the LIVE lists only — a list she
+     has set aside keeps its place in the file and is not shuffled past */
+  moveList: (d, pgId, listId, dir) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+    if (pg.id !== pgId) return pg;
+    const frozen = freezeTicks(pg);
+    const all = frozen.lists || [];
+    const liveIdx = all.map((l, i) => (l && l.status !== "removed" ? i : -1)).filter((i) => i >= 0);
+    const at = liveIdx.findIndex((i) => all[i] && all[i].id === listId);
+    const to = at + (dir < 0 ? -1 : 1);
+    if (at < 0 || to < 0 || to >= liveIdx.length) return frozen;
+    const a = liveIdx[at], b = liveIdx[to];
+    const next = [...all];
+    next[a] = all[b]; next[b] = all[a];
+    return { ...frozen, lists: bwOps.renumber(next) };
+  }) }),
+
+  /* THE ONE SHE ASKED FOR BY NAME: "moving one list from one tab to the other."
+     The list object moves whole — its id, its exercises, everything she logged
+     against them — and its TICKS move with it, which is only possible because
+     a tick names its list now. Ticks that belong to it are carried across and
+     removed from the area it left, so no day is counted twice. */
+  moveListToArea: (d, fromId, listId, toId, today) => {
+    if (!fromId || !toId || fromId === toId) return d;
+    const from0 = (d.bodywork || []).find((p) => p && p.id === fromId);
+    const to0 = (d.bodywork || []).find((p) => p && p.id === toId);
+    if (!from0 || !to0) return d;
+    const from = freezeTicks(from0);
+    const to = freezeTicks(to0);
+    const list = (from.lists || []).find((l) => l && l.id === listId);
+    if (!list) return d;
+    const carried = {};
+    const kept = {};
+    Object.keys(from.log || {}).forEach((k) => {
+      if ((from.log || {})[k] === listId) carried[k] = listId; else kept[k] = (from.log || {})[k];
+    });
+    return { ...d, bodywork: (d.bodywork || []).map((pg) => {
+      if (pg.id === fromId) {
+        return { ...from, log: kept,
+          lists: bwOps.renumber((from.lists || []).filter((l) => l.id !== listId)) };
+      }
+      if (pg.id === toId) {
+        return { ...to, log: { ...(to.log || {}), ...carried },
+          lists: bwOps.renumber([...(to.lists || []), { ...list, movedOn: today }]) };
+      }
+      return pg;
+    }) };
+  },
+
+  addArea: (d, today) => ({ ...d, bodywork: [...(d.bodywork || []), {
+    id: newId(), area: "New body area", own: true, mins: 10, created: today,
+    status: "active", log: {}, rounds: [],
+    lists: [{ id: newId(), n: 1, title: "List 1", focus: "", exercises: [], created: today }] }] }),
+
+  putAreaBack: (d, pgId) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== pgId ? pg : { ...pg, status: "active", removedOn: undefined })) }),
+};
+
 function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
   /* HER INSTRUCTION, 11 August: "put the lists under the area's tab — I
      don't want it loose, I keep scrolling. When I touch the tab it opens
@@ -28846,7 +28997,17 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const st = bodyworkState(prog);
-  const lists = prog.lists || [];
+  /* LIVE LISTS, EACH CARRYING ITS TRUE POSITION (build 219). toggleDone takes a
+     position into prog.lists, so a filtered list must never renumber what it
+     hands back or every tick lands on the wrong row. */
+  const allLists = prog.lists || [];
+  const lists = allLists.map((l, i) => ({ l, i })).filter((x) => x.l && x.l.status !== "removed");
+  const asideLists = allLists.map((l, i) => ({ l, i })).filter((x) => x.l && x.l.status === "removed");
+  const [naming, setNaming] = useState(null);       /* list id being renamed   */
+  const [namingText, setNamingText] = useState("");  /* and what she is typing  */
+  const [areaName, setAreaName] = useState(null);   /* area name being edited  */
+  const [movingList, setMovingList] = useState(null);
+  const otherAreas = (data.bodywork || []).filter((p) => p && p.id !== prog.id && p.status !== "removed");
 
   const toggleOpen = (id) => setOpenIds((xs) =>
     xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]);
@@ -28856,14 +29017,25 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
      un-stamped by it (what she trained stays trained, rule 20). */
   const toggleDone = (i) => setData((d) => {
     const pg0 = (d.bodywork || []).find((x) => x.id === prog.id) || prog;
+    /* A TICK NAMES ITS LIST (build 219). It used to store the list's POSITION,
+       so renaming was safe and moving anything was not: every tick she had
+       ever made followed the slot rather than the list. Both are read; only
+       ids are written. */
+    const lists0 = pg0.lists || [];
+    const target = lists0[i];
+    if (!target) return d;
     const log = { ...(pg0.log || {}) };
-    const isDone = Object.values(log).map(Number).includes(i);
+    const isDone = tickedListIds(pg0, lists0).has(target.id);
     if (isDone) {
-      Object.keys(log).forEach((k) => { if (Number(log[k]) === i) delete log[k]; });
+      Object.keys(log).forEach((k) => {
+        const v = log[k];
+        if (typeof v === "string" ? v === target.id
+          : (isFinite(Number(v)) && lists0[Number(v)] && lists0[Number(v)].id === target.id)) delete log[k];
+      });
       return { ...d, bodywork: (d.bodywork || []).map((pg) =>
         pg.id !== prog.id ? pg : { ...pg, log }) };
     }
-    log[coach.t + "#" + i] = i;
+    log[coach.t + "#" + target.id] = target.id;
     const l = (d.logs || {})[coach.t] || {};
     return { ...d,
       bodywork: (d.bodywork || []).map((pg) => (pg.id !== prog.id ? pg : { ...pg, log })),
@@ -28957,7 +29129,39 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
 
       {/* THE MENU. Every list by number and name; done flipped on the row;
           each list opens and closes on its own, in any order she likes. */}
-      {lists.map((l, i) => {
+      {/* RENAMING THE AREA — her instruction, 18 August: "editing the name of
+          the tabs of the list". The id never changes, so nothing she has
+          logged or ticked is disturbed by it. */}
+      {unfolded && (
+        <div style={{ marginBottom: 12 }}>
+          {areaName === null ? (
+            <button onClick={() => setAreaName(prog.area || "")} className="tap" style={{
+              border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+              fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+              rename this body area
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input value={areaName} onChange={(e) => setAreaName(e.target.value)}
+                autoFocus placeholder="What do you call this area?"
+                style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9,
+                  border: `1.5px solid ${C.signal}`, background: C.card, color: C.ink,
+                  fontSize: 13.5, fontFamily: "inherit" }} />
+              <button onClick={() => { const v = areaName.trim();
+                  if (v) setData((d) => bwOps.renameArea(d, prog.id, v));
+                  setAreaName(null); }}
+                className="tap" style={{ flexShrink: 0, padding: "9px 14px", borderRadius: 9,
+                  border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
+                  fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Save</button>
+              <button onClick={() => setAreaName(null)} className="tap" style={{
+                flexShrink: 0, border: "none", background: "transparent", cursor: "pointer",
+                fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>cancel</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {lists.map(({ l, i }) => {
         const isDone = st.doneSet.has(i);
         const isOpen = openIds.includes(l.id);
         return (
@@ -29037,11 +29241,111 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                     {st.doneSet.has(i) ? "Not done after all — untick it" : "Done — tick this list off"}
                   </Btn>
                 </div>
+
+                {/* WHAT SHE CAN DO TO THIS LIST — her instruction, 18 August:
+                    "rename and change places and do everything in my body
+                    lists." Nothing here deletes: a list taken off keeps every
+                    exercise and every number under it (rule 20). */}
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+                  {naming === l.id ? (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                      <input value={namingText} autoFocus
+                        onChange={(e) => setNamingText(e.target.value)}
+                        placeholder="What do you call this list?"
+                        style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9,
+                          border: `1.5px solid ${C.signal}`, background: C.card, color: C.ink,
+                          fontSize: 13.5, fontFamily: "inherit" }} />
+                      <button onClick={() => { const v = namingText.trim();
+                          if (v) setData((d) => bwOps.renameList(d, prog.id, l.id, v));
+                          setNaming(null); }}
+                        className="tap" style={{ flexShrink: 0, padding: "9px 14px", borderRadius: 9,
+                          border: "none", background: C.signal, color: C.chalk, cursor: "pointer",
+                          fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Save</button>
+                      <button onClick={() => setNaming(null)} className="tap" style={{
+                        flexShrink: 0, border: "none", background: "transparent", cursor: "pointer",
+                        fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                      {[["rename this list", () => { setNamingText(l.title || ""); setNaming(l.id); }],
+                        ["move up", () => setData((d) => bwOps.moveList(d, prog.id, l.id, -1))],
+                        ["move down", () => setData((d) => bwOps.moveList(d, prog.id, l.id, 1))],
+                        ...(otherAreas.length ? [["move to another area",
+                          () => setMovingList(movingList === l.id ? null : l.id)]] : []),
+                        ["take this list off", () => setData((d) => bwOps.setListAside(d, prog.id, l.id, coach.t))],
+                      ].map(([label, go]) => (
+                        <button key={label} onClick={go} className="tap" style={{
+                          border: `1.5px solid ${C.line}`, background: "transparent",
+                          color: label === "take this list off" ? C.muted : C.ink,
+                          borderRadius: 9, padding: "7px 11px", cursor: "pointer",
+                          fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>{label}</button>
+                      ))}
+                    </div>
+                  )}
+
+                  {movingList === l.id && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 6, lineHeight: 1.45 }}>
+                        Move it whole — the exercises, everything you logged against them, and the
+                        days you ticked it off all go with it. Which area?
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {otherAreas.map((p) => (
+                          <button key={p.id} onClick={() => {
+                              setData((d) => bwOps.moveListToArea(d, prog.id, l.id, p.id, coach.t));
+                              setMovingList(null);
+                            }} className="tap" style={{
+                              border: `1.5px solid ${C.signal}`, background: "transparent",
+                              color: C.signal, borderRadius: 9, padding: "7px 11px", cursor: "pointer",
+                              fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>
+                            {p.area || "an area"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
         );
       })}
+
+      <button onClick={() => setData((d) => bwOps.addList(d, prog.id, coach.t))}
+        className="tap" style={{
+          border: `1.5px dashed ${C.line}`, borderRadius: 10, background: "transparent",
+          cursor: "pointer", padding: "10px 0", width: "100%", marginTop: 4,
+          fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+        + add a list to {prog.area || "this area"}
+      </button>
+
+      {/* SET ASIDE, NOT DELETED (rule 20). Every exercise and every number she
+          logged is still under it, and one tap brings it back. */}
+      {asideLists.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+          <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 8 }}>
+            Set aside — kept whole, with everything you logged against them.
+          </div>
+          {asideLists.map(({ l }) => (
+            <div key={l.id} style={{ display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 0", borderTop: `1px solid ${C.line}` }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.muted }}>
+                {l.title || "untitled"}
+                <span className="mono" style={{ fontSize: 10, marginLeft: 8 }}>
+                  {(l.exercises || []).length} exercise{(l.exercises || []).length === 1 ? "" : "s"}
+                  {l.removedOn ? ` · off since ${l.removedOn}` : ""}
+                </span>
+              </span>
+              <button onClick={() => setData((d) => bwOps.putListBack(d, prog.id, l.id))}
+                className="tap" style={{ flexShrink: 0, border: `1.5px solid ${C.moss}`,
+                  background: "transparent", color: C.moss, borderRadius: 9, padding: "6px 11px",
+                  cursor: "pointer", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>
+                put it back
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {err && (
         <div style={{ fontSize: 12, color: C.clay, marginTop: 10, lineHeight: 1.5 }}>{err}</div>
@@ -29280,6 +29584,53 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
           <BodyWorkProgramme key={prog.id} prog={prog} data={data} setData={setData}
             coach={coach} setSheet={setSheet} />
         ))}
+
+      {/* AN AREA OF HER OWN, WITHOUT ASKING THE COACH FOR ONE (build 219).
+          Until now the only way to get a body area was to ask for ten lists to
+          be designed into it — so she could not make an empty folder to move a
+          list into, or to write herself. Her instruction, 18 August: "adding,
+          removing, and deleting, and editing... I need to be able to do
+          everything in my body lists." */}
+      {showing === "all" && (
+        <button onClick={() => setData((d) => bwOps.addArea(d, coach.t))}
+          className="tap" style={{
+            border: `1.5px dashed ${C.line}`, borderRadius: 12, background: "transparent",
+            cursor: "pointer", padding: "12px 0", width: "100%", marginBottom: 14,
+            fontSize: 13, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+          + add an empty body area of your own
+        </button>
+      )}
+
+      {/* AND ONE SHE TOOK OFF COMES BACK (rule 20). "Remove this body area"
+          has always set it aside whole, dated, with every list and every
+          number in it — and nothing in the app has ever shown it to her
+          again, which makes a reversible thing irreversible in practice. */}
+      {showing === "all" && (data.bodywork || []).some((pg) => pg && pg.status === "removed") && (
+        <Card style={{ marginBottom: 14 }}>
+          <Eyebrow>Body areas you took off</Eyebrow>
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, margin: "2px 0 8px" }}>
+            Kept whole — every list, every exercise, and everything you logged against them.
+          </div>
+          {(data.bodywork || []).filter((pg) => pg && pg.status === "removed").map((pg) => (
+            <div key={pg.id} style={{ display: "flex", alignItems: "center", gap: 10,
+              padding: "9px 0", borderTop: `1px solid ${C.line}` }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.ink }}>
+                {pg.area || "an area"}
+                <span className="mono" style={{ fontSize: 10, color: C.muted, marginLeft: 8 }}>
+                  {(pg.lists || []).length} list{(pg.lists || []).length === 1 ? "" : "s"}
+                  {pg.removedOn ? ` · off since ${pg.removedOn}` : ""}
+                </span>
+              </span>
+              <button onClick={() => setData((d) => bwOps.putAreaBack(d, pg.id))}
+                className="tap" style={{ flexShrink: 0, border: `1.5px solid ${C.moss}`,
+                  background: "transparent", color: C.moss, borderRadius: 9, padding: "7px 12px",
+                  cursor: "pointer", fontSize: 11.5, fontWeight: 600, fontFamily: "inherit" }}>
+                put it back
+              </button>
+            </div>
+          ))}
+        </Card>
+      )}
 
       {(showing === "new" || (!progs.length && !hasTen)) && (
       <Card style={{ background: C.pist }}>
