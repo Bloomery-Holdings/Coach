@@ -332,7 +332,13 @@ const FORMULA_DEFAULTS = {
     briefDayRows: 21, /* days of the day-by-day record the coach is given  */
     clockMinSession: 2, /* minutes the session clock must run to log a session */
     nameSessionDays: 7, /* days back the app will still ask what a session was  */
-    briefListsMax: 200, /* exercises of her own lists the coach is given        */
+    /* WAS 200 UNTIL BUILD 217, AND HER COACH COULD NOT SEE INSIDE SIX OF HER
+       PROGRAMMES BECAUSE OF IT. She has ~60 lists; 200 exercises is a third of
+       them. Measured on her shape of data: complete costs ~14k tokens a message
+       against ~9k cut. This is a backstop against a runaway payload, not a
+       budget — the budget is hers, on the summary page, where this section's
+       size is printed. */
+    briefListsMax: 1200, /* exercises of her own lists the coach is given        */
     briefBeliefsMax: 40, /* beliefs about her the coach carries                  */
     /* AUDIT OF 18 AUGUST. These four were literals in the code — two of them
        inside a comment claiming they were already hers (rule 12). */
@@ -4589,7 +4595,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 216";
+const BUILD = "18 August 2026 · 217";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5990,10 +5996,28 @@ const briefBody = (data, coach) => {
    screen uses, so the page and the payload cannot disagree (rule 33). */
 const briefLists = (data, coach) => {
     const F = formulas(data.settings);
-    const cap = Math.max(10, Number(F.briefListsMax) || 200);
-    const progs = (data.bodywork || []).filter((p) => p && p.status !== "removed" && p.status !== "retired");
-    if (!progs.length)
+    const cap = Math.max(10, Number(F.briefListsMax) || 1200);
+    const live = (data.bodywork || []).filter((p) => p && p.status !== "removed" && p.status !== "retired");
+    if (!live.length)
         return "HER OWN LISTS: none written yet.";
+    /* WHAT SHE HAS ACTUALLY BEEN DOING, FIRST (build 217). The cap used to fall
+       wherever the store happened to hold these, so which two hundred exercises
+       survived was an accident. Ordered by the last day she ticked anything in
+       each programme, so if the cap ever bites it takes the work she is furthest
+       from rather than the work she did yesterday. Rule 23: this changes the
+       ORDER only — nothing is dropped that was not dropped before. */
+    const lastTouched = (p) => {
+        const days = [];
+        [p.log, ...((p.rounds || []).map((r) => r && r.log))].forEach((lg) => Object.keys(lg || {}).forEach((k) => {
+            const d = String(k).split("#")[0];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(d))
+                days.push(d);
+        }));
+        return days.length ? days.sort()[days.length - 1] : (p.created || "");
+    };
+    const progs = live.map((p, i) => ({ p, i, when: lastTouched(p) }))
+        .sort((a, b) => (b.when || "").localeCompare(a.when || "") || a.i - b.i)
+        .map((x) => x.p);
     const out = [];
     let n = 0;
     progs.forEach((p) => {
@@ -6034,7 +6058,9 @@ const briefLists = (data, coach) => {
                 out.push(`    (and ${cutHere} more in this list, not shown — ask her for them.)`);
         });
     });
-    const cut = n >= cap ? `\n  (${cap} exercises shown — the rest are on her Body page. Say so if you need them.)` : "";
+    const cut = n >= cap ? `\n  (${cap} exercises shown, which is all this payload is set to carry — the rest are on her`
+        + `\n  Body page and she can raise it: "Exercises from your own lists your coach is given" in the`
+        + `\n  formulas sheet. The programmes she has worked most recently are the ones shown.)` : "";
     return `HER OWN LISTS — the exercises she has written for herself, in full. THIS IS WHAT SHE IS MEANT\n`
         + `TO BE DOING; the record below is what she actually did. You may read, judge and change these —\n`
         + `she asks you to.\n`
