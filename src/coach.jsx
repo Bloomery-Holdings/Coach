@@ -437,13 +437,18 @@ const BAND_OFFSETS = [
   { over: -99, key: "rest",   label: "Recovery only",    line: "Well below your normal. Mobility, stretching or a walk. Movement yes, training no." },
 ];
 
-const recoveryBaseline = (morning, t) => {
+/* AUDIT FINDING 33. These two read FORMULA_DEFAULTS.minBaselineReadings
+   directly, so the row she can edit in the formulas sheet looked live and was
+   discarded — rule 12 says every threshold is read from her settings, never
+   from a literal. The settings are threaded in; where they are not passed the
+   default still applies, so nothing that calls these without them changes. */
+const recoveryBaseline = (morning, t, settings) => {
   const vals = [];
   for (let i = 1; i <= 30; i++) {
     const v = Number(morning?.[addDays(t, -i)]?.recovery);
     if (!isNaN(v) && v > 0) vals.push(v);
   }
-  if (vals.length < FORMULA_DEFAULTS.minBaselineReadings) return null;
+  if (vals.length < (Number(formulas(settings).minBaselineReadings) || FORMULA_DEFAULTS.minBaselineReadings)) return null;
   vals.sort((a, b) => a - b);
   return Math.round(vals[Math.floor(vals.length / 2)]);
 };
@@ -451,13 +456,13 @@ const recoveryBaseline = (morning, t) => {
 /* Her own sleep normal, read the same way as recovery: the median of the last
    thirty nights rather than a number out of a textbook. Five nights minimum,
    otherwise it says nothing rather than inventing a baseline. */
-const sleepBaseline = (logs, t) => {
+const sleepBaseline = (logs, t, settings) => {
   const vals = [];
   for (let i = 1; i <= 30; i++) {
     const v = Number(logs?.[addDays(t, -i)]?.sleep);
     if (!isNaN(v) && v > 0) vals.push(v);
   }
-  if (vals.length < FORMULA_DEFAULTS.minBaselineReadings) return null;
+  if (vals.length < (Number(formulas(settings).minBaselineReadings) || FORMULA_DEFAULTS.minBaselineReadings)) return null;
   vals.sort((a, b) => a - b);
   return Math.round(vals[Math.floor(vals.length / 2)] * 10) / 10;
 };
@@ -4272,7 +4277,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 205";
+const BUILD = "18 August 2026 · 206";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5983,7 +5988,7 @@ const briefText = (data, coach, opts) => {
 
   lines.push(`WHO: ${s.name || "she"}${s.age ? `, ${s.age}` : ""}. Target ${s.weeklyTarget || "?"} sessions a week.`);
   lines.push(`NOW: block "${coach.livePhase?.name || "none"}" week ${coach.weeksIntoBlock} of ${coach.livePhase?.weeks || "?"}.`
-    + ` This week ${coach.weekDone}/${coach.seasonTarget}. Consistency ${coach.consistency}% over 28 days.`
+    + ` This week ${coach.weekDone}/${coach.seasonTarget}. Consistency ${coach.consistencyKnown === false ? coach.consistencySay : `${coach.consistency}% over 28 days`}.`
     + ` Lapse state ${coach.lapseState}.`);
   lines.push(`TODAY: ${coach.prescribed ? `${coach.prescribed.name}, ${coach.prescribed.minutes} min` : "nothing prescribed"}.`
     + ` Recovery ${coach.recValue || "not entered"}.`
@@ -7086,7 +7091,23 @@ function useCoach(data, day, clock) {
       if (isScheduled(d)) { sched++; if (done(d)) hit++; }
     }
     const consistency = sched ? Math.round((hit / sched) * 100) : 0;
+    /* AUDIT OF 18 AUGUST, FINDING 26. The CARD already got this right — it
+       shows "—" and says "starts with your first session". Nothing else did.
+       Progress asserted "Consistency 0% — you did 0 out of every 100 sessions
+       you were down for", and the payload told the coach 0% in two separate
+       lines, so on a fresh account the app scored her at zero for a month she
+       had not had yet. That is rule 23 and rule 24 in one number.
 
+       Settled ONCE, here, rather than at the five places that ask (rule 33).
+       consistency stays a number so every threshold comparison keeps working;
+       consistencyKnown says whether it means anything, and everything that
+       PRINTS it has to ask. */
+    const consistencyKnown = !!firstSession && sched > 0;
+    const consistencySay = consistencyKnown ? `${consistency}%` : "not yet — it starts at her first logged session";
+
+    /* did she train at all in the seven days coverage is reading? (build 206) */
+    const coverWeekTrained = Array.from({ length: 7 }, (_, i) => addDays(t, -i))
+      .some((d) => { const l = logs[d]; return !!l && !!l.completed && !l.rest; });
     const ws = weekStart(t, startOn);
     /* the seven days of HER week, whichever day it begins on */
     const calendarWeek = Array.from({ length: 7 }, (_, i) => addDays(ws, i));
@@ -8690,7 +8711,7 @@ function useCoach(data, day, clock) {
     if (pbCount > 0 && improving.some((m) => m.isBest))
       nudges.push({ tone: "warm", text: `New personal best in ${improving.filter((m) => m.isBest).map((m) => m.label.toLowerCase()).join(" and ")}. That's the whole point of measuring.` });
     if (consistency >= FX.consistencyHigh)
-      nudges.push({ tone: "warm", text: `${consistency}% consistency over four weeks. Most people never get near that.` });
+      if (consistencyKnown) nudges.push({ tone: "warm", text: `${consistency}% consistency over four weeks. Most people never get near that.` });
     if (recovery?.key === "rest" && !loggedToday)
       nudges.push({ tone: "firm", text: "Recovery is well below your normal. Doing nothing today is the correct training decision, not a missed day." });
 
@@ -9740,8 +9761,15 @@ function useCoach(data, day, clock) {
 
       M({ group: "week", id: "doms", label: "When it catches up", scope: "your own delay",
         display: domsLag === null ? "—" : `day ${domsLag.worst}`,
+        /* AUDIT FINDING 31, the same sign error in a different card: Math.abs
+           with no test, so a day recovery went UP was reported as points DOWN.
+           The number is a change; it is described as one. */
         sub: domsLag === null ? "needs WHOOP and effort scores"
-          : `${Math.abs(domsLag.worst === 1 ? domsLag.d1 : domsLag.d2)} points down`,
+          : (() => {
+              const dv = domsLag.worst === 1 ? domsLag.d1 : domsLag.d2;
+              if (!dv) return "no measurable change";
+              return `${Math.abs(dv)} points ${dv < 0 ? "down" : "up"}`;
+            })(),
         color: domsLag === null ? C.muted : C.ink,
         plain: "Whether a hard session costs you the next morning or the one after.",
         how: "Recovery change one and two days after every session over 300 load, averaged.",
@@ -9909,9 +9937,19 @@ function useCoach(data, day, clock) {
 
       M({ group: "quarter", id: "progression", label: "Progression rate", scope: "safe ceiling 10%/week",
         display: chronicGrowth === null ? "—" : `${Math.round((chronicGrowth || 0) / 4)}%`,
+        /* AUDIT FINDING 29, a sign error. Math.abs on a SIGNED growth figure,
+           so a load that had collapsed read as one climbing too fast: train
+           hard, take a light month, and the card said "−13% · faster than
+           advised" in warning colour on the month her training fell off a
+           cliff. The ceiling is about climbing. Falling is a different thing
+           and is now named as one. */
         sub: chronicGrowth === null ? "needs effort scores"
-          : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? "within the safe rate" : "faster than advised",
-        color: chronicGrowth === null ? C.muted : Math.abs(chronicGrowth / 4) <= FX.chronicGrowthSafe ? C.moss : C.ochre,
+          : chronicGrowth / 4 < -FX.chronicGrowthSafe ? "falling — you are doing less than a month ago"
+          : chronicGrowth / 4 <= FX.chronicGrowthSafe ? "within the safe rate"
+          : "faster than advised",
+        color: chronicGrowth === null ? C.muted
+          : chronicGrowth / 4 < -FX.chronicGrowthSafe ? C.ink
+          : chronicGrowth / 4 <= FX.chronicGrowthSafe ? C.moss : C.ochre,
         plain: "How fast your training load is climbing, per week.",
         how: "Month-over-month change in average weekly load, divided across four weeks.",
         meaning: "The load-management literature is consistent that increases beyond about 10% a week are where trouble starts. This is the number that lets you build for a year without a setback — slower than you'd like, and far more likely to still be going in twelve months.",
@@ -9996,9 +10034,17 @@ function useCoach(data, day, clock) {
       },
       {
         id: "coverage", label: "Coverage", scope: "body regions, last 7 days",
-        value: covered, display: `${covered}/${REGIONS.length}`,
-        sub: covered >= FX.coverWhole ? "whole body" : covered >= FX.coverNarrow ? `${thinnest.length} thin` : "narrow",
-        color: covered >= FX.coverWhole ? C.moss : covered >= FX.coverNarrow ? C.ink : C.ochre,
+        /* AUDIT FINDING 27. Every other headline dashes honestly when it has
+           nothing. This one printed "0/7" with the word "narrow" under it in
+           the warning colour on day one — a computed-looking judgement about a
+           week in which she had not trained at all. Rule 23: a calculation
+           without its input shows a dash and says what it needs. */
+        value: coverWeekTrained ? covered : null,
+        display: coverWeekTrained ? `${covered}/${REGIONS.length}` : "—",
+        sub: !coverWeekTrained ? "no sessions logged in the last 7 days"
+          : covered >= FX.coverWhole ? "whole body" : covered >= FX.coverNarrow ? `${thinnest.length} thin` : "narrow",
+        color: !coverWeekTrained ? C.muted
+          : covered >= FX.coverWhole ? C.moss : covered >= FX.coverNarrow ? C.ink : C.ochre,
         plain: "How many parts of your body took a real share of the week's work.",
         meaning: `Until now this app watched one shoulder and nothing else. It now accounts for legs, back, chest, shoulders, arms, core and heart separately, because the regions that quietly disappear are the ones nobody is counting. ${thinnest.length ? `Thinnest right now: ${thinnest.slice(0, 3).map((r) => r.label.toLowerCase()).join(", ")}.` : "Everything is getting a share."}`,
         need: hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
@@ -10128,8 +10174,11 @@ function useCoach(data, day, clock) {
       if (settings.shoulderInjury && shoulderAMTrend !== null && shoulderAMTrend < FX.shoulderTrendBad) out.flags.push({ kind: "shoulder", id: "am", text: `shoulder waking at ${shoulderAMTrend}/5 after training` });
 
       /* adherence and load */
-      if (consistency >= FX.consistencyStrong) out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
-      if (consistency < FX.consistencyHolding) out.flags.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
+      /* AUDIT FINDING 26. Both of these fired on a fresh account, so the app
+         raised "0% consistency" as a FLAG against someone who had not had a
+         first session yet — rule 24's exact prohibition. */
+      if (consistencyKnown && consistency >= FX.consistencyStrong) out.strong.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
+      if (consistencyKnown && consistency < FX.consistencyHolding) out.flags.push({ kind: "adherence", id: "consistency", text: `${consistency}% consistency` });
       if (acwrBand?.key === "spike") out.flags.push({ kind: "load", id: "acwr", text: `load spiking at ${acwr}` });
       if (acwrBand?.key === "under") out.weak.push({ kind: "load", id: "acwr", text: `load running under your base at ${acwr}` });
       if (variety28 <= FX.varietyNarrow) out.weak.push({ kind: "variety", id: "variety", text: `only ${variety28} different classes` });
@@ -10200,7 +10249,7 @@ function useCoach(data, day, clock) {
       weeks: livePhase.weeks,
       sessions: blockSessions,
       load: blockLoad,
-      consistency,
+      consistency, consistencyKnown, consistencySay,
       setsMet, setsShort,
       realUp: realUp.length, realDown: realDown.length,
       rhrDrift, hrvDrift,
@@ -11143,6 +11192,9 @@ function useCoach(data, day, clock) {
 
     return {
       t, ws, mk, weekDays, calendarWeek, startOn, done, isScheduled, consistency,
+      /* whether that number means anything yet, and what to say instead of a
+         zero when it does not (build 206, audit finding 26) */
+      consistencyKnown, consistencySay,
       weekDone, target, monthDone, monthTarget, totalSessions,
       weeksHit, weekRun, avgPerWeek, totalHours, totalMinutes,
       pbs,
@@ -16391,9 +16443,14 @@ function Progress({ data, setData, coach, setSheet }) {
         </div>
         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
           <strong style={{ color: C.ink, fontWeight: 600 }}>Consistency</strong> looks at the last 28 days.
-          It counts the days your cycle called for training, then how many of those you actually did —
-          so {coach.consistency}% means you did {coach.consistency} out of every 100 sessions you were down for.
-          Rest days aren't counted against you, and one missed day dents it rather than wiping it out.
+          It counts the days your cycle called for training, then how many of those you actually did.
+          {/* AUDIT FINDING 26. This sentence asserted "0% means you did 0 out of every 100 sessions
+              you were down for" on an account with no first session — scoring her at zero for a
+              month she had not had yet (rules 23 and 24). It only says it when it is true. */}
+          {coach.consistencyKnown
+            ? ` So ${coach.consistency}% means you did ${coach.consistency} out of every 100 sessions you were down for.`
+            : " It starts counting at your first logged session — there is nothing before that to be a share of, so it shows a dash rather than a zero."}
+          {" "}Rest days aren't counted against you, and one missed day dents it rather than wiping it out.
           <br /><br />
           <strong style={{ color: C.ink, fontWeight: 600 }}>Per week</strong> is your true average across
           every week you've logged — the honest answer to "how often do I actually train?"
@@ -22564,7 +22621,18 @@ const NumbersTable = ({ shown, total, onAsk }) => (
               {v.key && <span className="mono" style={{ fontSize: 9, color: C.moss, marginLeft: 6 }}>HEADLINE</span>}
             </span>
             <span className="mono" style={{ fontSize: 13, fontWeight: 700,
-              color: v.value === null || v.value === undefined ? C.line : C.ink }}>{v.display}</span>
+              /* AUDIT FINDING 28. This coloured by `value`, and only five of
+                 the forty-one metrics carry one — the five headlines. So the
+                 other thirty-six were painted #F0E4E7 on white, which is the
+                 colour this app uses for NO DATA. Mobility 72%, Readiness 61
+                 and Habit strength 48% all printed as though they were absent.
+
+                 The honest test is the one the app already makes everywhere
+                 else: a metric with nothing to say DISPLAYS a dash. Reading
+                 that costs nothing and is true for all forty-one. */
+              color: (v.display === undefined || v.display === null
+                || String(v.display).trim() === "" || String(v.display).trim() === "—")
+                ? C.line : C.ink }}>{v.display}</span>
           </span>
           {v.need && (
             <span style={{ display: "block", fontSize: 10.5, color: C.muted, lineHeight: 1.4, marginTop: 2 }}>
