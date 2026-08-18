@@ -2900,6 +2900,10 @@ const narrowTo = (data, scope, t) => {
         return out;
     };
     const nLogs = keepFloor(byDate(data.logs), data.logs);
+    /* Her programmes are never narrowed — they carry the lists themselves — so
+       the ticks inside them ride through any window already. Recorded here so a
+       later session does not "tidy" bodywork into the narrowed set and silently
+       take her one-tap sessions away again (build 215). */
     const nMorning = byDate(data.morning);
     const nWeekly = byWeek(data.weekly), nMobility = byWeek(data.mobility);
     const nMonthly = byMonth(data.monthly);
@@ -4570,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 214";
+const BUILD = "18 August 2026 · 215";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -5317,6 +5321,45 @@ const bwNameOf = (data, exId, entry) => {
         return kept;
     return `a movement no longer in any list (logged as ${exId})`;
 };
+/* WHAT SHE TICKED OFF ON A DAY, AND WHICH MOVEMENTS THAT MEANS (build 215).
+   ---------------------------------------------------------------------------
+   A tick is stored as pg.log["<date>#<listIndex>"] = <listIndex>, and older
+   ticks as pg.log["<date>"] = <listIndex> — build 98 changed the key when the
+   lists became free order, and rule 20 does not let the old ones stop working.
+
+   Archived rounds carry their own lists AND their own log, so a tick from a
+   round she has since closed still resolves to the movements it meant.
+
+   Returns one entry per list ticked on that date, with the exercises in it. */
+const listsTickedOn = (data, date) => {
+    if (!data || !date)
+        return [];
+    const out = [];
+    const scan = (pg, lists, log, roundN) => {
+        Object.keys(log || {}).forEach((k) => {
+            var _a;
+            const day = String(k).split("#")[0];
+            if (day !== date)
+                return;
+            const i = Number(log[k]);
+            if (!isFinite(i) || i < 0)
+                return;
+            const l = (lists || [])[i];
+            if (!l)
+                return;
+            out.push({ area: pg.area || "body work", n: (_a = l.n) !== null && _a !== void 0 ? _a : (i + 1), title: l.title || "",
+                round: roundN,
+                exercises: (l.exercises || []).filter((e) => e && e.status !== "removed") });
+        });
+    };
+    (data.bodywork || []).forEach((pg) => {
+        if (!pg)
+            return;
+        scan(pg, pg.lists, pg.log, null);
+        (pg.rounds || []).forEach((r, ri) => scan(pg, r && r.lists, r && r.log, ri + 1));
+    });
+    return out;
+};
 const bwHomeOf = (data, exId) => {
     for (const pg of (data.bodywork || [])) {
         /* archived rounds are searched too, so a movement she did in June still
@@ -5467,6 +5510,37 @@ const doneOnDay = (data, date, onCard) => {
         (byList[name] = byList[name] || []).push({ id: exId,
             what: bwNameOf(data, exId, e),
             detail: bwSay(e, home && home.ex) });
+    });
+    /* ---- A LIST SHE TICKED OFF (build 215) --------------------------------
+       HER REPORT: "It just says which list." It did, because this function only
+       ever read bwlog — the numbers she TYPES. Ticking a list done is the other
+       way to record a session, it is one tap, and it writes which list and which
+       day and nothing else. The movements it stands for were never expanded.
+  
+       They are expanded here, and marked for what they are: a tick says she did
+       that list, not that she did 3 x 12 at 20kg. Where she ALSO typed numbers
+       against a movement that day, her numbers win and the written dose is not
+       shown — and that movement is dropped from the bwlog grouping below so it
+       is not reported twice. */
+    const tickedIds = new Set();
+    listsTickedOn(data, date).forEach((t, ti) => {
+        const lines = (t.exercises || []).map((e) => {
+            const logged = bw[e.id] || null;
+            const has = logged && ["w", "reps", "secs"].some((k) => { var _a; return String((_a = logged[k]) !== null && _a !== void 0 ? _a : "").trim() !== ""; });
+            if (has)
+                tickedIds.add(e.id);
+            const said = has ? bwSay(logged, e) : "";
+            const dose = doseFrom(e);
+            return { id: e.id, what: e.name || "an exercise",
+                detail: has ? said : (dose ? `as written: ${dose}` : "as written") };
+        });
+        add("tick:" + ti, `${t.area} · list ${t.n}${t.title ? ` "${t.title}"` : ""} — ticked off`
+            + (t.round ? ` (round ${t.round})` : ""), lines.length ? `${lines.length} ${lines.length === 1 ? "movement" : "movements"} in it` : "", { kind: "tab", tab: "body" }, lines);
+    });
+    Object.keys(byList).forEach((name) => {
+        byList[name] = byList[name].filter((r) => !tickedIds.has(r.id));
+        if (!byList[name].length)
+            delete byList[name];
     });
     Object.keys(byList).sort().forEach((name) => {
         const done = byList[name];
@@ -6157,6 +6231,17 @@ const briefDays = (data, coach) => {
     const cap = Math.max(3, Number(F.briefDayRows) || Number(FORMULA_DEFAULTS.briefDayRows) || 21);
     const LG = restIsFinal(data.logs || {});
     const seen = new Set([...Object.keys(LG), ...Object.keys(data.bwlog || {})]);
+    /* a day she recorded by ticking a list is a day she trained, whatever else
+       is or is not stamped on it (build 215) */
+    (data.bodywork || []).forEach((pg) => {
+        if (!pg)
+            return;
+        [pg.log, ...(pg.rounds || []).map((r) => r && r.log)].forEach((lg) => Object.keys(lg || {}).forEach((k) => {
+            const day = String(k).split("#")[0];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(day))
+                seen.add(day);
+        }));
+    });
     const days = [...seen]
         .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t)
         .sort().reverse().slice(0, cap);
@@ -6260,6 +6345,10 @@ const briefDays = (data, coach) => {
         + `if you want to know whether she trained on a day, this line answers it. REST outranks everything\n`
         + `(rule 33). "nothing logged" means nothing was entered — not a rest day, and never held against\n`
         + `her (rules 23, 24). Where a row names the movements, those are the movements she did.\n`
+        + `A row saying "ticked off" is her marking a whole list done in one tap — she DID those movements;\n`
+        + `"as written" beside one means she did not type a weight or a rep count for it, so use the written\n`
+        + `dose as what the list ASKS for and never report it back to her as what she achieved. Where a\n`
+        + `number IS shown, she entered it herself.\n`
         + (older
             ? `THIS RECORD STOPS AT ${days[days.length - 1]}, and she has ${older} more logged day(s) BEFORE it on her\n`
                 + `device. That is this section's own limit, not her window and not a gap — do not tell her a day\n`
@@ -23827,6 +23916,25 @@ const memoryDelta = (data, from, t) => {
         .filter((sc) => sc && since(sc.date))
         .map((sc) => `  * ${sc.date}, "${g.text}": ${sc.value}/10${sc.note ? ` — she wrote: "${sc.note}"` : ""}`)).join("\n"));
     /* NAMED, NOT COUNTED (build 211) — see the comment on this build. */
+    /* A TICKED LIST IS BODY-PAGE WORK TOO (build 215). This read bwlog alone, so
+       every session she recorded with one tap reached the running memory as
+       nothing at all. */
+    const tickDays = new Set();
+    (d.bodywork || []).forEach((pg) => {
+        if (!pg)
+            return;
+        const logs = [pg.log, ...(pg.rounds || []).map((r) => r && r.log)];
+        logs.forEach((lg) => Object.keys(lg || {}).forEach((k) => {
+            const day = String(k).split("#")[0];
+            if (/^\d{4}-\d{2}-\d{2}$/.test(day) && since(day))
+                tickDays.add(day);
+        }));
+    });
+    S("LISTS SHE TICKED OFF SINCE THEN — one tap each, and the movements they hold", [...tickDays].sort().map((day) => {
+        const rows = listsTickedOn(d, day).map((t) => `${t.area} list ${t.n}${t.title ? ` "${t.title}"` : ""}`
+            + (t.exercises.length ? `: ${t.exercises.map((e) => e.name || "an exercise").join(", ")}` : ""));
+        return rows.length ? `  * ${day}: ${rows.join(" | ")}` : null;
+    }).filter(Boolean).join("\n"));
     S("BODY-PAGE WORK SINCE THEN", Object.keys(d.bwlog || {}).filter(since).sort()
         .map((k) => {
         const day = d.bwlog[k] || {};
