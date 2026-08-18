@@ -353,6 +353,14 @@ const FORMULA_DEFAULTS = {
   minHardDays: 8,          /* hard days before adaptation is calculated               */
   minBaselineReadings: 5,  /* readings before a recovery or sleep median is trusted   */
 
+  /* THE SAFETY NET ON THIS DEVICE (build 200). Snapshots are whole copies, so
+     these three decide how much of her history survives a bad write — and how
+     much room that costs. snapMin is the floor the budget may not trim past. */
+  snapKeep: 10,            /* daily copies kept on the device                         */
+  snapMin: 3,              /* never trimmed below this many, however big the file     */
+  snapBudget: 1200000,     /* bytes all the copies together may take                  */
+  storeWarnAt: 3500000,    /* bytes stored before the app warns her it is filling up  */
+
   /* How she rates her own confidence, and what that permits */
   confidenceHigh: 8,       /* at or above: a good week to move a variable             */
   confidenceSteady: 6,     /* at or above: hold. Under it, simplify                   */
@@ -4203,7 +4211,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 199";
+const BUILD = "18 August 2026 · 200";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4255,6 +4263,48 @@ let freshening = false;
 const takeTheNewOne = async () => {
   if (freshening) return;
   freshening = true;
+
+  /* PROVE THE NEW ONE IS THERE BEFORE DELETING THE OLD ONE (build 200; audit
+     of 18 August, finding 9).
+
+     The order used to be: unregister every service worker, delete every cache
+     on the origin, then navigate. No fetch of the new bundle first, no
+     rollback, and the freshening latch was never cleared so nothing retried.
+
+     It runs automatically on every open where the server hash differs. So:
+     the Tube, a plane, hotel wifi behind a captive portal, or GitHub serving
+     a 5xx — the old app is gone, the new one never arrives, and she gets the
+     browser's offline page. EVERY TIME SHE OPENS IT AFTERWARDS, because there
+     is no longer a service worker to serve anything. Her whole record sits in
+     localStorage, intact and completely unreachable. Rule 21 says this thing
+     works offline; the update path was the one route that could take that
+     away.
+
+     AND THE CHECK FOUND WORSE THAN THE AUDIT DID. This is called directly by
+     the manual button, which never asked newerOnServer anything — so tapping
+     "check for a newer version" when there was nothing new deleted her
+     offline app for nothing at all. Both are answered by the same three
+     questions, asked in order:
+
+       is there a bundle on the server at all
+       is it actually different from the one running here
+       and does it FETCH
+
+     Any no, and nothing is touched. The latch is released on every one of
+     those exits so the next open can try again. */
+  const giveUp = () => { freshening = false; };
+  let there = null;
+  try { there = await bundleOnServer(); } catch (e) { there = null; }
+  if (!there) return giveUp();
+  const here = bundleHere();
+  if (here && there === here) return giveUp();
+  try {
+    const probe = await fetch(new URL("./assets/" + there, location.href).toString(),
+      { cache: "no-store" });
+    if (!probe || !probe.ok) return giveUp();
+  } catch (e) { return giveUp(); }
+
+  /* only now is it safe to let go of what she has */
   try {
     if (typeof navigator !== "undefined" && navigator.serviceWorker) {
       const regs = await navigator.serviceWorker.getRegistrations();
@@ -4762,7 +4812,21 @@ const restIsFinal = (logs) => {
   const out = {};
   Object.keys(logs || {}).forEach((k) => {
     const l = logs[k];
-    if (l && l.rest) {
+    /* A NULL DAY IS NOT A DAY (build 200; audit finding 44).
+
+       This passed nulls straight through, and three readers in useCoach call
+       .completed on whatever comes out — so one null in her logs threw
+       TypeError during render and sent her to the rescue screen. A backup with
+       a truncated or hand-edited day was all it took, and restoreData's only
+       check is "does it have a logs key".
+
+       Settled HERE, once, in the view the engine reads, rather than at the
+       eighty call sites that ask — which is rule 33's whole point, and the
+       lesson of the restDay business. The null stays in her stored file
+       untouched (rule 20); it simply stops being handed to the engine as
+       though it were a day she lived. */
+    if (!l) return;
+    if (l.rest) {
       /* completed goes false and the minutes stop counting; the session she
          logged is kept beside it so nothing is lost and so the question can
          still be answered either way. */
@@ -6115,6 +6179,9 @@ async function loadData() {
    would be a promise the app cannot keep.
    ==========================================================================*/
 const SNAP_KEY = "coach:snapshots";
+/* what the last snapshot actually managed, so the app can tell her rather than
+   quietly showing her fewer copies than she believes she has (build 200) */
+const SNAP_META = "coach:snapmeta";
 const SNAP_KEEP = 10;
 /* Ten whole copies of a dataset that has to survive years will eventually
    outgrow the roughly five megabytes a browser gives a site - and the moment
@@ -6145,15 +6212,47 @@ const snapshotIfDue = (d) => {
       days: Object.keys(d.logs || {}).length,
       json: JSON.stringify(d),
     };
-    let next = [entry, ...snaps].slice(0, SNAP_KEEP);
+    /* HER THRESHOLDS, NOT MINE (rule 12) — all three have rows in the
+       formulas sheet, because a number that decides how much of her history
+       survives is exactly the kind she should be able to move. */
+    const F = formulas(d.settings);
+    const keepN  = Math.max(1, Number(F.snapKeep) || SNAP_KEEP);
+    const budget = Math.max(200000, Number(F.snapBudget) || SNAP_BUDGET);
+    const floorN = Math.max(1, Math.min(keepN, Number(F.snapMin) || 3));
+
+    let next = [entry, ...snaps].slice(0, keepN);
     const size = (list) => list.reduce((a, x) => a + (x.json || "").length, 0);
-    while (next.length > 1 && size(next) > SNAP_BUDGET) next = next.slice(0, -1);
+    /* AUDIT OF 18 AUGUST, FINDING 8. This loop used to run down to ONE.
+
+       Every snapshot is a full copy, so the moment her file passed the budget
+       a single copy exceeded it on its own — and the net collapsed from ten
+       days to one, permanently, silently, at precisely the moment her history
+       was largest and most worth protecting. She would still have been told
+       "10 daily snapshots kept on the device as well".
+
+       It now stops at a floor. That is safe because the write below already
+       halves and retries on a store that genuinely will not take them, so the
+       floor is a floor on INTENT, not a promise to exceed the quota. */
+    while (next.length > floorN && size(next) > budget) next = next.slice(0, -1);
     /* Even inside the budget the store can be full for reasons of its own.
        Halve and retry rather than lose the day's copy outright; and if even a
        single copy will not fit, leave what is already there untouched. */
     while (next.length) {
       try {
         window.localStorage.setItem(SNAP_KEY, JSON.stringify(next));
+        /* WHAT IT ACTUALLY MANAGED, WRITTEN DOWN (rule 23). If it kept fewer
+           than she asked for, the reason is recorded and the backup screen
+           says so — a safety net that has quietly shrunk is worse than one
+           she knows is small, because she is counting on it. */
+        try {
+          window.localStorage.setItem(SNAP_META, JSON.stringify({
+            at: day, wanted: keepN, kept: next.length,
+            bytes: size(next),
+            why: next.length >= keepN ? "" : (size(next) > budget
+              ? "your file is big enough that this many copies is all that fits"
+              : "the browser would not take any more"),
+          }));
+        } catch (e2) { /* the meta is a courtesy; never let it cost a snapshot */ }
         return next;
       } catch (e) {
         if (next.length === 1) break;
@@ -6568,11 +6667,58 @@ const shareBackup = async (d) => {
 
 let storeWriteFailed = false;
 const didStoreWriteFail = () => storeWriteFailed;
+
+/* AUDIT OF 18 AUGUST, FINDING 8 — the second half of it.
+
+   storeWriteFailed was a bare module-level let, read once inside NeedsYou.
+   React has no subscription to a module variable, so flipping it re-rendered
+   nothing: the warning appeared only when something ELSE happened to render —
+   and the thing that had just failed was the save of the state change that
+   would have caused one. NeedsYou also lives on the Today tab and returns null
+   when nothing is due, so if she was in the chat, the battery or the Body tab
+   when the store filled, she got no signal at all and kept typing into
+   something that was discarding every word.
+
+   So it is real state now: anything can subscribe, and the app frame does, so
+   the warning is on screen whatever tab she is on.
+
+   Note what is NOT changed. store.set still lets setItem throw rather than
+   pretending (rule 23), and saveData still refuses to write over data it
+   failed to read. Those were already right. */
+const writeWatchers = new Set();
+const onStoreWriteFailed = (fn) => { writeWatchers.add(fn); return () => writeWatchers.delete(fn); };
+const markWriteFailed = (v) => {
+  if (v === storeWriteFailed) return;
+  storeWriteFailed = v;
+  writeWatchers.forEach((f) => { try { f(v); } catch (e) { /* a bad listener never costs a save */ } });
+};
+
+/* HOW FULL IT IS, MEASURED RATHER THAN GUESSED. A browser gives a site roughly
+   five megabytes, and her file plus one whole snapshot is most of what is in
+   here. Knowing the number is what lets the app warn her BEFORE the write that
+   fails rather than after it. */
+const storeBytes = () => {
+  try {
+    let n = 0;
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      n += (k || "").length + (window.localStorage.getItem(k) || "").length;
+    }
+    return n;
+  } catch (e) { return null; }
+};
+
 const saveData = async (d) => {
   /* Never write over data we failed to read. */
   if (storeReadFailed) return;
-  try { await store.set(KEY, JSON.stringify(d)); storeWriteFailed = false; }
-  catch (e) { storeWriteFailed = true; }
+  /* WHICH BUILD WROTE THIS FILE (build 200; audit finding 43). Nothing in the
+     stored data said. A file written by build 120 and one written by build 199
+     were byte-indistinguishable in provenance, while the restore check was
+     only "does it have a logs key" — so a backup from any age merged in with
+     no way to know what its fields meant. Two keys, added on the way out so
+     they cost nothing in memory and cannot start a render. */
+  try { await store.set(KEY, JSON.stringify({ ...d, build: BUILD, savedAt: new Date().toISOString() })); markWriteFailed(false); }
+  catch (e) { markWriteFailed(true); }
   /* A snapshot a day, kept separately, so a bad restore or a corrupted write
      can never take the history with it. */
   try { snapshotIfDue(d); } catch (e) {}
@@ -17043,6 +17189,17 @@ function Settings({ data, setData, coach, setSheet }) {
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 12, lineHeight: 1.45 }}>
           Everything lives in this browser, on this device. A copy kept somewhere else is
           what makes that safe rather than fragile.
+          {" "}
+          {/* AUDIT OF 18 AUGUST, FINDING 10. The photos she adds to exercises live in a
+              separate IndexedDB store, deliberately, so a few hundred kilobytes of picture
+              can never eat the space her training record needs. No backup path can see
+              them. She was told only "it stays on this device", which reads as
+              reassurance rather than as a warning — so a correct backup and restore onto
+              a new phone would have said "Nothing already here was removed" while every
+              photo silently did not come. Rule 23: say what is missing. */}
+          <strong>One exception, so it cannot surprise you later:</strong> the photos you add
+          to exercises are kept separately and are not in any backup or export. Move to a new
+          phone and everything else comes with you — the photos do not.
         </div>
 
         {/* where it stands, said plainly */}
@@ -17999,6 +18156,12 @@ function Formulas({ data, setData, close }) {
              ["minDaysForPattern", "Days in the window before weekday patterns are read"],
              ["minHardDays", "Hard days before adaptation is calculated"],
              ["minBaselineReadings", "Readings before a median is trusted"]] },
+
+    { title: "The safety net on this device", note: "Snapshots are whole copies of your file, taken once a day, kept separately so a bad write can never take your history with it. These decide how many are kept and how much room they may take. The floor is the important one: below build 200 the net quietly shrank to a single copy the moment your file got big, which is exactly when you need it most.",
+      rows: [["snapKeep", "Daily copies kept on this device"],
+             ["snapMin", "Never fewer than this, however big the file"],
+             ["snapBudget", "Bytes all the copies together may take"],
+             ["storeWarnAt", "Bytes stored before the app warns you"]] },
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
@@ -25519,6 +25682,45 @@ const SheetShell = ({ children, onBack, onClose, canGoBack }) => (
 /* ============================================================================
    8. SHELL
    ==========================================================================*/
+/* THE ONE THING THE APP MUST NEVER FAIL TO SAY (build 200).
+
+   It sits in the frame rather than on a card, so it is on screen whatever tab
+   she is on — the fault it reports is precisely the one that makes everything
+   she does next disappear, and the old warning lived only on Today. It appears
+   the moment a write fails, because a failed write now publishes to anything
+   subscribed instead of setting a variable nobody is watching.
+
+   It also warns BEFORE the wall. The number is hers (storeWarnAt). */
+function StoreWarning({ data }) {
+  const [failed, setFailed] = useState(didStoreWriteFail());
+  useEffect(() => onStoreWriteFailed(setFailed), []);
+  const F = formulas(data && data.settings);
+  const bytes = storeBytes();
+  const warnAt = Number(F.storeWarnAt) || 3500000;
+  const nearly = !failed && bytes !== null && bytes > warnAt;
+  if (!failed && !nearly) return null;
+  const mb = bytes === null ? null : Math.round(bytes / 100000) / 10;
+  return (
+    <div style={{ background: failed ? C.pist : C.mint, border: `1px solid ${failed ? C.signal : C.moss}`,
+      borderRadius: 12, padding: "12px 14px", marginBottom: 12, fontSize: 12.5,
+      lineHeight: 1.55, color: C.ink }}>
+      {failed ? (
+        <>
+          <strong>The last thing you entered did not save.</strong> This device's storage is full,
+          so today is only on this screen — if you close the app it is gone. Take a copy now:
+          Settings, then Your data, then "Show my data as text".
+        </>
+      ) : (
+        <>
+          <strong>Storage on this device is filling up{mb ? ` — about ${mb} MB used` : ""}.</strong>{" "}
+          Nothing is lost and nothing has failed yet. The usual cause is photos sent to your coach.
+          Worth taking a backup: Settings, then Your data.
+        </>
+      )}
+    </div>
+  );
+}
+
 function CoachApp() {
   const [data, setDataRaw] = useState(BLANK);
   const [ready, setReady] = useState(false);
@@ -25684,6 +25886,7 @@ function CoachApp() {
     <div className="body" style={{ background: C.chalk, color: C.ink, minHeight: "100vh" }}>
       <style dangerouslySetInnerHTML={{ __html: FONTS }} />
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "14px 14px 96px" }}>
+        <StoreWarning data={data} />
 
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, minHeight: 34 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
