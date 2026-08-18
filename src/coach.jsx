@@ -4272,7 +4272,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 204";
+const BUILD = "18 August 2026 · 205";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5523,8 +5523,18 @@ const briefLists = (data, coach) => {
       const exes = (l.exercises || []).filter((e) => e && e.status !== "removed");
       out.push(`  ${p.area || "an area"} · list ${l.n ?? "?"} "${l.title || "untitled"}"${p.mins ? ` (${p.mins} min)` : ""}`);
       if (!exes.length) { out.push("    (nothing in it yet)"); return; }
+      /* AUDIT FINDING 24. The cap was counted across ALL lists, so once it was
+         reached every later list printed "(nothing in it yet)" — which is not
+         a truncation, it is a lie: the coach was told those lists were empty
+         and would have prescribed accordingly. A cut says it was cut. */
+      if (n >= cap) {
+        out.push(`    (${exes.length} exercise(s) — not listed here because this payload has already`);
+        out.push(`     carried ${cap} of them. They exist and she is doing them: ASK if you need them.)`);
+        return;
+      }
+      let cutHere = 0;
       exes.forEach((e) => {
-        if (n >= cap) return;
+        if (n >= cap) { cutHere += 1; return; }
         n += 1;
         const dose = doseFrom(e);
         const kind = loadKindOf(e);
@@ -5533,6 +5543,7 @@ const briefLists = (data, coach) => {
           .filter(Boolean).join(", ");
         out.push(`    ${e.name || "unnamed"}${bits ? ` — ${bits}` : ""}`);
       });
+      if (cutHere) out.push(`    (and ${cutHere} more in this list, not shown — ask her for them.)`);
     });
   });
   const cut = n >= cap ? `\n  (${cap} exercises shown — the rest are on her Body page. Say so if you need them.)` : "";
@@ -26976,6 +26987,12 @@ bodyweight is "none".`;
 /* HER INSTRUCTION, 13 August: "I need him to edit them too." What the coach
    just said it would change, turned into exact operations against exact ids.
    It may only touch lists that already exist, and it may never invent an id. */
+/* AUDIT OF 18 AUGUST, FINDING 22. The schema below omitted sets, reps, hold,
+   sides and loadKind, so the model could not supply them however much it
+   wanted to — and every exercise the coach added arrived with empty boxes and
+   no dose the app could read. bodyInventory then showed the model its own
+   blanks on the next turn, so it never had a reason to think anything was
+   wrong. They are in the schema now, and shapeLists already reads them. */
 const EDIT_LISTS_SYSTEM = `You are turning a change you have ALREADY described to her, in
 conversation, into exact operations on her Body-page lists.
 
@@ -26986,6 +27003,16 @@ RULES.
 - Only make the changes you actually described in the message. Nothing extra, nothing tidied.
 - Removing is not deleting: it is set aside and she can put it back. Remove anything you told her
   to stop doing.
+
+ALWAYS GIVE AN EXERCISE ITS NUMBERS. sets, reps, hold (seconds), sides and loadKind are what her
+card actually asks her for and what her timer runs on — "dose" is only the words printed above
+them. An exercise added or replaced without them arrives with empty boxes she has to fill in
+herself, which is the opposite of the point. Give a hold in SECONDS for a stretch, reps for a
+rep exercise, and say sides "each" when it is done per side.
+
+NOTHING YOU REMOVE IS DELETED. It is set aside, dated, and she can put it back in one tap with
+everything she ever logged against it still underneath. Say so when you remove something, so it
+never sounds final (rule 35).
 - When you replace something, the replacement must reach the same tissue by a route that avoids
   whatever made the original wrong for her.
 - "why" is one short sentence in her language, and it is what she will read.
@@ -26998,10 +27025,14 @@ Return ONLY a JSON object, no prose, no code fence:
     { "op": "dose", "exercise": "<exercise id>", "dose": "3 x 8", "why": "..." },
     { "op": "how", "exercise": "<exercise id>", "how": "...", "why": "..." },
     { "op": "replace", "exercise": "<exercise id>", "why": "...",
-      "with": { "name": "...", "tool": "...", "dose": "...", "mins": 2, "search": "...",
+      "with": { "name": "...", "tool": "...", "dose": "...", "sets": "3", "reps": "10",
+                "hold": "", "sides": "each|one", "loadKind": "weight|band|none",
+                "mins": 2, "search": "...",
                 "video": "", "how": "...", "targets": "..." } },
     { "op": "add", "list": "<list id>", "why": "...",
-      "with": { "name": "...", "tool": "...", "dose": "...", "mins": 2, "search": "...",
+      "with": { "name": "...", "tool": "...", "dose": "...", "sets": "3", "reps": "10",
+                "hold": "", "sides": "each|one", "loadKind": "weight|band|none",
+                "mins": 2, "search": "...",
                 "video": "", "how": "...", "targets": "..." } },
 
     { "where": "drill|weekly|monthly|mobility|class|goal", "op": "remove",
@@ -27239,8 +27270,15 @@ const applyListEdits = (data, changes, today) => {
             : { ...x, status: "removed", removedOn: today, removedWhy: c.why || "" }));
           done.push({ what: `removed ${ex.name} from list ${li.n}`, why: c.why || "" });
         } else if (c.op === "dose" && c.dose) {
-          exercises = exercises.map((x, k) => (k !== i ? x : { ...x, dose: String(c.dose), wasDose: x.dose }));
-          done.push({ what: `${ex.name}: ${ex.dose || "no dose"} becomes ${c.dose}`, why: c.why || "" });
+          /* AUDIT FINDING 21: write the NUMBERS too, not just the words. A
+             dose the boxes and the timer do not read is not a changed dose. */
+          const parsed = doseInto(c.dose) || {};
+          exercises = exercises.map((x, k) => (k !== i ? x : { ...x, ...parsed,
+            dose: String(c.dose), wasDose: x.dose,
+            wasSets: x.sets, wasReps: x.reps, wasHold: x.hold }));
+          done.push({ what: `${ex.name}: ${ex.dose || "no dose"} becomes ${c.dose}`
+            + (Object.keys(parsed).length ? "" : " (as written — I could not read it as sets and reps, so your boxes are unchanged)"),
+            why: c.why || "" });
         } else if (c.op === "how" && c.how) {
           exercises = exercises.map((x, k) => (k !== i ? x : { ...x, how: String(c.how), wasHow: x.how }));
           done.push({ what: `changed how you do ${ex.name}`, why: c.why || "" });
@@ -27295,6 +27333,40 @@ const doseFrom = (x) => {
   if (hold) return `${hold} seconds${side}`;
   if (reps) return `${reps} reps${side}`;
   return "";
+};
+
+/* READING A DOSE BACK INTO THE NUMBERS THE APP ACTUALLY USES.
+
+   AUDIT OF 18 AUGUST, FINDING 21. op "dose" wrote the free-text `dose` field
+   and nothing else, leaving sets, reps and hold exactly as they were. But the
+   exercise card asks for what she DID against sets/reps/hold, and doseFrom
+   recomputes the dose from those same numbers — so after the coach "changed"
+   a dose to 3 x 8, her card still asked for the old 3 x 12 and the row showed
+   two contradicting doses at once. She had been told the change was made.
+
+   This is doseFrom run backwards. It is deliberately conservative: it reads
+   the shapes the coach actually writes, and where it cannot parse something it
+   leaves the numbers alone rather than guessing — a wrong number here is worse
+   than a free-text dose, because it is what the timer and the boxes use. */
+const doseInto = (text) => {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return null;
+  const out = {};
+  if (/\beach\s*side\b|\bper\s*side\b|\beach\s*leg\b|\beach\s*arm\b|\bboth\s*sides\b/.test(t)) out.sides = "each";
+  /* "3 x 8", "3x8", "3 sets of 8" */
+  let m = t.match(/(\d+)\s*(?:x|×|sets?\s*of)\s*(\d+)\s*(s|sec|secs|seconds)?/);
+  if (m) {
+    out.sets = m[1];
+    if (m[3]) out.hold = m[2]; else out.reps = m[2];
+    return out;
+  }
+  /* "30 seconds", "45s" */
+  m = t.match(/(\d+)\s*(?:s\b|sec|secs|seconds)/);
+  if (m) { out.hold = m[1]; return out; }
+  /* "12 reps", "to failure" has no number and is left alone */
+  m = t.match(/(\d+)\s*reps?\b/);
+  if (m) { out.reps = m[1]; return out; }
+  return Object.keys(out).length ? out : null;
 };
 
 const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
@@ -28015,15 +28087,19 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                   <BodyWorkExercise key={ex.id} prog={prog} list={l} ex={ex}
                     data={data} setData={setData} coach={coach} setSheet={setSheet} />
                 ))}
-                {/* SET ASIDE, AND ONE TAP FROM COMING BACK. Build 199. A
-                    removal she cannot undo is a second accident waiting
-                    behind the first, and everything she logged against it is
-                    still underneath, still charted, waiting for the row. */}
+                {/* SET ASIDE, AND ONE TAP FROM COMING BACK. Build 199 for her
+                    own removals; build 205 extended it to the COACH's, which
+                    had no way back at all while three separate texts promised
+                    her that anything taken off comes back (audit finding 23).
+                    Everything she logged against it is still underneath,
+                    still charted, waiting for the row. */}
                 {(l.exercises || []).filter((ex) => ex.status === "removed").map((ex) => (
                   <div key={ex.id} style={{ display: "flex", alignItems: "center", gap: 8,
                     padding: "8px 0", borderTop: "1px solid " + C.line }}>
                     <span style={{ flex: 1, fontSize: 12.5, color: C.muted }}>
-                      {ex.name} — set aside{ex.removedOn ? " on " + ex.removedOn : ""}.
+                      {ex.name} — set aside{ex.removedOn ? " on " + ex.removedOn : ""}
+                      {ex.addedBy === "coach" || ex.removedWhy ? " by your coach" : ""}
+                      {ex.removedWhy ? ": " + ex.removedWhy : ""}.
                       Everything you logged against it is kept.
                     </span>
                     <button className="tap" onClick={() => setData((d) => ({ ...d,
