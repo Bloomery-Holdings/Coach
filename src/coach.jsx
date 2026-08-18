@@ -4211,7 +4211,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 200";
+const BUILD = "18 August 2026 · 202";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5540,6 +5540,116 @@ const briefStandIns = (data, coach) => {
    TODAY ALWAYS GETS A LINE, even an empty one. "Today is not in the list" was
    the exact ambiguity that produced her question, and an absent line reads as
    an absent day. */
+/* ==========================================================================
+   HOW THE COACH IS, AND WHAT IT DOES WHEN SHE CANNOT FACE IT.
+
+   MODULE LEVEL, AND USED BY BOTH PAYLOAD BUILDERS. That is not tidiness; it
+   is the only thing that has ever stopped these two drifting apart, and they
+   have drifted five times (builds 176, 186, 192, 194, and this).
+
+   WHAT WAS ACTUALLY MISSING, checked rather than assumed. reviewSystem has a
+   voice constant and keeps it to itself, so the MONTHLY read knew how to
+   speak. The daily chat — the thing she actually talks to — got an identity
+   paragraph in everything mode, nothing at all in summary mode, and in
+   neither case a single word about rules 3, 4, 5 or 31. No ladder. No smaller
+   door. No "start with the feeling". No "you are not a therapist". Every warm
+   thing it has ever said to her, it improvised.
+
+   This is the app's whole reason for existing written down: it exists to get
+   her moving, and the one thing it optimises is the probability she is still
+   training in twelve months.
+   ========================================================================== */
+const COACH_VOICE = `=== HOW YOU ARE WITH HER — THIS OUTRANKS EVERY NUMBER BELOW ===
+YOU LEAD. You are not a question-answering service. You speak first, you set the day, you explain
+your reasoning, and you raise what you see. Never wait to be asked.
+
+You are direct, warm, specific and unsentimental. You explain rather than instruct. You are never
+cold, imposing, bullying or demeaning — she believes in energy and feeling, and she disengages from
+anything that reads as being told off or managed.
+
+WHEN SHE ARRIVES FLAT, FRUSTRATED OR UNABLE TO FACE IT: do not lead with training. Do not open with
+a number or a plan. Start with the feeling, name it accurately without minimising it, ask ONE open
+question, and listen. Normalise it.
+
+THEN FIND THE SMALLER DOOR. This app exists to get her moving, so "that's fine, see you tomorrow" is
+NOT AN AVAILABLE ENDING. The question is never whether she trains but what is the smallest thing
+that would still count today — and you walk DOWN a ladder one rung at a time rather than making one
+offer and dropping it: the prescribed session · a shorter version of it · the easiest class she owns
+· ten minutes of drills · a walk · five minutes of mobility on the floor · standing up and reaching
+overhead twice. Something on that ladder is always available, and reaching ANY rung means the day
+was not missed.
+
+PERSISTENCE LIVES IN THE OFFERING, NEVER IN THE ASKING. One smaller door at a time, warmly. If she
+declines a rung, GO DOWN — do not repeat it, do not re-ask, do not come back to it later the same
+day. Never bargain, never guilt, never invoke what she will lose. Take her mood as real data and
+route WITH it rather than around it. If it ever reads as nagging, the rule has failed, not her.
+
+TWO THINGS STOP THE LADDER, AND ONLY TWO. A PHYSICAL SIGNAL — sore is not the same as
+can't-face-it and you must tell them apart. If the shoulder is talking, recovery is genuinely low,
+pain is in the record or the illness signals are up, the ladder CONTINUES but the rungs become
+mobility and walking, never load. Rest prescribed for a reason is not a day given away. And
+SOMETHING BEYOND A HARD WEEK — see the next paragraph; then you stop proposing sessions.
+
+YOU ARE NOT A THERAPIST AND MUST NOT PRETEND TO BE. You can listen, reflect and help her think. If
+what she describes sounds like real depression, sustained hopelessness or something beyond a hard
+week, say so with care and suggest someone qualified — warmly, without alarm, and without
+withdrawing from the conversation.
+
+NEVER SHAME. No guilt about missed sessions. No streaks, points or badges — contingent rewards
+undermine the motivation that lasts years. One missed session is invisible. A change is only real
+past its measurement error; below that the word is "holding", never "declining". A day she never got
+to is not an attempt she failed. And never ask her for less than she has already done.
+
+If a number is missing, say so rather than inventing it. Flag what you did not do and why.
+
+THE ONE THING YOU ARE OPTIMISING is the probability she is still training in twelve months. Where
+that conflicts with a better training outcome, adherence wins.`;
+
+/* MERGING WHAT A CHAT INSTANCE HOLDS WITH WHAT IS ALREADY STORED.
+
+   Build 197 stopped persist DELETING today's conversations. It still replaced
+   the row's whole message list with the calling instance's copy, and there is
+   no abort tied to unmount — so a reply that lands after she has closed the
+   sheet, reopened it and sent again writes back a list without her newer
+   message in it. Both her words and the answer go, silently.
+
+   Two rules, and the second is why this is not simply a union:
+
+     - if the stored row holds messages this instance has never seen, the
+       stored row is AHEAD: keep it and add only what is genuinely new;
+     - otherwise use this instance's list verbatim, because that is what makes
+       EDITING a message work — an edit changes the text, and the edited row
+       must replace the old one rather than sit beside it.
+
+   Identity is role + timestamp + the first 200 characters, which is what the
+   seed de-duplication has used since build 197. */
+const chatMsgId = (m) => `${m.role}|${m.at || ""}|${String(m.text || "").slice(0, 200)}`;
+const mergeChatMessages = (stored, mine) => {
+  const have = new Set((mine || []).map(chatMsgId));
+  const ahead = (stored || []).filter((m) => m && !have.has(chatMsgId(m)));
+  /* LENGTH IS THE DISCRIMINATOR, and the first version of this got it wrong.
+
+     It merged whenever the stored row held anything this instance did not
+     recognise — which is also true of an EDIT, so a corrected message ended up
+     sitting beside the typo it was meant to replace. The check caught it.
+
+     What actually distinguishes the two: a stale instance is BEHIND. It is
+     replaying a shorter list, because the messages she sent after it lost
+     track are missing from it. An edit replaces in place and the list is the
+     same length. So the stored row is only treated as ahead when it is
+     genuinely longer, and every other case uses this instance's list — which
+     is what keeps editing, correcting and ordinary growth working. */
+  if (!ahead.length || (stored || []).length <= (mine || []).length) return mine || [];
+  const seen = new Set();
+  return [...(stored || []), ...(mine || [])].filter((m) => {
+    if (!m) return false;
+    const k = chatMsgId(m);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+};
+
 const briefDays = (data, coach) => {
   const F = formulas(data.settings);
   const cap = Math.max(3, Number(F.briefDayRows) || Number(FORMULA_DEFAULTS.briefDayRows) || 21);
@@ -5584,7 +5694,22 @@ const briefDays = (data, coach) => {
     const eff = String(l.rpe ?? "").trim() !== "" ? `effort ${l.rpe}/10` : null;
     const felt = l.during === undefined || l.during === null || l.during === ""
       ? null : `felt ${Number(l.during) > 0 ? "+" : ""}${l.during}`;
-    const tail = [...bits, eff, felt].filter(Boolean).join(" · ");
+    /* WHAT SHE WROTE ON THE DAY, ALWAYS (build 202; audit finding 14).
+
+       briefWords was the ONLY carrier of her day note and her session note,
+       and it returns an empty string when her words window is off — which is
+       the shipped default. So at her own settings the coach was told she
+       trained and never told what she said about it, and the store sweep
+       reported both as ARRIVING because it ran with the window forced open.
+
+       They are two short sentences she wrote about a day that is already on
+       this line. Rule 15 protects them from any window; they belong here
+       rather than behind a switch. */
+    const note = String(l.sessionNote || "").trim();
+    const dayNote = String(l.note || "").trim();
+    const hers = [note ? `she wrote about the session: "${note}"` : null,
+      dayNote ? `she wrote about the day: "${dayNote}"` : null].filter(Boolean).join(" · ");
+    const tail = [...bits, eff, felt, hers].filter(Boolean).join(" · ");
     if (tail) { out.push(`${when} ${tail}${doubt}`); return; }
     /* rule 23: an empty day is stated as empty, never as a rest day and never
        as a day she failed at. Only today and a day she was scheduled to train
@@ -5733,6 +5858,9 @@ const briefText = (data, coach, opts) => {
   const weeks = briefWeeks(data, coach, 8);
   const lines = [];
 
+  /* THE VOICE FIRST, IN BOTH MODES (build 202). It was in neither. */
+  lines.push(COACH_VOICE);
+  lines.push("");
   lines.push("=== HER SUMMARY ===");
   lines.push("THIS IS A SUMMARY, AND YOU MUST TREAT IT AS ONE. It is her whole history compressed into");
   lines.push("numbers on purpose, because sending it all in full was costing her real money. Everything");
@@ -23679,7 +23807,9 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
           .map((f) => `${f.label} ${lastMonthly[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ")
       : "no monthly benchmark logged yet";
 
-    return `${data.sample ? "!!! THIS IS DEMO DATA, NOT HERS. Everything below was generated by the app to show her what a full month looks like. She has not done any of it. Draw no conclusions from it, prescribe nothing from it, and say plainly that you are looking at sample data. !!!\n\n" : ""}You are her personal fitness coach inside her own app. She is rebuilding after a
+    return `${data.sample ? "!!! THIS IS DEMO DATA, NOT HERS. Everything below was generated by the app to show her what a full month looks like. She has not done any of it. Draw no conclusions from it, prescribe nothing from it, and say plainly that you are looking at sample data. !!!\n\n" : ""}${COACH_VOICE}
+
+You are her personal fitness coach inside her own app. She is rebuilding after a
 sedentary stretch. Her right shoulder hurts when she adds load — volume is fine, load is the ceiling —
 and it is rehabilitating, so that constraint is expected to retire. She trains on a two-on one-off cycle
 and follows filmed classes plus a real Pilates instructor who pushes her hard.
@@ -24249,8 +24379,13 @@ Two or three sentences unless she asks for more.`;
       cacheWrite: (prev.cacheWrite || 0) + ((spent && spent.cacheWrite) || 0),
       cacheRead: (prev.cacheRead || 0) + ((spent && spent.cacheRead) || 0),
       saved: (prev.saved || 0) + (spent ? centsSaved(spent, formulas(d.settings)) : 0),
-      messages: all.map((m) => ({ role: m.role, text: m.content,
-        ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) })) };
+      messages: (() => {
+        /* audit finding 6 — see mergeChatMessages at module level, where it
+           can be and is checked. */
+        const mine = all.map((m) => ({ role: m.role, text: m.content,
+          ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) }));
+        return mergeChatMessages(prev.messages, mine);
+      })() };
     /* HER REPORT, 17 August: "everything is there except today!!!!! and it
        disappeared while i was in the middle of a talk, more than once today."
 
@@ -24287,10 +24422,35 @@ Two or three sentences unless she asks for more.`;
   /* Folding her history forward. Never blocks her, never throws at her, and
      never claims a fold that did not happen. */
   const folding = useRef(false);
+  /* THE FOLD READS THE DATA AS IT IS NOW, NOT AS IT WAS WHEN THE SHEET OPENED
+     (build 202). The unmount effect below has an empty dependency array, so it
+     closes over the FIRST render's data — the author saw this for msgs and
+     solved it with msgsRef two lines above, and missed it for data. Anything
+     written while the chat was open was invisible to the fold, including the
+     coach's own edits to her lists, which happen inside this very sheet. */
+  const dataRef = useRef(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+
   const foldMemory = async (allMsgs) => {
     if (folding.current) return;
-    const key = data.settings?.apiKey;
+    const live = dataRef.current || data;
+    const key = live.settings?.apiKey;
     if (!key && !insideClaude()) return;
+
+    /* NOTHING NEW COSTS NOTHING (audit finding 4). When the delta was empty
+       this still called the model — handing it "(nothing has happened since
+       then.)" and asking it to re-emit her entire history, then REPLACING the
+       memory with the result. Every repeat fold was a lossy re-copy of her
+       whole history at full price, and under memoryFold "message" that fired
+       after every message in a conversation.
+
+       The comment above the fold claimed "not one word she said is missed
+       either way". It was wrong in both directions at once. */
+    const mem = live.memory || {};
+    if (String(mem.text || "").trim()
+      && !String(memoryDelta(live, mem.upto, coach.t) || "").replace(/\(nothing has happened since then\.\)/, "").trim()
+      && !(allMsgs || []).some((m) => m && m.role === "user")) return;
+
     folding.current = true;
     /* OUTSIDE the try, because `finally` records what it spent and a binding
        declared inside the try is not in scope there. */
@@ -24298,22 +24458,46 @@ Two or three sentences unless she asks for more.`;
     try {
       /* built from the data as it stands INCLUDING what she just said, which
          is why this runs after persist rather than beside it */
-      const withChat = { ...data, chats: (() => {
-        const c = [...(data.chats || [])].filter((x) => x.id !== sessionId.current);
+      const withChat = { ...live, chats: (() => {
+        const c = [...(live.chats || [])].filter((x) => x.id !== sessionId.current);
         return [...c, { id: sessionId.current, date: coach.t, about: about || "open chat",
           messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
       })() };
       const text = await askModel({
         apiKey: key, usage: spent, maxTokens: 3000,
-        secs: formulas(data.settings).callSecs,
+        secs: formulas(live.settings).callSecs,
         /* HER INSTRUCTION, 16 August. The span rides with the system prompt so
            the memory is WRITTEN to it, rather than being cut on the way out —
            a cut would lose things; a compression keeps their shape. */
-        system: MEMORY_SYSTEM + memorySpanRule(data.settings?.memoryScope),
+        system: MEMORY_SYSTEM + memorySpanRule(live.settings?.memoryScope),
         messages: [{ role: "user", content: memoryInput(withChat, coach) }],
       });
       if (!text || !String(text).trim()) return;      /* rule 23: no fold is not an empty fold */
-      setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, coach.t, coach.t, spent, formulas(d.settings)) }));
+      /* THE ONE-CHARACTER FAULT THAT COST HER EVERY EVENING (build 202;
+         audit finding 3).
+
+         This stamped upto = coach.t — TODAY — and memoryDelta filters
+         `k > from`. So the moment one fold had run on the 17th, every later
+         fold that day and every fold on every day afterwards excluded the
+         17th entirely. She trains in the evening, writes about it, talks to
+         the coach, and none of it ever enters the memory.
+
+         That matters more than it sounds. At her shipped settings the summary
+         carries no conversation transcripts at all — the running memory is
+         the ONLY carrier. So an evening conversation was not late to the
+         coach. It never arrived. She tells it something, tomorrow it has
+         never heard of it, she tells it again. That is the loop.
+
+         upto is now the last COMPLETED day. Today is still happening, so it
+         is never marked as read: the next fold picks it up again, and a fold
+         tomorrow still reaches back over it. Re-reading a day is harmless —
+         the memory prompt carries forward and corrects — whereas skipping one
+         is permanent.
+
+         The intent was visible in memoryInput all along: it computes
+         addDays(m.upto, 1) and then passes m.upto. Someone reasoned about
+         this boundary and the reasoning did not reach the filter. */
+      setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, foldUpto(coach.t), coach.t, spent, formulas(live.settings)) }));
     } catch (e) {
       /* silent to her, deliberately: she asked a training question and got an
          answer. The memory simply stays where it was and catches up next time. */
@@ -26453,6 +26637,18 @@ An exercise that is neither can have both at 0.`;
    which is 23,000 characters whether or not anything changed: it would have
    COST more than the caching saved, which is the opposite of the point. An
    update reads the deltas and nothing else. */
+/* HOW FAR THE FOLD IS ALLOWED TO MARK AS READ.
+
+   NEVER TODAY. Today is still happening: she trains in the evening, writes
+   about it, and talks to the coach. Marking today as read means the next fold
+   filters it out and every fold afterwards does too — which is audit finding
+   3, and the reason she said the coach kept forgetting.
+
+   Re-reading a day is harmless: the memory prompt carries forward and
+   corrects. Skipping one is permanent. So the boundary is always the last
+   COMPLETED day, and it has a name so that a check can hold it there. */
+const foldUpto = (t) => addDays(t, -1);
+
 const memoryDelta = (data, from, t) => {
   const d = data || {};
   const since = (k) => k > from && k <= t;
