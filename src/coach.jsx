@@ -4203,7 +4203,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "17 August 2026 · 198";
+const BUILD = "18 August 2026 · 199";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -12532,16 +12532,28 @@ function MobilitySheet({ data, setData, coach, close, setSheet }) {
    before, and asks again in a couple of days. */
 function RecordCard({ data, setData, coach, setSheet }) {
   const [adding, setAdding] = useState(false);
-  const [text, setText] = useState("");
+  /* WRITTEN AS SHE TYPES IT (rule 11; audit of 18 August, finding 7).
+
+     This was the one text box left in the app that only committed when she
+     also tapped something else. Chat has chatDraft, the journal has
+     journalDraft, goal notes have goalNoteDrafts — the record, which is the
+     store the whole follow-up-in-two-days machinery is built on, and the box
+     she is most likely to dictate three sentences into, had nothing. Lock the
+     phone before tapping "Add it" and it was gone with no trace anywhere.
+
+     Same two lines as the journal, which is where the pattern came from. */
+  const [text, setTextLocal] = useState(data.issueDraft || "");
+  const setText = (v) => { setTextLocal(v); setData((d) => ({ ...d, issueDraft: v })); };
   const [trying, setTrying] = useState(null);
-  const [what, setWhat] = useState("");
+  const [what, setWhatLocal] = useState(data.triedDraft || "");
+  const setWhat = (v) => { setWhatLocal(v); setData((d) => ({ ...d, triedDraft: v })); };
 
   const add = () => {
     if (!text.trim()) return;
     const entry = { id: newId(), date: coach.t, text: text.trim(),
       tags: tagIssue(text), status: "open", tried: [] };
-    setData((d) => ({ ...d, issues: [...(d.issues || []), entry] }));
-    setText(""); setAdding(false);
+    setData((d) => ({ ...d, issues: [...(d.issues || []), entry], issueDraft: "" }));
+    setTextLocal(""); setAdding(false);
     setSheet({ kind: "chat", about: "something I've noticed",
       seed: `${entry.text} — what should I do about it?` });
   };
@@ -13536,7 +13548,7 @@ function DuringTap({ value, onChange }) {
   );
 }
 
-function BodyWorkCard({ log, write, isToday }) {
+function BodyWorkCard({ log, write, isToday, todayKey }) {
   const [adding, setAdding] = useState(null);   /* therapy id being added */
   const [mins, setMins] = useState("60");
   const [note, setNote] = useState("");
@@ -13547,7 +13559,21 @@ function BodyWorkCard({ log, write, isToday }) {
     write({ therapy: [...entries, { id: newId(), type: adding, minutes: mins, note }] });
     setAdding(null); setMins("60"); setNote("");
   };
-  const remove = (id) => write({ therapy: entries.filter((x) => x.id !== id) });
+  /* SET ASIDE (rule 20, build 199) — it leaves the day's list so nothing that
+     counts it changes, and lands whole in voidedTherapy with the date. */
+  const voided = log?.voidedTherapy || [];
+  const remove = (id) => {
+    const gone = entries.find((x) => x.id === id);
+    if (!gone) return;
+    write({ therapy: entries.filter((x) => x.id !== id),
+      voidedTherapy: [...voided, { ...gone, voidedOn: todayKey }] });
+  };
+  const putBack = (id) => {
+    const back = voided.find((x) => x.id === id);
+    if (!back) return;
+    const { voidedOn, ...rest } = back;
+    write({ therapy: [...entries, rest], voidedTherapy: voided.filter((x) => x.id !== id) });
+  };
 
   return (
     <Card>
@@ -13579,6 +13605,22 @@ function BodyWorkCard({ log, write, isToday }) {
           </div>
         );
       })}
+
+      {/* SET ASIDE, AND ONE TAP BACK (build 199). "Remove" used to destroy the
+          entry and the note she wrote with it. Now it leaves the day's list —
+          so nothing that counts it changes — and waits here. */}
+      {voided.map((e) => (
+        <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 0", borderTop: "1px solid " + C.line }}>
+          <span style={{ flex: 1, fontSize: 11.5, color: C.muted }}>
+            {therapyById(e.type)?.label || e.type} was set aside{e.voidedOn ? " on " + e.voidedOn : ""}. Kept, not deleted.
+          </span>
+          <button onClick={() => putBack(e.id)} className="tap" style={{
+            border: "1.5px solid " + C.moss, background: "transparent", color: C.moss,
+            borderRadius: 9, padding: "5px 10px", cursor: "pointer", fontSize: 11,
+            fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
+        </div>
+      ))}
 
       {adding ? (
         <div style={{ marginTop: 12, padding: "13px 14px", background: C.chalk, borderRadius: 12 }}>
@@ -13933,7 +13975,23 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     setAdding(false);
   };
   const patchSession = (id, p) => write({ extraSessions: extraSessions.map((x) => x.id === id ? { ...x, ...p } : x) });
-  const dropSession = (id) => write({ extraSessions: extraSessions.filter((x) => x.id !== id) });
+  /* SET ASIDE (rule 20, build 199) — same shape as the body-work entry above
+     and as clearSession below: out of the list every reader counts, into a
+     dated list on the day, one tap from coming back. */
+  const voidedExtras = log?.voidedExtras || [];
+  const dropSession = (id) => {
+    const gone = extraSessions.find((x) => x.id === id);
+    if (!gone) return;
+    write({ extraSessions: extraSessions.filter((x) => x.id !== id),
+      voidedExtras: [...voidedExtras, { ...gone, voidedOn: coach.t }] });
+  };
+  const putBackSession = (id) => {
+    const back = voidedExtras.find((x) => x.id === id);
+    if (!back) return;
+    const { voidedOn, ...rest } = back;
+    write({ extraSessions: [...extraSessions, rest],
+      voidedExtras: voidedExtras.filter((x) => x.id !== id) });
+  };
   /* Clears the session and everything that belongs to it, and NOTHING else.
      Written as an explicit list rather than a wipe so that a field added
      later cannot start silently disappearing when she removes a class.
@@ -14955,6 +15013,23 @@ function Today({ data, setData, coach, setSheet, goTab }) {
               second session, and the way to add one. */}
           {!isFuture && (
           <Card>
+            {/* SET ASIDE, AND ONE TAP BACK (build 199). Removing an extra
+                session used to destroy it, its minutes and its note. It now
+                leaves extraSessions — which eighteen readers count, so none
+                of them change — and waits here on the day it came off. */}
+            {voidedExtras.map((x) => (
+              <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                padding: "8px 0", marginBottom: 6, borderBottom: "1px solid " + C.line }}>
+                <span style={{ flex: 1, fontSize: 11.5, color: C.muted }}>
+                  {x.type || "A session"}{x.minutes ? " · " + x.minutes + " min" : ""} was set
+                  aside{x.voidedOn ? " on " + x.voidedOn : ""}. Kept, not deleted.
+                </span>
+                <button onClick={() => putBackSession(x.id)} className="tap" style={{
+                  border: "1.5px solid " + C.moss, background: "transparent", color: C.moss,
+                  borderRadius: 9, padding: "5px 10px", cursor: "pointer", fontSize: 11,
+                  fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
+              </div>
+            ))}
             {extraSessions.length === 0 ? null : (
               <div style={{ marginBottom: 14 }}>
                 {/* THE MAIN SESSION USED TO BE REPEATED HERE. Removed 16
@@ -15181,11 +15256,11 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           /* The ten minutes moved to the Body tab on 10 August. Nothing is
              shown here any more — the card above is the doorway. */
           { id: "body", title: "Body work",
-            node: <BodyWorkCard log={log} write={write} isToday={isToday} /> },
+            node: <BodyWorkCard log={log} write={write} isToday={isToday} todayKey={coach.t} /> },
         ]} />
       )}
 
-      {!isToday && <BodyWorkCard log={log} write={write} isToday={isToday} />}
+      {!isToday && <BodyWorkCard log={log} write={write} isToday={isToday} todayKey={coach.t} />}
 
       {/* ---- everything else, folded away until asked for ---- */}
       {/* "What is the day itself, shoulder strain? It doesn't have any meaning.
@@ -16281,6 +16356,162 @@ function Progress({ data, setData, coach, setSheet }) {
 }
 
 /* ------------------------------------------------------------ SETTINGS ---- */
+/* ==========================================================================
+   RESTORING A BACKUP — ONE MERGE, USED BY BOTH RESTORE PATHS.
+
+   AT MODULE LEVEL SINCE BUILD 199. It is a pure function and it was only
+   inside the component by accident of where it was first written. Out here it
+   can be checked, and suite 34 checks it — which matters, because what was
+   wrong with it could not be seen by reading it.
+
+   WHAT WAS WRONG (audit of 18 August, finding 1). It opened
+
+     { ...prev, ...incoming, settings: {...}, logs: {...}, ... }
+
+   and then named eighteen branches. The spread is the whole problem: every
+   branch NOT named after it was replaced wholesale by the older copy. Her data
+   has thirty-six top-level branches. Eighteen were being destroyed on every
+   restore:
+
+     mobTests   her whole mobility battery DEFINITION, and every paused row
+                with its retest date (rule 35)
+     drills     her ten minutes
+     bodywork   every programme on the Body page
+     bwlog      EVERY WEIGHT AND REP she ever logged against a body exercise
+     reviews    every monthly read — the thing rule 8 says is kept forever
+     memory     the coach's running account of her
+     spendLog   the whole cost ledger (rule 36)
+     standIns   the stand-ins that replaced her paused measures
+     skips / deferrals / notesUsed / liveBet / bodyFocus / led / forGoal
+     chatDraft / journalDraft / goalNoteDrafts
+
+   And it finished by telling her "Nothing already here was removed", which was
+   counted from the three branches that DID merge, so it could never report a
+   loss.
+
+   HOW IT IS FIXED. The eighteen named branches are untouched — their merge
+   behaviour is exactly what it was, because changing it was not what was asked
+   (rule 2). What is added is that EVERY OTHER KEY, on either side, is now
+   merged too, by shape, with one rule holding throughout:
+
+     WHAT IS ON THIS DEVICE ALWAYS WINS.
+
+   An older backup can ADD a day, a row or a key this phone does not have. It
+   can never overwrite one it does. That is the property that makes an unknown
+   branch — including any store a later build adds — safe by default, which is
+   the real lesson of this fault: the old version was not wrong about eighteen
+   names, it was wrong to work from a list at all.
+
+   ONE THING FLAGGED RATHER THAN CHANGED (rule 2). Inside the eighteen named
+   DATED branches — logs, morning, weekly, monthly, mobility, notes, dayPlan —
+   a day the backup and the phone BOTH have still resolves to the backup's
+   copy. That has been the behaviour since the merge was written and it is not
+   part of this fault, so it stands. It is worth her ruling on separately: the
+   phone's copy is almost always the newer one.
+   ========================================================================== */
+const mergeById = (mine, theirs, key = "id") => {
+  const out = [...(mine || [])];
+  (theirs || []).forEach((x) => {
+    if (out.findIndex((y) => y && x && y[key] === x[key]) === -1) out.push(x);
+  });
+  return out;
+};
+
+/* the eighteen the merge names explicitly; everything else goes through
+   mergeUnnamed below, which is the half that was missing */
+const RESTORE_NAMED = new Set(["settings", "logs", "morning", "weekly", "monthly",
+  "mobility", "notes", "plan", "dayPlan", "journal", "issues", "goals", "chats",
+  "profile", "library", "fields", "program", "sample"]);
+
+const isPlainObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+
+/* THE DEVICE ALWAYS WINS. Three shapes, one rule.
+   - two lists of rows that all carry an id: merge by id, so a restore adds
+     rows this phone has never seen and can never drop or duplicate one it has;
+   - two objects: take the backup's keys FIRST and let the phone's overwrite
+     them, so old days arrive and current ones are untouched;
+   - anything else, or any shape the two sides disagree about: keep the
+     phone's. */
+const mergeUnnamed = (mine, theirs) => {
+  if (mine === undefined || mine === null) return theirs === undefined ? mine : theirs;
+  if (theirs === undefined || theirs === null) return mine;
+  if (Array.isArray(mine) && Array.isArray(theirs)) {
+    const ided = [...mine, ...theirs].every((x) => x && typeof x === "object" && x.id !== undefined);
+    if (ided) return mergeById(mine, theirs);
+    /* No ids to merge on — the spend ledger is the real case. Keeping only
+       the phone's would silently drop every older line the backup holds, so
+       both sides are kept and identical rows are collapsed. Nothing on the
+       device moves, and nothing in the backup is thrown away. */
+    const seen = new Set(mine.map((x) => JSON.stringify(x)));
+    return [...mine, ...theirs.filter((x) => !seen.has(JSON.stringify(x)))];
+  }
+  if (isPlainObj(mine) && isPlainObj(theirs)) return { ...theirs, ...mine };
+  return mine;
+};
+
+/* WHAT A RESTORE ACTUALLY COST, COMPUTED. Rule 23: if the app asserts
+   something, the assertion is computed. The old message asserted that nothing
+   was removed. This walks what she had against what she now has and names any
+   branch that came out smaller — so the app can only say nothing was lost when
+   nothing was. */
+const lostBranches = (prev, next) => {
+  const out = [];
+  Object.keys(prev || {}).forEach((k) => {
+    const a = prev[k], b = (next || {})[k];
+    if (a === undefined || a === null) return;
+    if (Array.isArray(a)) { if (!Array.isArray(b) || b.length < a.length) out.push(k); return; }
+    if (isPlainObj(a)) {
+      if (!isPlainObj(b)) { out.push(k); return; }
+      if (Object.keys(a).some((kk) => !(kk in b))) out.push(k);
+      return;
+    }
+    /* A plain value can be lost too, and the first version of this missed all
+       three of them: bodyFocus, chatDraft and journalDraft are strings, and a
+       half-written sentence replaced by an empty one is exactly the kind of
+       quiet loss this whole build exists to stop. */
+    if (a !== "" && a !== false && !b) out.push(k);
+  });
+  return out;
+};
+
+const mergeInto = (prev, incoming) => {
+  const p = prev || {}, inc = incoming || {};
+  const out = {
+    ...p,
+    ...inc,
+    settings: { ...p.settings, ...(inc.settings || {}) },
+    logs:     { ...p.logs,     ...(inc.logs || {}) },
+    morning:  { ...p.morning,  ...(inc.morning || {}) },
+    weekly:   { ...p.weekly,   ...(inc.weekly || {}) },
+    monthly:  { ...p.monthly,  ...(inc.monthly || {}) },
+    mobility: { ...p.mobility, ...(inc.mobility || {}) },
+    notes:    { ...p.notes,    ...(inc.notes || {}) },
+    plan:     { ...p.plan,     ...(inc.plan || {}) },
+    /* keyed by date, so a restore adds days it has and keeps days it does not */
+    dayPlan:  { ...(p.dayPlan || {}), ...(inc.dayPlan || {}) },
+    journal: [...(p.journal || []), ...((inc.journal || []).filter(
+      (j) => !(p.journal || []).some((x) => x.date === j.date && x.text === j.text)))],
+    issues: mergeById(p.issues, inc.issues),
+    goals:  mergeById(p.goals,  inc.goals),
+    chats:  mergeById(p.chats,  inc.chats),
+    profile: mergeById(p.profile, inc.profile),
+    /* Her library and her programme are current state, not history: keep what
+       is on the device unless this copy is the only one that has any. */
+    library: (p.library && p.library.length) ? p.library : inc.library,
+    fields:  p.fields || inc.fields,
+    program: (p.program?.phases?.length) ? p.program : inc.program,
+    sample: false,
+  };
+  /* AND EVERY OTHER BRANCH EITHER SIDE HAS — the eighteen this used to throw
+     away, plus anything a later build adds without anyone remembering to come
+     back here. That is the point of doing it by enumeration rather than by
+     list: the next store is safe before it is written. */
+  new Set([...Object.keys(p), ...Object.keys(inc)]).forEach((k) => {
+    if (!RESTORE_NAMED.has(k)) out[k] = mergeUnnamed(p[k], inc[k]);
+  });
+  return out;
+};
+
 function Settings({ data, setData, coach, setSheet }) {
   const s = data.settings;
   const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
@@ -16395,14 +16626,17 @@ function Settings({ data, setData, coach, setSheet }) {
     try {
       const incoming = JSON.parse(snap.json);
       let added = 0;
+      /* computed, not asserted — see mergeInto and lostBranches, build 199 */
+      let snapLost = [];
       setData((prev) => {
         const next = mergeInto(prev, incoming);
         added = (next.issues.length - (prev.issues || []).length)
               + (next.goals.length - (prev.goals || []).length)
               + (next.chats.length - (prev.chats || []).length);
+        snapLost = lostBranches(prev, next);
         return next;
       });
-      setBackupMsg(`Put back the copy from ${prettyShort(snap.day)}${added ? `, which brought back ${added} item${added === 1 ? "" : "s"}` : ""}. Nothing already here was removed.`);
+      setBackupMsg(`Put back the copy from ${prettyShort(snap.day)}${added ? `, which brought back ${added} item${added === 1 ? "" : "s"}` : ""}. ${snapLost.length ? `Tell me before you do anything else — this looks like it shortened: ${snapLost.join(", ")}.` : "Nothing already here was removed — I checked every part of it."}`);
       setSnaps(snapRead());
     } catch (e) { setBackupMsg("That snapshot couldn't be read."); }
   };
@@ -16414,49 +16648,9 @@ function Settings({ data, setData, coach, setSheet }) {
   const [restoreText, setRestoreText] = useState("");
   const [restoreMsg, setRestoreMsg] = useState("");
 
-  /* ONE MERGE, USED BY BOTH RESTORE PATHS.
-
-     `{ ...prev, ...incoming }` looks like a merge and is not: it replaces
-     whole branches, so every list the spread does not explicitly name is
-     overwritten by the older copy. Restoring a nine-day-old snapshot silently
-     cost her every goal, conversation, journal entry, kept note, class and
-     tuned threshold added since — while the message said nothing was removed.
-
-     Lists merge by id so restoring twice cannot duplicate. Objects merge
-     key-by-key. What is on this device always survives. Rule 20. */
-  const mergeById = (mine, theirs, key = "id") => {
-    const out = [...(mine || [])];
-    (theirs || []).forEach((x) => {
-      if (out.findIndex((y) => y && x && y[key] === x[key]) === -1) out.push(x);
-    });
-    return out;
-  };
-  const mergeInto = (prev, incoming) => ({
-    ...prev,
-    ...incoming,
-    settings: { ...prev.settings, ...(incoming.settings || {}) },
-    logs:     { ...prev.logs,     ...(incoming.logs || {}) },
-    morning:  { ...prev.morning,  ...(incoming.morning || {}) },
-    weekly:   { ...prev.weekly,   ...(incoming.weekly || {}) },
-    monthly:  { ...prev.monthly,  ...(incoming.monthly || {}) },
-    mobility: { ...prev.mobility, ...(incoming.mobility || {}) },
-    notes:    { ...prev.notes,    ...(incoming.notes || {}) },
-    plan:     { ...prev.plan,     ...(incoming.plan || {}) },
-    /* keyed by date, so a restore adds days it has and keeps days it does not */
-    dayPlan:  { ...(prev.dayPlan || {}), ...(incoming.dayPlan || {}) },
-    journal: [...(prev.journal || []), ...((incoming.journal || []).filter(
-      (j) => !(prev.journal || []).some((p) => p.date === j.date && p.text === j.text)))],
-    issues: mergeById(prev.issues, incoming.issues),
-    goals:  mergeById(prev.goals,  incoming.goals),
-    chats:  mergeById(prev.chats,  incoming.chats),
-    profile: mergeById(prev.profile, incoming.profile),
-    /* Her library and her programme are current state, not history: keep what
-       is on the device unless this copy is the only one that has any. */
-    library: (prev.library && prev.library.length) ? prev.library : incoming.library,
-    fields:  prev.fields || incoming.fields,
-    program: (prev.program?.phases?.length) ? prev.program : incoming.program,
-    sample: false,
-  });
+  /* mergeInto, mergeById and lostBranches moved to module level at build 199
+     so they can be checked — see the block above this component. What was
+     wrong with the old copy could not be seen by reading it. */
 
   const restoreData = () => {
     try {
@@ -16467,6 +16661,11 @@ function Settings({ data, setData, coach, setSheet }) {
       }
       /* Same merge as the snapshot path — see mergeInto above. */
       let added = { issues: 0, goals: 0, chats: 0 };
+      /* WHAT CAME BACK, AND WHAT WENT MISSING — both computed (rule 23). The
+         old message said "Nothing already here was removed" as a fixed
+         sentence, counted from the only three branches that merged. It could
+         not have reported the eighteen it was destroying. */
+      let lost = [];
       setData((prev) => {
         const next = mergeInto(prev, incoming);
         added = {
@@ -16474,6 +16673,7 @@ function Settings({ data, setData, coach, setSheet }) {
           goals: next.goals.length - (prev.goals || []).length,
           chats: next.chats.length - (prev.chats || []).length,
         };
+        lost = lostBranches(prev, next);
         return next;
       });
       const days = Object.keys(incoming.morning || {}).length;
@@ -16481,7 +16681,7 @@ function Settings({ data, setData, coach, setSheet }) {
                      added.goals && `${added.goals} goal${added.goals === 1 ? "" : "s"}`,
                      added.chats && `${added.chats} conversation${added.chats === 1 ? "" : "s"}`]
                     .filter(Boolean).join(", ");
-      setRestoreMsg(`Restored. ${Object.keys(incoming.logs || {}).length} days of training and ${days} days of WHOOP data${extra ? `, plus ${extra}` : ""}. Nothing already here was removed.`);
+      setRestoreMsg(`Restored. ${Object.keys(incoming.logs || {}).length} days of training and ${days} days of WHOOP data${extra ? `, plus ${extra}` : ""}. ${lost.length ? `Tell me before you do anything else — this looks like it shortened: ${lost.join(", ")}.` : "Nothing already here was removed — I checked every part of it, not just the three I used to count."}`);
       setRestoreText("");
     } catch {
       setRestoreMsg("Couldn't read that. Make sure you copied the whole thing.");
@@ -22996,7 +23196,9 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
      words in a chat box that scroll away. */
   /* HER INSTRUCTION, 13 August: "I need him to edit them too." */
   const [editingLists, setEditingLists] = useState(null);
-  const [editsMade, setEditsMade] = useState(null);  /* { done[] , before } | { error } */
+  const [editsMade, setEditsMade] = useState(null);
+  /* which branches the undo left alone because she had changed them herself */
+  const [undoKept, setUndoKept] = useState(null);  /* { done[] , before } | { error } */
   const applyEdits = async (i) => {
     if (editingLists !== null) return;
     setEditingLists(i); setEditsMade(null); setListMade(null);
@@ -23016,6 +23218,16 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
         return;
       }
+      /* WHAT IT LOOKED LIKE BEFORE — and, from build 199, what the edit
+         PRODUCED as well, because undoing needs both.
+
+         The old Undo spread this whole object back over her data. It was
+         frozen at the moment the edits were applied, so anything she changed
+         herself in bodywork, drills, goals, mobTests, fields or library
+         between then and tapping Undo was destroyed — a list she had just
+         built, a goal she had added, a battery field she had renamed. The
+         window was the rest of the conversation. Rule 20 again, in the one
+         control whose entire job is to be safe. */
       const before = JSON.parse(JSON.stringify({ bodywork: data.bodywork || [],
         drills: data.drills || [], goals: data.goals || [], mobTests: data.mobTests || [],
         fields: data.fields || {}, library: data.library || [] }));
@@ -23038,7 +23250,10 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       setData((d) => ({ ...d, bodywork,
         drills: after.data.drills, goals: after.data.goals, mobTests: after.data.mobTests,
         fields: after.data.fields, library: after.data.library }));
-      setEditsMade({ done, before });
+      setEditsMade({ done, before, after: JSON.parse(JSON.stringify({
+        bodywork: after.data.bodywork || [], drills: after.data.drills || [],
+        goals: after.data.goals || [], mobTests: after.data.mobTests || [],
+        fields: after.data.fields || {}, library: after.data.library || [] })) });
     } catch (e) {
       const why = String((e && e.message) || e || "unknown");
       setEditsMade({ error: why === "no-key"
@@ -23532,7 +23747,10 @@ ${(() => {
          message bought nothing. What it needs is the movement, what it asks
          for, and what it reaches. The paragraph is still in her data and still
          editable; it just stops being relayed. */
-      const exs = (li.exercises || []).map((x) => [
+      /* A set-aside exercise is not a live one (build 199). It stays in her
+         data, it keeps its history, and it stops being read to the coach as
+         something she is doing. */
+      const exs = (li.exercises || []).filter((x) => x && x.status !== "removed").map((x) => [
         `        - ${x.name || "exercise"}`,
         exerciseSpec(x).join(" · ") || (x.dose ? `dose: ${x.dose}` : null),
         x.targets ? `reaches: ${x.targets}` : null,
@@ -24416,12 +24634,41 @@ Two or three sentences unless she asks for more.`;
                     <Btn kind="signal" onClick={() => { close(); if (goTab) goTab("body"); }}>See my lists</Btn>
                   </div>
                   <div style={{ flex: 1 }}>
-                    <Btn kind="quiet" onClick={() => { setData((d) => ({ ...d, ...editsMade.before }));
-                      setEditsMade(null); }}>Undo all of it</Btn>
+                    <Btn kind="quiet" onClick={() => { setData((d) => {
+                      /* ONLY WHAT THE EDIT TOUCHED, AND ONLY IF SHE HAS NOT
+                         TOUCHED IT SINCE (build 199). A branch is put back
+                         when it still looks exactly the way the edit left it.
+                         If she has changed it herself since, hers stands and
+                         the undo says so rather than quietly overwriting her
+                         afternoon. */
+                      const back = {};
+                      const kept = [];
+                      Object.keys(editsMade.before || {}).forEach((k) => {
+                        const now = JSON.stringify(d[k] === undefined
+                          ? (Array.isArray(editsMade.before[k]) ? [] : {}) : d[k]);
+                        const made = JSON.stringify((editsMade.after || {})[k]);
+                        const was  = JSON.stringify(editsMade.before[k]);
+                        if (now === was) return;              /* nothing to undo */
+                        if (now === made) back[k] = editsMade.before[k];
+                        else kept.push(k);
+                      });
+                      if (kept.length) setUndoKept(kept);
+                      return { ...d, ...back };
+                    }); setEditsMade(null); }}>Undo all of it</Btn>
                   </div>
                 </div>
               </>
             )}
+          </div>
+        )}
+        {undoKept && (
+          <div style={{ background: C.pist, borderRadius: 12, padding: "12px 14px",
+            marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
+            Undone — except {undoKept.join(", ")}, which you changed yourself after I made
+            those edits. I left your version alone rather than writing over it.
+            <div style={{ marginTop: 8 }}>
+              <Btn kind="quiet" onClick={() => setUndoKept(null)}>Got it</Btn>
+            </div>
           </div>
         )}
         {listMade && (
@@ -26786,9 +27033,25 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
     pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
       ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).map((x) =>
         x.id === ex.id ? { ...x, ...fields } : x) }) }) }));
+  /* SET ASIDE, NOT DELETED (rule 20; audit of 18 August, finding 5).
+
+     This used to filter the exercise out of the list. Her weights and reps
+     live in bwlog keyed by the exercise's ID, and her notes in drillNotes
+     keyed the same way — so removing the row did not touch her numbers, it
+     made them unreachable. bwNoteName could no longer resolve the id, the
+     chart went blank, and there was no way back. That is exactly the fault
+     the field editor was fixed for on 15 August: "anything that removes must
+     SET ASIDE: dated, reversible, still in every chart, and one tap from
+     returning with its numbers still under it."
+
+     Marking it rather than dropping it is all that was needed, because the
+     list already renders only exercises whose status is not "removed", and
+     bwNoteName already searches every exercise regardless of status so that
+     history keeps its names. The row simply stops being offered. */
   const drop = () => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
     pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
-      ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).filter((x) => x.id !== ex.id) }) }) }));
+      ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).map((x) =>
+        x.id === ex.id ? { ...x, status: "removed", removedOn: coach.t } : x) }) }) }));
 
   return (
     <div style={{ padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
@@ -27212,6 +27475,29 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet }) {
                 {(l.exercises || []).filter((ex) => ex.status !== "removed").map((ex) => (
                   <BodyWorkExercise key={ex.id} prog={prog} list={l} ex={ex}
                     data={data} setData={setData} coach={coach} setSheet={setSheet} />
+                ))}
+                {/* SET ASIDE, AND ONE TAP FROM COMING BACK. Build 199. A
+                    removal she cannot undo is a second accident waiting
+                    behind the first, and everything she logged against it is
+                    still underneath, still charted, waiting for the row. */}
+                {(l.exercises || []).filter((ex) => ex.status === "removed").map((ex) => (
+                  <div key={ex.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                    padding: "8px 0", borderTop: "1px solid " + C.line }}>
+                    <span style={{ flex: 1, fontSize: 12.5, color: C.muted }}>
+                      {ex.name} — set aside{ex.removedOn ? " on " + ex.removedOn : ""}.
+                      Everything you logged against it is kept.
+                    </span>
+                    <button className="tap" onClick={() => setData((d) => ({ ...d,
+                      bodywork: (d.bodywork || []).map((pg) => (pg.id !== prog.id ? pg
+                        : { ...pg, lists: (pg.lists || []).map((ls) => (ls.id !== l.id ? ls
+                          : { ...ls, exercises: (ls.exercises || []).map((x) => (x.id === ex.id
+                            ? { ...x, status: undefined, removedOn: undefined } : x)) })) })) }))}
+                      style={{ border: "1.5px solid " + C.moss, background: "transparent",
+                        color: C.moss, borderRadius: 9, padding: "6px 11px", cursor: "pointer",
+                        fontSize: 11.5, fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>
+                      put it back
+                    </button>
+                  </div>
                 ))}
                 <button onClick={() => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
                     pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
