@@ -263,6 +263,14 @@ const FORMULA_DEFAULTS = {
      literal, which made the most consequential number in the app the one she
      could not reach (rule 12). */
   memoryTokens: 3000,      /* how much running history a fold may write back      */
+  /* WHAT A WINDOW MAY NEVER CUT BELOW (build 214). Her window exists to bound
+     the EXPENSIVE material — conversations, journal, kept notes, her own
+     words. The day-by-day record is one line a day, about fifteen words, and
+     it is the plainest question she asks: what did I do on Saturday. It is
+     kept for this many days whatever she sets the window to. Rule 15's
+     protected set, made real: "every measurement exactly as she entered it".
+     Set it to 0 and the window governs everything again. */
+  recordFloorDays: 14,     /* days of what she DID that no window may cut away    */
   /* the two ceilings on the buttons under a message. A list that does not fit
      comes back cut, parseReview fails, and she is told the coach found nothing
      to change — which is indistinguishable from it refusing. */
@@ -2737,7 +2745,7 @@ const narrowTo = (data, scope, t) => {
     });
     return out;
   };
-  /* WHAT THIS WINDOW TOOK (build 212). Without it, a section reading the
+  /* WHAT THIS WINDOW TOOK (build 212), and WHAT IT WAS NOT ALLOWED TO (214). Without it, a section reading the
      narrowed object cannot tell a store she has never used from a store her
      own window emptied — and the app then tells her coach she has never done
      the thing. Counted here, once, where the cutting happens, so no section
@@ -2748,9 +2756,28 @@ const narrowTo = (data, scope, t) => {
     const now = Object.keys(kept || {}).length;
     if (was > now) took[key] = was - now;
   };
-  const nLogs = byDate(data.logs), nMorning = byDate(data.morning);
+  /* THE FLOOR (build 214). See the note on this build: the two stores the
+     day-by-day record is built from keep a minimum number of recent days
+     whatever window she has set, because one line a day costs nothing and
+     losing it costs her the plainest question she asks. Everything else on
+     this function is untouched and still bounded by her window. */
+  const floorN = Math.max(0, Number(formulas(data.settings).recordFloorDays) || 0);
+  const floorFrom = floorN ? addDays(t, -(floorN - 1)) : null;
+  const keepFloor = (kept, all) => {
+    if (!floorFrom) return kept;
+    const out = { ...kept };
+    Object.keys(all || {}).forEach((k) => {
+      const day = String(k).slice(0, 10);
+      if (day >= floorFrom && day <= t) out[k] = all[k];
+    });
+    return out;
+  };
+  const nLogs = keepFloor(byDate(data.logs), data.logs);
+  const nMorning = byDate(data.morning);
   const nWeekly = byWeek(data.weekly), nMobility = byWeek(data.mobility);
-  const nMonthly = byMonth(data.monthly), nBwlog = byDate(data.bwlog), nNotes = byDate(data.notes);
+  const nMonthly = byMonth(data.monthly);
+  const nBwlog = keepFloor(byDate(data.bwlog), data.bwlog);
+  const nNotes = byDate(data.notes);
   count("logs", nLogs); count("morning", nMorning); count("weekly", nWeekly);
   count("mobility", nMobility); count("monthly", nMonthly);
   count("bwlog", nBwlog); count("notes", nNotes);
@@ -2760,6 +2787,8 @@ const narrowTo = (data, scope, t) => {
     /* what the window removed, so a section can say "outside your window"
        instead of "you have never done this" */
     narrowedAway: took,
+    /* and what it was NOT allowed to remove (build 214) */
+    recordFloor: floorN || 0,
     logs: nLogs, morning: nMorning,
     /* week-keyed, not day-keyed — see byWeek above */
     weekly: nWeekly, mobility: nMobility,
@@ -4358,7 +4387,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 213";
+const BUILD = "18 August 2026 · 214";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6158,6 +6187,15 @@ const briefText = (data, coach, opts) => {
      absence and never guessed at. */
   if (opts && opts.windowLabel) {
     lines.push(`The dated history below covers ${opts.windowLabel} — HER INSTRUCTION, not a gap.`);
+    /* BUILD 214. Without this the coach reads the window label, sees days
+       inside the day record that sit outside it, and cannot tell whether it is
+       allowed to trust them. It is. */
+    if (Number(data.recordFloor) > 0) {
+      lines.push(`WITH ONE EXCEPTION, AND IT IS DELIBERATE: the day-by-day record below keeps the last`);
+      lines.push(`${data.recordFloor} days WHATEVER window she sets, because what she did is one line a day and she asks`);
+      lines.push("about it constantly. So you can answer \"what did I do on Saturday\" even when her window is");
+      lines.push("shorter than that. Her words and her conversations are what the window is actually for.");
+    }
     lines.push("Everything older is safe on her device and she has simply not asked you to read it here.");
     lines.push("Her goals, her open record, anything paused and every stand-in are ALWAYS below whatever");
     lines.push("window she sets. If an answer genuinely needs more history, say which and tell her she can");
@@ -18799,6 +18837,7 @@ function Formulas({ data, setData, close }) {
              ["briefGoalScores", "Scores kept against each thing you want to do"],
              ["briefPausedFeels", "How-it-feels scores kept against a paused thing"],
              ["memoryTokens", "How much running history each fold may write back"],
+             ["recordFloorDays", "Days of what you did that your window never cuts away"],
              ["editTokens", "Room your coach has to answer \"change my lists\""],
              ["listTokens", "Room it has to build a new list from a message"],
              ["briefLiftDays", "Sessions of real loads carried"],
