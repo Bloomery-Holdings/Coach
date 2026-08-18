@@ -253,6 +253,21 @@ const FORMULA_DEFAULTS = {
   nameSessionDays: 7,      /* days back the app will still ask what a session was  */
   briefListsMax: 200,      /* exercises of her own lists the coach is given        */
   briefBeliefsMax: 40,     /* beliefs about her the coach carries                  */
+  /* AUDIT OF 18 AUGUST. These four were literals in the code — two of them
+     inside a comment claiming they were already hers (rule 12). */
+  briefCols: 12,           /* columns of history a trend row carries               */
+  briefGoalScores: 12,     /* scores kept against each thing she wants to do       */
+  briefPausedFeels: 3,     /* how-it-feels scores kept against a paused thing      */
+  /* THE CEILING ON HER OWN HISTORY (build 213). The running memory is rewritten
+     whole on every fold, and this is how much of it may come back. It was a
+     literal, which made the most consequential number in the app the one she
+     could not reach (rule 12). */
+  memoryTokens: 3000,      /* how much running history a fold may write back      */
+  /* the two ceilings on the buttons under a message. A list that does not fit
+     comes back cut, parseReview fails, and she is told the coach found nothing
+     to change — which is indistinguishable from it refusing. */
+  editTokens: 3000,        /* room the "change my lists" call has to answer in     */
+  listTokens: 3000,        /* room the "put these on my Body page" call has        */
   briefNoteSittings: 8,    /* battery sittings her own wins are quoted from    */
 
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
@@ -2439,7 +2454,8 @@ const reviewPayload = (data, coach, cut) => {
     if (!ps.length) return "nothing is paused.";
     const rows = ps.map((f) => {
       const si = standInMeasure(d, f.id);
-      const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
+      const feels = (f.feels || []).slice(-Math.max(1, Number(formulas(d.settings).briefPausedFeels) || 3))
+        .map((x) => `${x.score}/10 on ${x.on}`).join(", ");
       return `  * ${f.label} (${f.which} battery) - paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
         + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
         + `${si ? ` Standing in: ${si.label}.` : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : ""}`
@@ -2721,16 +2737,37 @@ const narrowTo = (data, scope, t) => {
     });
     return out;
   };
+  /* WHAT THIS WINDOW TOOK (build 212). Without it, a section reading the
+     narrowed object cannot tell a store she has never used from a store her
+     own window emptied — and the app then tells her coach she has never done
+     the thing. Counted here, once, where the cutting happens, so no section
+     has to reimplement it and no section can get it wrong (rule 33). */
+  const took = {};
+  const count = (key, kept) => {
+    const was = Object.keys(data[key] || {}).length;
+    const now = Object.keys(kept || {}).length;
+    if (was > now) took[key] = was - now;
+  };
+  const nLogs = byDate(data.logs), nMorning = byDate(data.morning);
+  const nWeekly = byWeek(data.weekly), nMobility = byWeek(data.mobility);
+  const nMonthly = byMonth(data.monthly), nBwlog = byDate(data.bwlog), nNotes = byDate(data.notes);
+  count("logs", nLogs); count("morning", nMorning); count("weekly", nWeekly);
+  count("mobility", nMobility); count("monthly", nMonthly);
+  count("bwlog", nBwlog); count("notes", nNotes);
+
   return {
     ...data,
-    logs: byDate(data.logs), morning: byDate(data.morning),
+    /* what the window removed, so a section can say "outside your window"
+       instead of "you have never done this" */
+    narrowedAway: took,
+    logs: nLogs, morning: nMorning,
     /* week-keyed, not day-keyed — see byWeek above */
-    weekly: byWeek(data.weekly), mobility: byWeek(data.mobility),
-    monthly: byMonth(data.monthly),
-    bwlog: byDate(data.bwlog),
+    weekly: nWeekly, mobility: nMobility,
+    monthly: nMonthly,
+    bwlog: nBwlog,
     /* her kept daily notes were never narrowed by anything, so a one-day
        window still sent every note she had ever kept */
-    notes: byDate(data.notes),
+    notes: nNotes,
     chats: (data.chats || []).filter((c) => !c.date || String(c.date) >= cut),
     journal: (data.journal || []).filter((j) => !j.date || String(j.date) >= cut),
     /* open issues survive any window — a thing she has not closed is current */
@@ -4321,7 +4358,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 209";
+const BUILD = "18 August 2026 · 213";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4715,6 +4752,9 @@ const BLANK = {
      reps, its timer or stopwatch, how to do it, anything you want to say,
      everything in it."  { date: { exerciseId: { w, reps, secs } } } */
   bwlog: {},
+  /* a conversation she left without navigating out — folded on the next open
+     (build 213). Null when there is nothing waiting. */
+  unfolded: null,
   /* HER INSTRUCTION, 13 August: "Don't remove it. Keep it for the following
      day... Don't change it unless it's already done." The challenge she is
      currently carrying, offered once and kept until she does it. It lives
@@ -4987,6 +5027,19 @@ const restIsFinal = (logs) => {
 /* which programme and list a body-work exercise belongs to. History keeps its
    names: a set-aside programme is searched too, so a list she did in June
    still reads as itself rather than as a raw id. */
+/* WHAT A LOGGED MOVEMENT IS CALLED (build 211). Her live lists first, because
+   a rename should show; then the name stored beside the reading; and if
+   neither can place it, SAY that rather than inventing a word for it. Rule 23:
+   the app states what it has. Rule 34: never a description in place of what
+   she entered. */
+const bwNameOf = (data, exId, entry) => {
+  const home = bwHomeOf(data, exId);
+  if (home && home.ex && String(home.ex.name || "").trim()) return String(home.ex.name).trim();
+  const kept = String((entry || {}).nm || "").trim();
+  if (kept) return kept;
+  return `a movement no longer in any list (logged as ${exId})`;
+};
+
 const bwHomeOf = (data, exId) => {
   for (const pg of (data.bodywork || [])) {
     /* archived rounds are searched too, so a movement she did in June still
@@ -5149,7 +5202,7 @@ const doneOnDay = (data, date, onCard) => {
     const home = bwHomeOf(data, exId);
     const name = home ? (home.list ? home.area + " · " + home.list : home.area) : "Body work";
     (byList[name] = byList[name] || []).push({ id: exId,
-      what: (home && home.ex && home.ex.name) || "an exercise",
+      what: bwNameOf(data, exId, e),
       detail: bwSay(e, home && home.ex) });
   });
   Object.keys(byList).sort().forEach((name) => {
@@ -5235,6 +5288,13 @@ const doneOnDay = (data, date, onCard) => {
    past that the row is still true, it just starts with an older number. Hers
    to change like every other threshold (rule 12). */
 const BRIEF_COLS = 12;
+/* AND IT IS HERS NOW (build 212). BRIEF_COLS stays as the default so nothing
+   that reads it without her settings changes shape; anything that HAS her
+   formulas asks here. The floor is 2 because a trend needs two points, and
+   because Math.max is what stops a 0 she types turning slice(-n) into
+   slice(0) — which sends EVERYTHING rather than nothing, the exact opposite of
+   a limit. */
+const briefColsOf = (F) => Math.max(2, Number((F || {}).briefCols) || BRIEF_COLS);
 
 const briefNum = (v) => {
   const n = Number(v);
@@ -5280,9 +5340,9 @@ const trendRow = (f, store, keys, F) => {
 };
 
 /* every measure with a reading, and the dates they were taken on */
-const trendData = (fields, store) => {
+const trendData = (fields, store, F) => {
   const keys = Object.keys(store || {}).sort();
-  return { keys, use: keys.slice(-BRIEF_COLS) };
+  return { keys, use: keys.slice(-briefColsOf(F)) };
 };
 
 const briefRow = (f, store, keys, F) => {
@@ -5294,7 +5354,7 @@ const briefRow = (f, store, keys, F) => {
 const briefTable = (fields, store, label, F) => {
   const keys = Object.keys(store || {}).sort();
   if (!keys.length) return `${label}: none logged yet.`;
-  const use = keys.slice(-BRIEF_COLS);
+  const use = keys.slice(-briefColsOf(F));
   /* HER WRITTEN ROWS ARE NOT NUMBERS, AND READING THEM AS NUMBERS INVERTED THEM.
      Biggest win and Biggest challenge are type "note". Run through the trend
      read they came out exactly backwards: a sitting where she wrote a sentence
@@ -5309,8 +5369,16 @@ const briefTable = (fields, store, label, F) => {
      Her writing travels under her own words switch, not as a fake number. */
   const rows = (fields || []).filter((f) => f.type !== "note")
     .map((f) => briefRow(f, store, use, F)).filter(Boolean);
-  if (!rows.length) return `${label}: ${use.length} sitting(s) logged, no numbers in them.`;
+  if (!rows.length) return `${label}: ${use.length} sitting(s) shown, no numbers in them`
+    + (keys.length > use.length ? ` (and ${keys.length - use.length} earlier one(s) not shown here)` : "") + ".";
+  /* AND IT SAYS WHEN IT CUT (build 212). This named the dates it had and never
+     said there had been more, so a coach asked about her first month was
+     reading an absence as though it were the whole record. */
+  const dropped = keys.length - use.length;
   return `${label} — ${use.length} sitting(s), oldest to newest. Dates: ${use.map((k) => k.slice(5)).join(" ")}\n`
+    + (dropped ? `${dropped} EARLIER sitting(s) exist on her device and are not shown here — this row starts at\n`
+      + `${use[0]}, not at the beginning. Do not read the first figure as where she started, and say so if\n`
+      + `she asks about further back. She can widen it: "Columns of history" in the formulas sheet.\n` : "")
     + `A dot means she did not do that one at that sitting. The last figure is the move across the whole\n`
     + `row, and "holding" means the change is inside the measurement error for that measure — not a\n`
     + `decline and not a gain (rule 24). Never call a holding number a drop.\n`
@@ -5336,7 +5404,8 @@ const briefIssues = (coach) => {
     }).join("\n");
 };
 
-const briefGoals = (coach) => {
+const briefGoals = (coach, data) => {
+  const F = formulas((data || {}).settings);
   const gs = coach.openGoals || [];
   if (!gs.length) return "WHAT SHE WANTS TO BE ABLE TO DO: none set.";
   return "WHAT SHE WANTS TO BE ABLE TO DO (these outrank what the numbers would prefer):\n"
@@ -5345,9 +5414,12 @@ const briefGoals = (coach) => {
          coach could not tell a 4 from March from a 4 from yesterday, and the
          row grew without limit. Dated, newest last, and capped at a length
          that still shows a trend. */
-      const sc = (g.scores || []).slice(-12);
+      const all = (g.scores || []);
+      const keep = Math.max(2, Number(F.briefGoalScores) || 12);
+      const sc = all.slice(-keep);
       const line = sc.length
         ? ` — scored ${sc.map((x) => `${x.on || x.date || "?"} ${x.value}/10`).join(" · ")}`
+          + (all.length > sc.length ? ` (${all.length - sc.length} earlier score(s) not shown)` : "")
         : " — not scored yet. It should be tried and scored weekly (rule 9).";
       return `  * "${g.text}"${line}`;
     }).join("\n");
@@ -5422,7 +5494,8 @@ const briefWords = (data, cut) => {
    there. One row per figure, oldest to newest, dots where she has none. */
 const briefWhoop = (data, coach) => {
   const F = formulas(data.settings);
-  const days = Object.keys(data.morning || {}).sort().filter((d) => d <= coach.t).slice(-F.briefMornings);
+  const days = Object.keys(data.morning || {}).sort().filter((d) => d <= coach.t)
+    .slice(-Math.max(1, Number(F.briefMornings) || 14));
   if (!days.length) return "WHOOP: nothing imported yet. Say so rather than guessing at how she slept.";
   const row = (get) => days.map((d) => {
     const v = get(d);
@@ -5523,14 +5596,14 @@ const briefReads = (data) => {
 const briefBody = (data, coach) => {
   const F = formulas(data.settings);
   const days = Object.keys(data.bwlog || {}).filter((d) => d <= coach.t)
-    .sort().slice(-F.briefBodyDays);
+    .sort().slice(-Math.max(1, Number(F.briefBodyDays) || 7));
   const rows = days.map((d) => {
     const day = data.bwlog[d] || {};
     const bits = Object.keys(day).map((exId) => {
       const e = day[exId] || {};
       if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return null;
       const home = bwHomeOf(data, exId);
-      const nm = (home && home.ex && home.ex.name) || "an exercise";
+      const nm = bwNameOf(data, exId, e);
       const said = bwSay(e, home && home.ex);
       return `${nm}${said ? ` (${said})` : ""}${home && home.list ? ` [${home.area} · ${home.list}]` : ""}`;
     }).filter(Boolean);
@@ -5614,8 +5687,10 @@ const briefBeliefs = (data, coach) => {
   const hers = all.filter((p) => p.hers);
   const held = all.filter((p) => !p.hers && (p.confidence === "believed" || p.computed === false));
   const line = (p) => `  * ${p.claim || p.belief || "—"}${p.hers ? " (her own words)" : p.confidence ? ` (${p.confidence})` : ""}`;
-  const rows = [...hers, ...held].slice(0, cap).map(line);
+  const kept = [...hers, ...held];
+  const rows = kept.slice(0, cap).map(line);
   if (!rows.length) return "";
+  const cutB = kept.length - rows.length;
   return `WHAT IS BELIEVED ABOUT HER — hers first, then what you concluded. Every one of these is visible\n`
     + `to her and correctable by her, so treat them as working beliefs and say so if the evidence has\n`
     + `moved (rule 16):\n` + rows.join("\n");
@@ -5815,20 +5890,33 @@ const briefDays = (data, coach) => {
   days.forEach((d) => {
     const l = LG[d] || {};
     const when = `  ${d} ${dayName(d) || ""}`.replace(/\s+$/, "");
-    if (l.rest) {
-      out.push(`${when} REST — she said so${l.conflict
-        ? " (a session was logged on this day too; rest wins and the session is set aside, rule 33)" : ""}`);
-      return;
-    }
     /* The same third argument the Today card passes (build 181): for TODAY the
        drills row may only claim drills that were actually on today's card. A
        past day has no card left to check against, so it claims what she
-       ticked. Passing it here keeps the card and the coach identical. */
+       ticked. Passing it here keeps the card and the coach identical.
+
+       Computed ABOVE the rest branch now, because a rest day is still a day
+       she may have done things on — see below. */
     const onCard = d === coach.t && coach.dailyDrills
       ? (coach.dailyDrills.list || []).map((x) => x && x.id).filter(Boolean)
       : undefined;
+    /* THE MOVEMENTS, BY NAME (build 211). HER REPORT, 18 August: "the summary
+       doesn't have every exercise I've done in the two days before. It just
+       says which list."
+
+       It did. This mapped each row to what + detail and threw away r.lines —
+       the individual movements, which doneOnDay has built since 16 August and
+       which her own screen reads. So her coach got "Shoulders · Rotator cuff
+       2 exercises" while her phone showed both names and both doses. Where
+       there are lines they ARE the row; the count was only ever a stand-in
+       for them. */
     const bits = doneOnDay(data, d, onCard)
-      .map((r) => `${r.what}${r.detail ? ` ${r.detail}` : ""}`)
+      .map((r) => {
+        const named = (r.lines || [])
+          .map((x) => `${x.what}${x.detail ? ` ${x.detail}` : ""}`.trim())
+          .filter(Boolean).join("; ");
+        return named ? `${r.what}: ${named}` : `${r.what}${r.detail ? ` ${r.detail}` : ""}`;
+      })
       .filter(Boolean);
     /* HER REPORT, 17 August: her coach was handed "Session 1 min" and had to
        work out for itself that it was an artefact. It should not have to. An
@@ -5864,6 +5952,17 @@ const briefDays = (data, coach) => {
     const dayNote = String(l.note || "").trim();
     const hers = [note ? `she wrote about the session: "${note}"` : null,
       dayNote ? `she wrote about the day: "${dayNote}"` : null].filter(Boolean).join(" · ");
+    /* A REST DAY IS STILL A DAY (build 211). Rest wins as the state — the line
+       leads with it, the session stays set aside, nothing here counts as
+       training. What stops is the app deleting everything else she did and
+       everything she wrote, which is what the old early return did. */
+    if (l.rest) {
+      const also = [...bits, mood, hers].filter(Boolean).join(" · ");
+      out.push(`${when} REST — she said so${l.conflict
+        ? " (a session was logged on this day too; rest wins and the session is set aside, rule 33)" : ""}`
+        + (also ? `. She did do this on it, and it is NOT a training day: ${also}` : ""));
+      return;
+    }
     const tail = [...bits, eff, felt, mood, hers].filter(Boolean).join(" · ");
     if (tail) { out.push(`${when} ${tail}${doubt}`); return; }
     /* rule 23: an empty day is stated as empty, never as a rest day and never
@@ -5873,10 +5972,19 @@ const briefDays = (data, coach) => {
     else out.push(`${when} nothing logged`);
   });
 
+  /* WHERE THIS STOPS, SAID OUT LOUD (build 211). See the comment above. */
+  const older = [...seen].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= coach.t
+    && d < (days[days.length - 1] || "")).length;
   return `WHAT SHE DID, DAY BY DAY — ${days.length} day(s), most recent first. THIS IS THE RECORD ITSELF:\n`
     + `if you want to know whether she trained on a day, this line answers it. REST outranks everything\n`
     + `(rule 33). "nothing logged" means nothing was entered — not a rest day, and never held against\n`
-    + `her (rules 23, 24).\n`
+    + `her (rules 23, 24). Where a row names the movements, those are the movements she did.\n`
+    + (older
+      ? `THIS RECORD STOPS AT ${days[days.length - 1]}, and she has ${older} more logged day(s) BEFORE it on her\n`
+        + `device. That is this section's own limit, not her window and not a gap — do not tell her a day\n`
+        + `did not happen because it is not here, and say plainly that you cannot see that far back if she\n`
+        + `asks about it. She can widen it: "Days of the day-by-day record" in the formulas sheet.\n`
+      : "")
     + out.join("\n");
 };
 
@@ -5888,15 +5996,26 @@ const briefLifts = (data, coach) => {
   const F = formulas(data.settings);
   const out = [];
   Object.keys(data.logs || {}).sort().reverse().forEach((d) => {
-    if (out.length >= F.briefLiftDays) return;
+    if (out.length >= Math.max(1, Number(F.briefLiftDays) || 10)) return;
     const l = data.logs[d] || {};
     if (l.rest) return;
     if (l.loads) out.push(`  ${d} ${l.type || "session"}: ${l.loads}`);
-    (l.extraSessions || []).forEach((x) => { if (x.loads && out.length < F.briefLiftDays) out.push(`  ${d} ${x.type || "session"}: ${x.loads}`); });
+    (l.extraSessions || []).forEach((x) => { if (x.loads && out.length < Math.max(1, Number(F.briefLiftDays) || 10)) out.push(`  ${d} ${x.type || "session"}: ${x.loads}`); });
+  });
+  /* rule 23 twice. This never said it stopped at ten days — and if she ever set
+     that threshold to 0 the loop returned on the first day and the app then
+     ASSERTED that she had never recorded a load, which is a statement about her
+     training made out of a setting. */
+  const lifted = Object.keys(data.logs || {}).some((d) => {
+    const l = (data.logs || {})[d] || {};
+    return !l.rest && (l.loads || (l.extraSessions || []).some((x) => x && x.loads));
   });
   return out.length
-    ? `WHAT SHE ACTUALLY LIFTED, most recent first — the real record, not what the class calls for:\n${out.join("\n")}`
-    : "WHAT SHE ACTUALLY LIFTED: nothing recorded against a session yet.";
+    ? `WHAT SHE ACTUALLY LIFTED, most recent first — the real record, not what the class calls for.\n`
+      + `This carries the last ${Math.max(1, Number(F.briefLiftDays) || 10)} day(s) that have a load written against them; older ones exist on her device:\n${out.join("\n")}`
+    : lifted
+      ? "WHAT SHE ACTUALLY LIFTED: she HAS written loads against sessions — none of them are inside what this payload carries. Ask her rather than telling her there are none."
+      : "WHAT SHE ACTUALLY LIFTED: nothing recorded against a session yet.";
 };
 
 /* HER WINS AND HER CHALLENGES, IN HER OWN WORDS. These are the note rows of
@@ -5910,7 +6029,7 @@ const briefNotes = (data) => {
   if (!fields.length) return "";
   const out = [];
   [data.weekly, data.monthly].forEach((store) => {
-    Object.keys(store || {}).sort().slice(-F.briefNoteSittings).forEach((k) => {
+    Object.keys(store || {}).sort().slice(-Math.max(1, Number(F.briefNoteSittings) || 8)).forEach((k) => {
       fields.forEach((f) => {
         const v = String((store[k] || {})[f.id] || "").trim();
         if (v) out.push(`  ${k} ${f.label}: "${v}"`);
@@ -5918,7 +6037,8 @@ const briefNotes = (data) => {
     });
   });
   if (!out.length) return "";
-  return `WHAT SHE WROTE IN HER OWN BATTERY, most recent sittings — her words, not a summary of them:\n${out.join("\n")}`;
+  return `WHAT SHE WROTE IN HER OWN BATTERY — the last ${Math.max(1, Number(F.briefNoteSittings) || 8)} sitting(s) of each battery, her words,\n`
+    + `not a summary of them. She has written in earlier ones too:\n${out.join("\n")}`;
 };
 
 /* THE WHOLE THING. Pure — it takes her data and gives back text, so the page
@@ -5939,6 +6059,16 @@ thing in her own words — "the standing forward fold" — and the app will matc
 So when something is wrong for her, or too coarse to show her anything, do not apologise and do
 not tell her to work around it. Say what you would change and why in a line or two, and tell her
 to tap the button. NEVER SAY YOU CANNOT EDIT HER APP. YOU CAN.
+
+AND YOU CAN MAKE HER A LIST — IN EITHER MODE. Under every message you send there is a SECOND
+button, "put these on my Body page", which turns the exercises in that message into a real list
+on her Body tab: each one with its own boxes for weight, reps and hold, a timer, a place to write
+what happened, how it is done, and a video. Her instruction, 13 August: "I want to input time and
+reps and kilograms like when I do on the page of my body." So when she asks you for a list of
+exercises, WRITE THE EXERCISES — one per line, each with its dose — and tell her to tap that
+button. Never tell her you cannot make her a list, and never tell her to type it in herself.
+The two buttons do different jobs: "change my lists" edits things that already exist, one at a
+time; "put these on my Body page" creates a new list out of what you just wrote.
 
 REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes back with its
 numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REPLACING: rebuild
@@ -6082,7 +6212,7 @@ const briefText = (data, coach, opts) => {
 
   lines.push(briefIssues(coach));
   lines.push("");
-  lines.push(briefGoals(coach));
+  lines.push(briefGoals(coach, data));
   lines.push("");
 
   /* the rows each battery ASKS for, read from the store it writes to — so a
@@ -6096,7 +6226,8 @@ const briefText = (data, coach, opts) => {
   if (notes) { lines.push(notes); lines.push(""); }
 
   /* mobility keeps its own shape: the tests are not battery fields */
-  const mk = Object.keys(data.mobility || {}).sort().slice(-BRIEF_COLS);
+  const mkAll = Object.keys(data.mobility || {}).sort();
+  const mk = mkAll.slice(-briefColsOf(F));
   if (mk.length) {
     const rows = (coach.mobTests || []).map((m) => {
       const vals = mk.map((k) => {
@@ -6130,9 +6261,22 @@ const briefText = (data, coach, opts) => {
     }).filter(Boolean);
     lines.push(`MOBILITY — ${mk.length} sitting(s). Where a test is measured both sides it reads left/right,`);
     lines.push(`and the GAP between sides matters more than either number. Dates: ${mk.map((k) => k.slice(5)).join(" ")}`);
+    if (mkAll.length > mk.length) lines.push(`${mkAll.length - mk.length} EARLIER sitting(s) exist and are not shown — this starts at ${mk[0]}.`);
     lines.push(rows.join("\n") || "  nothing entered");
   } else {
-    lines.push("MOBILITY: not taken yet.");
+    /* rule 23. "not taken yet" is an assertion, and it was made without
+       checking — a window that cut every sitting she HAS taken produced the
+       same sentence as never having taken one. Those are different facts and
+       the second one is a lie about her. */
+    /* build 212: the narrowed object carries what the window took, so this can
+       tell "never done" from "cut by her own window". */
+    const mobCut = Number(((data.narrowedAway || {}).mobility) || 0)
+      || Object.keys(data.mobility || {}).length;
+    lines.push(mobCut
+      ? `MOBILITY: she HAS taken these — ${mobCut} sitting(s) exist and sit outside the window this payload was`
+        + " built with. They are not missing and she has not skipped them. Ask, rather than telling her she"
+        + " has not done them."
+      : "MOBILITY: not taken yet.");
   }
   lines.push("");
 
@@ -6150,14 +6294,16 @@ const briefText = (data, coach, opts) => {
   lines.push("and raise the retest EARLY if the stand-in has moved enough to justify it.");
   lines.push(paused.length ? paused.map((f) => {
     const si = standInMeasure(data, f.id);
-    const feels = (f.feels || []).slice(-3).map((x) => `${x.on || "?"}: ${x.score}/10`).join(", ");
+    const allFeels = (f.feels || []);
+    const feels = allFeels.slice(-Math.max(1, Number(F.briefPausedFeels) || 3))
+      .map((x) => `${x.on || "?"}: ${x.score}/10`).join(", ");
     return `  * ${f.label}${f.which ? ` (${f.which} battery)` : ""} — paused ${f.pausedOn || "date not recorded"}.`
       + ` Why: ${f.pausedWhy || "not recorded"}.`
       + `${si ? ` Standing in for it: ${si.label} — a real measure with a number.`
           : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : " Nothing named as its replacement yet — propose one."}`
       + ` Worth trying again ${f.retestOn || "no date set"}${f.retestWeeks
           ? ` (${f.retestWeeks} weeks — the time this tissue needs before a change is real)` : ""}.`
-      + `${feels ? ` How it has felt, her own 1-10: ${feels}.` : ""}`
+      + `${feels ? ` How it has felt, her own 1-10 (most recent${allFeels.length > 3 ? `, ${allFeels.length} in all` : ""}): ${feels}.` : ""}`
       + `${retestDue(f, coach.t) ? " THE RETEST DATE HAS PASSED — offer it warmly, and accept 'not yet' or 'never'." : ""}`;
   }).join("\n") : "  nothing paused");
 
@@ -18649,6 +18795,12 @@ function Formulas({ data, setData, close }) {
              ["nameSessionDays", "Days back the app will still ask what a session was"],
              ["briefListsMax", "Exercises from your own lists your coach is given"],
              ["briefBeliefsMax", "Beliefs about you your coach carries"],
+             ["briefCols", "Columns of history each trend row carries"],
+             ["briefGoalScores", "Scores kept against each thing you want to do"],
+             ["briefPausedFeels", "How-it-feels scores kept against a paused thing"],
+             ["memoryTokens", "How much running history each fold may write back"],
+             ["editTokens", "Room your coach has to answer \"change my lists\""],
+             ["listTokens", "Room it has to build a new list from a message"],
              ["briefLiftDays", "Sessions of real loads carried"],
              ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
 
@@ -22793,7 +22945,7 @@ const NumbersTable = ({ shown, total, onAsk }) => (
 function SummaryTables({ data, coach, setSheet }) {
   const F = formulas(data.settings);
   const build = (fields, store) => {
-    const { use } = trendData(fields, store);
+    const { use } = trendData(fields, store, F);
     return { dates: use,
       rows: (fields || []).filter((f) => f.type !== "note")
         .map((f) => trendRow(f, store, use, F)).filter(Boolean) };
@@ -22804,7 +22956,7 @@ function SummaryTables({ data, coach, setSheet }) {
   /* mobility keeps its own store shape, so it builds its own rows — the same
      dates-across, move-at-the-end shape, read from left and right separately
      because the GAP between sides is the thing that matters */
-  const mobKeys = Object.keys(data.mobility || {}).sort().slice(-BRIEF_COLS);
+  const mobKeys = Object.keys(data.mobility || {}).sort().slice(-briefColsOf(F));
   const mobRows = [];
   (coach.mobTests || []).forEach((m) => {
     const one = (pick) => {
@@ -22895,7 +23047,14 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
 
   let text = "";
   let failed = false;
-  try { text = briefText(data, coach, { wordsCut: cut }); } catch (e) { failed = true; }
+  /* BUILT THE WAY IT IS SENT (build 212). Same narrowing, same window label,
+     from the same settings — so the page and the payload cannot disagree.
+     Rule 33's principle applied to a screen: settle it once, in the view that
+     is read, not at the two places that ask. */
+  const winHere = data.settings?.chatScope || CHAT_SCOPE_DEFAULT;
+  const boundedHere = scopeReady(winHere) ? narrowTo(data, winHere, coach.t) : data;
+  try { text = briefText(boundedHere, coach, { wordsCut: cut, windowLabel: scopeLabel(winHere) }); }
+  catch (e) { failed = true; }
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   /* what it costs to send this once, at her own prices — computed, never
      asserted, and only from numbers the app actually holds */
@@ -23785,6 +23944,46 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     return out;
   })();
   const [msgs, setMsgs] = useState(seedMsgs);
+
+  /* ---- AND IT KEEPS UP WITH WHAT IS STORED (build 210) ------------------
+     HER REPORT, A THIRD TIME: "same problem with my talk vanishing in the
+     middle of it."
+
+     seedMsgs above is read ONCE, at mount. Her data loads asynchronously and
+     the app restores her to the screen she was last on, so after a reload this
+     sheet can mount before her conversation has arrived — and useState never
+     looks again. The store keeps every word; the screen shows none of them.
+     That is what she has been reporting, and it is not the deletion I fixed
+     twice.
+
+     So it reconciles. Anything in today's stored conversation that this
+     instance has not got is merged in — by mergeChatMessages, which already
+     knows a longer stored row is ahead and that an edited message replaces
+     rather than duplicates (build 202, suite 37). If there is nothing new the
+     list is returned untouched, so this can never loop and never disturbs
+     what she is in the middle of typing. */
+  useEffect(() => {
+    const todays = (data.chats || []).filter((c) => c && c.date === coach.t);
+    if (!todays.length) return;
+    const best = todays.slice().sort((a, b) =>
+      ((b.messages || []).length - (a.messages || []).length))[0];
+    if (!best) return;
+
+    /* mounted blank and the day already had a conversation: continue it rather
+       than starting a second one beside it */
+    if (best.id && !(msgsRef.current || []).length && best.id !== sessionId.current) {
+      sessionId.current = best.id;
+    }
+
+    setMsgs((cur) => {
+      const asStored = (cur || []).map((m) => ({ role: m.role, text: m.content,
+        ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) }));
+      const merged = mergeChatMessages(best.messages || [], asStored);
+      if (merged.length === asStored.length) return cur;   /* nothing new — leave her alone */
+      return merged.map((m) => ({ role: m.role, content: m.text,
+        ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) }));
+    });
+  }, [data.chats, coach.t]);
   /* THE SESSION ADOPTS WHAT TODAY ALREADY HOLDS. The LONGEST entry, not merely
      the first — after a day of reloads the first one written may be the stub,
      and continuing the day means continuing the real conversation. */
@@ -23848,7 +24047,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         usage: editSpend,
         messages: [{ role: "user", content:
           `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\nWHAT YOU JUST TOLD HER YOU WOULD CHANGE:\n${String(msgs[i]?.content || "")}` }],
-        maxTokens: 3000,
+        maxTokens: Math.max(1000, Number(formulas(data.settings).editTokens) || 3000),
         secs: formulas(data.settings).callSecs,
       });
       const out = parseReview(raw);
@@ -23866,9 +24065,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
          built, a goal she had added, a battery field she had renamed. The
          window was the rest of the conversation. Rule 20 again, in the one
          control whose entire job is to be safe. */
+      /* `issues` JOINED THIS LIST AT BUILD 212. It was missing from all three
+         places — the before snapshot, the commit and the after snapshot — so an
+         entry the coach added to her record was built, reported to her as done,
+         and thrown away. Undo could not have brought it back either, because
+         Undo restores from this object. */
       const before = JSON.parse(JSON.stringify({ bodywork: data.bodywork || [],
         drills: data.drills || [], goals: data.goals || [], mobTests: data.mobTests || [],
-        fields: data.fields || {}, library: data.library || [] }));
+        fields: data.fields || {}, library: data.library || [], issues: data.issues || [] }));
       const legacy = (out.changes || []).filter((c) => !c.where);
       const registry = (out.changes || []).filter((c) => c.where);
       const { bodywork, drills, goals, mobTests, done } = applyListEdits(data, legacy, coach.t);
@@ -23887,11 +24091,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       }
       setData((d) => ({ ...d, bodywork,
         drills: after.data.drills, goals: after.data.goals, mobTests: after.data.mobTests,
-        fields: after.data.fields, library: after.data.library }));
+        fields: after.data.fields, library: after.data.library,
+        /* build 212 — see the note on the snapshot above */
+        issues: after.data.issues || d.issues }));
       setEditsMade({ done, before, after: JSON.parse(JSON.stringify({
         bodywork: after.data.bodywork || [], drills: after.data.drills || [],
         goals: after.data.goals || [], mobTests: after.data.mobTests || [],
-        fields: after.data.fields || {}, library: after.data.library || [] })) });
+        fields: after.data.fields || {}, library: after.data.library || [],
+        issues: after.data.issues || [] })) });
     } catch (e) {
       const why = String((e && e.message) || e || "unknown");
       setEditsMade({ error: why === "no-key"
@@ -23923,7 +24130,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         apiKey: data.settings?.apiKey,
         system: LIST_FROM_CHAT_SYSTEM,
         messages: [{ role: "user", content: String(msgs[i]?.content || "") }],
-        maxTokens: 3000,
+        maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
         usage: listSpend,
         search: data.settings?.webSearch === true,
         secs: formulas(data.settings).callSecs,
@@ -24437,12 +24644,6 @@ ${(() => {
     return bits.length ? `    ${d}: ${bits.join("; ")}` : null;
   }).filter(Boolean).join("\n");
 })()}
-- WHEN YOU WRITE HER EXERCISES HERE, they do not have to stay as words. Under every message you
-  send there is a button, "put these on my Body page", which turns the exercises in that message
-  into a real list on her Body tab — each one with its own boxes for weight, reps and hold, a
-  timer, a place to write what happened, how it is done, and a video. Say the exercises plainly,
-  one per line with its dose, and tell her the button is there. Her instruction, 13 August:
-  "I want to input time and reps and kilograms like when I do on the page of my body."
 ${data.settings?.webSearch === true ? `- YOU CAN SEARCH THE INTERNET. Her instruction, 13 August: "I want to give the coach access to
   the Internet so it can get me video links and anything I want." Use it when a real answer needs
   something you do not hold — a demonstration video for an exercise, what the current evidence says,
@@ -24625,7 +24826,8 @@ ${(() => {
       + "  honest test would load one, say so plainly and test the supporting capacity instead.\n"
       + ps.map((f) => {
           const si = standInMeasure(data, f.id);
-          const feels = (f.feels || []).slice(-3).map((x) => `${x.score}/10 on ${x.on}`).join(", ");
+          const feels = (f.feels || []).slice(-Math.max(1, Number(formulas(data.settings).briefPausedFeels) || 3))
+            .map((x) => `${x.score}/10 on ${x.on}`).join(", ");
           return `  * ${f.label} (${f.which} battery) — paused ${f.pausedOn || "?"}. Why: ${f.pausedWhy || "?"}.`
             + `${f.pausedNote ? ` ${f.pausedNote}` : ""}`
             + `${si ? ` Standing in: ${si.label} — that is the number that earns it back.`
@@ -24829,7 +25031,9 @@ Two or three sentences unless she asks for more.`;
           messages: allMsgs.map((m) => ({ role: m.role, text: m.content })) }];
       })() };
       const text = await askModel({
-        apiKey: key, usage: spent, maxTokens: 3000,
+        apiKey: key, usage: spent,
+        /* hers now — build 213, rule 12 */
+        maxTokens: Math.max(500, Number(formulas(live.settings).memoryTokens) || 3000),
         secs: formulas(live.settings).callSecs,
         /* HER INSTRUCTION, 16 August. The span rides with the system prompt so
            the memory is WRITTEN to it, rather than being cut on the way out —
@@ -24960,10 +25164,78 @@ Two or three sentences unless she asks for more.`;
      between her and an answer. */
   const msgsRef = useRef(msgs);
   useEffect(() => { msgsRef.current = msgs; }, [msgs]);
+  const foldedRef = useRef(false);
+
+  /* AND IT NO LONGER DEPENDS ON HER LEAVING TIDILY (build 213).
+
+     This effect's cleanup is a REACT UNMOUNT. Navigating out of the sheet
+     runs it. Swiping the app away, locking the phone until the tab is
+     reclaimed, or closing it does not — and in her default mode the running
+     memory is the ONLY way anything she said reaches her coach again. So a
+     conversation she ended by putting the phone down was safe on her device
+     and invisible to her coach forever.
+
+     A phone gives no dependable async window on the way out, so nothing tries
+     to fit a model call into one. What happens on the way out is a SYNCHRONOUS
+     MARK in her own store, which is a localStorage write and completes. The
+     fold itself then runs on the next open, from the mark. Nothing is folded
+     twice, because a fold that lands clears it. */
+  const markUnfolded = () => {
+    if (foldedRef.current) return;
+    const mine = (msgsRef.current || []).filter((m) => m && (m.role === "user" || m.role === "assistant"));
+    if (!mine.some((m) => m.role === "user")) return;
+    try {
+      setData((d) => ({ ...d, unfolded: { at: Date.now(), date: coach.t, id: sessionId.current,
+        messages: mine.map((m) => ({ role: m.role, text: m.content })) } }));
+    } catch (e) { /* a store that will not take it is rule 20's problem, not this one's */ }
+  };
+  useEffect(() => {
+    const onHide = () => markUnfolded();
+    const onVis = () => { if (typeof document !== "undefined" && document.visibilityState === "hidden") markUnfolded(); };
+    if (typeof window !== "undefined" && window.addEventListener) {
+      window.addEventListener("pagehide", onHide);
+      if (typeof document !== "undefined" && document.addEventListener) document.addEventListener("visibilitychange", onVis);
+    }
+    return () => {
+      if (typeof window !== "undefined" && window.removeEventListener) {
+        window.removeEventListener("pagehide", onHide);
+        if (typeof document !== "undefined" && document.removeEventListener) document.removeEventListener("visibilitychange", onVis);
+      }
+    };
+  }, [coach.t]);
+
   useEffect(() => () => {
     if ((data.settings?.memoryFold || "conversation") !== "message"
-      && (msgsRef.current || []).some((m) => m.role === "user")) foldMemory(msgsRef.current);
+      && (msgsRef.current || []).some((m) => m.role === "user")) {
+      foldedRef.current = true;
+      foldMemory(msgsRef.current);
+      /* A TIDY EXIT SUPERSEDES ITS OWN MARK. She may have backgrounded the app
+         mid-conversation — which wrote a mark — and then navigated out
+         properly, which folds. Leaving the mark would fold the same
+         conversation again on the next open, at her cost and for nothing. */
+      setData((d) => (d && d.unfolded && d.unfolded.id === sessionId.current
+        ? { ...d, unfolded: null } : d));
+    }
   }, []);
+
+  /* AND ON THE WAY BACK IN: anything marked and never folded is folded now.
+
+     IT WATCHES THE MARK RATHER THAN READING IT ONCE, and that is not a detail.
+     The first version of this effect had an empty dependency list, which is
+     precisely build 210's fault: her data loads asynchronously, so a mount
+     effect that reads the store once reads it before anything has arrived and
+     never looks again. It would have rescued nothing and looked like it
+     worked. */
+  const caughtUp = useRef(null);
+  useEffect(() => {
+    const un = data.unfolded;
+    if (!un || !(un.messages || []).some((m) => m && m.role === "user")) return;
+    if (un.id && un.id === sessionId.current) return;   /* this very conversation, still open */
+    if (caughtUp.current === (un.id || un.at)) return;  /* already handled; the clear is in flight */
+    caughtUp.current = un.id || un.at;
+    foldMemory((un.messages || []).map((m) => ({ role: m.role, content: m.text })));
+    setData((d) => ({ ...d, unfolded: null }));
+  }, [data.unfolded]);
 
   const openers = [
     "Why that call this week?",
@@ -27053,8 +27325,18 @@ const memoryDelta = (data, from, t) => {
     .filter((sc) => sc && since(sc.date))
     .map((sc) => `  * ${sc.date}, "${g.text}": ${sc.value}/10${sc.note ? ` — she wrote: "${sc.note}"` : ""}`)).join("\n"));
 
+  /* NAMED, NOT COUNTED (build 211) — see the comment on this build. */
   S("BODY-PAGE WORK SINCE THEN", Object.keys(d.bwlog || {}).filter(since).sort()
-    .map((k) => `  * ${k}: ${Object.keys(d.bwlog[k] || {}).length} exercises logged`).join("\n"));
+    .map((k) => {
+      const day = d.bwlog[k] || {};
+      const bits = Object.keys(day).map((id) => {
+        const e = day[id] || {};
+        if (!["w", "reps", "secs"].some((f) => String(e[f] ?? "").trim() !== "")) return null;
+        const said = bwSay(e, (bwHomeOf(d, id) || {}).ex);
+        return `${bwNameOf(d, id, e)}${said ? ` (${said})` : ""}`;
+      }).filter(Boolean);
+      return bits.length ? `  * ${k}: ${bits.join(", ")}` : null;
+    }).filter(Boolean).join("\n"));
 
   S("WHAT YOU TALKED ABOUT SINCE THEN", (d.chats || []).filter((c) => c && since(c.date))
     .map((c) => `  * ${c.date} — ${c.about}:\n${(c.messages || []).map((x) => `      ${x.role === "user" ? "SHE" : "YOU"}: ${x.text || ""}`).join("\n")}`).join("\n"));
@@ -27300,6 +27582,42 @@ const registryInventory = (data) => COACH_EDITS.map((e) => {
     + rows.map((x) => `  where=${e.where} id=${x.id} "${e.name(x) || ""}"`).join("\n");
 }).filter(Boolean).join("\n\n");
 
+/* HOW A NAME IS MATCHED TO A ROW (build 212). See the note on this build:
+   the prompt promises she can be named in her own words and the matcher was
+   exact equality, so the prompt's own example failed. Exact, then normalised,
+   then containment — and containment only where exactly one row answers,
+   because guessing which row she meant is how the wrong measurement gets set
+   aside (rules 20, 23). */
+const nameKey = (x) => String(x || "").trim().toLowerCase()
+  .replace(/^(the|a|an)\s+/, "")
+  .replace(/[^a-z0-9 ]+/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+/* every string a row can honestly be called by */
+const rowNames = (x, nameOf) => [x && x.id, nameOf ? nameOf(x) : null,
+  x && x.name, x && x.label, x && x.text].filter((v) => String(v || "").trim() !== "");
+
+const findByName = (rows, want, nameOf) => {
+  const live = (rows || []).map((x, i) => ({ x, i }))
+    .filter(({ x }) => x && x.status !== "removed");
+  const w = String(want || "").trim();
+  if (!w) return -1;
+  const exact = live.find(({ x }) => rowNames(x, nameOf)
+    .some((n) => String(n).trim().toLowerCase() === w.toLowerCase()));
+  if (exact) return exact.i;
+  const wk = nameKey(w);
+  if (!wk) return -1;
+  const norm = live.find(({ x }) => rowNames(x, nameOf).some((n) => nameKey(n) === wk));
+  if (norm) return norm.i;
+  const near = live.filter(({ x }) => rowNames(x, nameOf).some((n) => {
+    const nk = nameKey(n);
+    return nk && (nk.includes(wk) || wk.includes(nk));
+  }));
+  /* exactly one, or nothing — never a choice made on her behalf */
+  return near.length === 1 ? near[0].i : -1;
+};
+
 /* One apply for every registry entry: set aside, patch, or add. */
 const applyRegistryEdits = (data, changes, today) => {
   const done = [];
@@ -27310,8 +27628,7 @@ const applyRegistryEdits = (data, changes, today) => {
     if (!e) return;
     const rows = storeGet(out, e.store, e.seed);
     const want = c.target !== undefined ? c.target : c.exercise;
-    const i = rows.findIndex((x) => x && x.status !== "removed"
-      && (same(x.id, want) || same(e.name(x), want)));
+    const i = findByName(rows, want, e.name);
     if (c.op === "add" && c.fields) {
       /* HER REPORT, 16 August. A mobility test arrived with four fields on it
          and every screen that reads one expects more, so it is completed here
@@ -27432,7 +27749,11 @@ const applyListEdits = (data, changes, today) => {
   /* HER REPORT, 13 August: the model was asked for opaque ids, and when it
      named the exercise instead nothing matched. Either works now. */
   const same = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-  const hits = (x, want) => same(x.id, want) || same(x.name, want) || same(x.label, want);
+  /* build 212: the same three passes the registry uses, so the two halves of
+     one button cannot disagree about what she called a thing (rule 33). This
+     asks the question of a single row, so it is answered by matching that row
+     against a one-row list. */
+  const hits = (x, want) => findByName([x], want, null) === 0;
 
   /* THE TEN MINUTES, on the same terms as everything else: taken off is set
      aside, dated, with the reason kept — never deleted (rule 20). */
@@ -27806,7 +28127,13 @@ const logOwn = (d, name, entry, date) => {
     : { ...(d.logs || {}), [date]: { ...l, completed: true, type: l.type || "Body work" } };
 
   return { ...d, bodywork, logs,
-    bwlog: { ...(d.bwlog || {}), [date]: { ...day, [ex.id]: { ...(day[ex.id] || {}), ...keep } } } };
+    /* THE NAME IS WRITTEN WITH THE READING (build 211). Her lists get
+       rewritten every round, and an exercise that leaves every list takes its
+       name with it — bwHomeOf then has nothing to find and her coach was told
+       "an exercise". Stored here it cannot be orphaned. Additive: nothing
+       already logged changes shape (rule 20). */
+    bwlog: { ...(d.bwlog || {}), [date]: { ...day, [ex.id]: { ...(day[ex.id] || {}),
+      ...(String(ex.name || "").trim() ? { nm: String(ex.name).trim() } : {}), ...keep } } } };
 };
 
 const bwHistory = (data, exId, skip) => {
@@ -27893,7 +28220,9 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
        evidence of training, so the day counts from the first one (11 August). */
     const l = (d.logs || {})[today] || {};
     return { ...d, bwlog: { ...(d.bwlog || {}),
-      [today]: { ...day, [ex.id]: { ...(day[ex.id] || {}), [k]: v } } },
+      /* the name rides with the reading — see build 211 above */
+      [today]: { ...day, [ex.id]: { ...(day[ex.id] || {}),
+        ...(String(ex.name || "").trim() ? { nm: String(ex.name).trim() } : {}), [k]: v } } },
       logs: (l.completed || l.rest || !String(v).trim()) ? (d.logs || {})
         : { ...(d.logs || {}), [today]: { ...l, completed: true, type: l.type || "Body work" } },
     };
