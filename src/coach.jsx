@@ -4004,7 +4004,18 @@ const COACH_METRICS = [
    nothing in the app reads them and since build 142 they went across every
    message as raw unlabelled figures. Rule 18: a collected-and-unused field is
    either wired in or dropped. */
-const WHOOP_UNREAD = ["light", "awake", "cycles", "calories", "maxHr", "inBed", "sleepPerf", "sleepEff", "disturbances"];
+/* AUDIT OF 18 AUGUST, FINDING 19. This list was written at build 148 on the
+   stated grounds that nothing in the app read these fields. Three of them are
+   read now and PRINTED TO HER: maxHr and disturbances by the cardiac card,
+   sleepEff by sleep quality. So she was looking at three numbers her coach had
+   been deliberately prevented from seeing — rule 14's own line is that a
+   number she can see should never be one her coach has not been told about.
+
+   The six that remain really are read by nothing and stay stripped: they are
+   still imported, still stored, still in her WHOOP log, and simply not posted
+   to the coach as unlabelled noise every message (rule 18). If one of them
+   ever starts driving a decision, take it off this list in the same edit. */
+const WHOOP_UNREAD = ["light", "awake", "cycles", "calories", "inBed", "sleepPerf"];
 
 /* What the coach is told about, resolved: her list if she has set one, plus any
    headline on her landing page — a number she can see must never be one her
@@ -4261,7 +4272,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 203";
+const BUILD = "18 August 2026 · 204";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5281,10 +5292,14 @@ const briefGoals = (coach) => {
   if (!gs.length) return "WHAT SHE WANTS TO BE ABLE TO DO: none set.";
   return "WHAT SHE WANTS TO BE ABLE TO DO (these outrank what the numbers would prefer):\n"
     + gs.map((g) => {
-      const sc = g.scores || [];
+      /* AUDIT FINDING 20. These travelled as a bare run of digits, so the
+         coach could not tell a 4 from March from a 4 from yesterday, and the
+         row grew without limit. Dated, newest last, and capped at a length
+         that still shows a trend. */
+      const sc = (g.scores || []).slice(-12);
       const line = sc.length
-        ? ` ${sc.map((x) => x.value).join(" ")}/10`
-        : " not scored yet";
+        ? ` — scored ${sc.map((x) => `${x.on || x.date || "?"} ${x.value}/10`).join(" · ")}`
+        : " — not scored yet. It should be tried and scored weekly (rule 9).";
       return `  * "${g.text}"${line}`;
     }).join("\n");
 };
@@ -5742,6 +5757,10 @@ const briefDays = (data, coach) => {
         + ` being tapped, not a session. ASK HER what she did and do not count it as training.`
       : "";
     const eff = String(l.rpe ?? "").trim() !== "" ? `effort ${l.rpe}/10` : null;
+    /* AUDIT FINDING 20. Her mood tap reached the coach for TODAY only — a day
+       she said she felt wiped on last Tuesday was invisible, which is exactly
+       the data rule 4 needs to route with rather than around. */
+    const mood = String(l.mood || "").trim() ? `she said she felt "${String(l.mood).trim()}"` : null;
     const felt = l.during === undefined || l.during === null || l.during === ""
       ? null : `felt ${Number(l.during) > 0 ? "+" : ""}${l.during}`;
     /* WHAT SHE WROTE ON THE DAY, ALWAYS (build 202; audit finding 14).
@@ -5759,7 +5778,7 @@ const briefDays = (data, coach) => {
     const dayNote = String(l.note || "").trim();
     const hers = [note ? `she wrote about the session: "${note}"` : null,
       dayNote ? `she wrote about the day: "${dayNote}"` : null].filter(Boolean).join(" · ");
-    const tail = [...bits, eff, felt, hers].filter(Boolean).join(" · ");
+    const tail = [...bits, eff, felt, mood, hers].filter(Boolean).join(" · ");
     if (tail) { out.push(`${when} ${tail}${doubt}`); return; }
     /* rule 23: an empty day is stated as empty, never as a rest day and never
        as a day she failed at. Only today and a day she was scheduled to train
@@ -5912,6 +5931,12 @@ const briefText = (data, coach, opts) => {
   lines.push(COACH_VOICE);
   lines.push("");
   lines.push("=== HER SUMMARY ===");
+  /* AUDIT FINDING 20. Nothing in this payload stated today's date unless she
+     happened to have imported WHOOP. The monthly read says so; the thing she
+     talks to every day did not, so every relative date below — "3 days ago",
+     "last week" — had to be inferred. */
+  lines.push(`AS AT ${coach.t}${dayName(coach.t) ? `, ${dayName(coach.t)}` : ""}. Every date below is a real`);
+  lines.push("calendar date on her device, and today is not finished.");
   /* WHICH WINDOW BUILT THIS (build 203). Rule 23: if the dated history below
      stops somewhere, say where, so a window she chose is never read as an
      absence and never guessed at. */
@@ -5992,6 +6017,23 @@ const briefText = (data, coach, opts) => {
         const v = (data.mobility[k] || {})[m.id];
         if (v === undefined || v === null || v === "") return "·";
         if (typeof v === "object") {
+          /* AUDIT OF 18 AUGUST, FINDING 17. This assumed every object reading
+             was a pair. Five of her eight tests are measured left and right
+             and store {l, r}; the other three are single-sided and store {v}.
+             So Standing forward fold, Seated forward fold and Legs apart,
+             sitting reached her coach as "·/·" — the symbol for NOT DONE —
+             every week, however faithfully she measured them. Three of eight
+             tests, reported as never taken.
+
+             A single value is printed as a single value. Nothing is averaged:
+             where there are two sides the GAP between them is the point, and
+             rule 23 says the app states what it has rather than a figure it
+             computed to look tidy. */
+          const one = v.v !== undefined && v.v !== "" ? v.v
+            : (v.value !== undefined && v.value !== "" ? v.value : undefined);
+          if (one !== undefined && v.l === undefined && v.r === undefined) {
+            return String(briefNum(one) ?? "·");
+          }
           const L = v.l === undefined || v.l === "" ? "·" : briefNum(v.l);
           const R = v.r === undefined || v.r === "" ? "·" : briefNum(v.r);
           return `${L}/${R}`;
@@ -6008,9 +6050,30 @@ const briefText = (data, coach, opts) => {
   }
   lines.push("");
 
+  /* AUDIT OF 18 AUGUST, FINDING 18. This read `f.dueBack`. The app has never
+     written a field called dueBack — a pause stores pausedOn, pausedWhy,
+     pausedInstead, retestOn, retestWeeks and her own feels. So in her default
+     mode the coach was told a name and nothing else: not why it stopped, not
+     what is being trained instead, not when it is worth trying again, not her
+     score. That is the whole of rule 35, missing, while the monthly read has
+     had all of it since build 141.
+
+     Same shape the read gets, so the two cannot say different things. */
   const paused = pausedFields(data);
-  lines.push(`PAUSED (coming back, not gone — train what has to get strong for it to return): ${
-    paused.length ? paused.map((f) => `${f.label}${f.dueBack ? ` until ${f.dueBack}` : ""}`).join(", ") : "nothing"}`);
+  lines.push("PAUSED — COMING BACK, NOT GONE. Train what has to get strong for it to return (rule 35),");
+  lines.push("and raise the retest EARLY if the stand-in has moved enough to justify it.");
+  lines.push(paused.length ? paused.map((f) => {
+    const si = standInMeasure(data, f.id);
+    const feels = (f.feels || []).slice(-3).map((x) => `${x.on || "?"}: ${x.score}/10`).join(", ");
+    return `  * ${f.label}${f.which ? ` (${f.which} battery)` : ""} — paused ${f.pausedOn || "date not recorded"}.`
+      + ` Why: ${f.pausedWhy || "not recorded"}.`
+      + `${si ? ` Standing in for it: ${si.label} — a real measure with a number.`
+          : f.pausedInstead ? ` Instead: ${f.pausedInstead}.` : " Nothing named as its replacement yet — propose one."}`
+      + ` Worth trying again ${f.retestOn || "no date set"}${f.retestWeeks
+          ? ` (${f.retestWeeks} weeks — the time this tissue needs before a change is real)` : ""}.`
+      + `${feels ? ` How it has felt, her own 1-10: ${feels}.` : ""}`
+      + `${retestDue(f, coach.t) ? " THE RETEST DATE HAS PASSED — offer it warmly, and accept 'not yet' or 'never'." : ""}`;
+  }).join("\n") : "  nothing paused");
 
   const bw = (data.bodywork || []).filter((p) => p && p.status !== "removed");
   lines.push(`BODY WORK RUNNING: ${bw.length ? bw.map((p) => `${p.area} (${(p.lists || []).length} lists, ${Object.keys(p.log || {}).length} done this round)`).join(" · ") : "none"}`);
