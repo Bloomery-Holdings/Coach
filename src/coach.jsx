@@ -4216,7 +4216,26 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
   } finally {
     clearTimeout(bell);
   }
-  if (!res.ok) throw new Error("request-failed");
+  /* AUDIT OF 18 AUGUST, FINDING 40. This threw away res.status and the body —
+     which for the Anthropic API names the actual problem — and collapsed 400,
+     401, 403, 429, 500, 503 and 529 into one token. There is exactly one
+     interpretation of that token in the whole app, and it asserts a cause
+     nothing established: "almost always the key in Settings — expired, or with
+     no credit on it."
+
+     The realistic distribution makes that wrong most of the time. A 429 or a
+     529 means wait a minute and nothing is wrong with her key. A 500 means
+     Anthropic is down. A 400 is the app sending something malformed — an app
+     bug reported to her as her billing problem. Only 401 is what the message
+     says, and the failure mode is specific: it teaches her to distrust a key
+     that is fine, and the next thing she does is delete and re-paste it while
+     the app is already failing.
+
+     The status rides on the error so the message can be computed (rule 23).
+     The surrounding code already distinguishes "timed-out" from
+     "no-connection" and comments on why; this is the same courtesy for the
+     case that actually happens most. */
+  if (!res.ok) throw new Error("http-" + (res.status || 0));
   const data = await res.json();
   if (usage && data && data.usage) {
     /* input_tokens EXCLUDES anything served from or written to the cache, so
@@ -4286,7 +4305,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 207";
+const BUILD = "18 August 2026 · 208";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6568,6 +6587,28 @@ const snapshotIfDue = (d) => {
   } catch (e) { return snapRead(); }
 };
 
+/* AUDIT FINDING 42. The four Google Drive and OneDrive calls had no
+   AbortController, no signal and no clock, while askModel a few hundred lines
+   away has a full one with a comment explaining exactly why. On a captive
+   portal — a hotel, a gym, an airport — the connection opens and never
+   answers, the promise never settles, there is no finally, and the Settings
+   card goes on reporting the PREVIOUS successful date indefinitely.
+
+   That is the one thing rule 20 says it must never do: "it never claims a
+   backup that did not happen — lapsed, not-connected and sample are all
+   distinct answers." A hung promise produces none of those three. It produces
+   a fourth, unstated one: yesterday's date, forever, while nothing is being
+   backed up.
+
+   Same shape as askModel: the clock rejects on its own account, because a
+   fetch that ignores its signal is precisely the case being guarded against. */
+const withClock = (p, secs, what) => {
+  const ms = Math.max(5, Number(secs) || 20) * 1000;
+  let bell;
+  const clock = new Promise((_, rej) => { bell = setTimeout(() => rej(new Error("slow-" + (what || "network"))), ms); });
+  return Promise.race([p, clock]).finally(() => clearTimeout(bell));
+};
+
 const backupName = () => `coach-backup-${today()}.json`;
 
 /* --- the folder she grants once, remembered across sessions ---------------
@@ -6752,14 +6793,17 @@ const gToken = async (clientId, quiet) => {
 const gFolder = async (token) => {
   const q = encodeURIComponent("name='" + G_FOLDER + "' and mimeType='application/vnd.google-apps.folder' and trashed=false");
   try {
-    const found = await fetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id)",
-      { headers: { Authorization: "Bearer " + token } }).then((r) => (r.ok ? r.json() : null));
+    /* the clock, build 208 — see withClock */
+    const found = await withClock(
+      fetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id)",
+        { headers: { Authorization: "Bearer " + token } }).then((r) => (r.ok ? r.json() : null)),
+      20, "drive");
     if (found && found.files && found.files.length) return found.files[0].id;
-    const made = await fetch("https://www.googleapis.com/drive/v3/files",
+    const made = await withClock(fetch("https://www.googleapis.com/drive/v3/files",
       { method: "POST",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
         body: JSON.stringify({ name: G_FOLDER, mimeType: "application/vnd.google-apps.folder" }) })
-      .then((r) => (r.ok ? r.json() : null));
+      .then((r) => (r.ok ? r.json() : null)), 20, "drive");
     return made ? made.id : null;
   } catch (e) { return null; }
 };
@@ -6781,11 +6825,11 @@ const uploadToDrive = async (d, clientId, quiet) => {
       + CRLF + "--" + B + CRLF + "Content-Type: application/json" + CRLF + CRLF
       + JSON.stringify(d, null, 2)
       + CRLF + "--" + B + "--";
-    const res = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
+    const res = await withClock(fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
       method: "POST",
       headers: { Authorization: "Bearer " + token, "Content-Type": "multipart/related; boundary=" + B },
       body,
-    });
+    }), 30, "drive");
     if (!res.ok) return "failed";
     try { window.localStorage.setItem("coach:lastCloudBackup", today()); } catch (e) {}
     return "ok";
@@ -6903,11 +6947,11 @@ const uploadToOneDrive = async (d, clientId) => {
   const token = await msToken(clientId);
   if (!token) return "lapsed";
   try {
-    const res = await fetch(
+    const res = await withClock(fetch(
       "https://graph.microsoft.com/v1.0/me/drive/special/approot:/" + backupName() + ":/content",
       { method: "PUT",
         headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-        body: JSON.stringify(d, null, 2) });
+        body: JSON.stringify(d, null, 2) }), 30, "onedrive");
     if (!res.ok) return "failed";
     try { window.localStorage.setItem("coach:lastCloudBackup", today()); } catch (e) {}
     return "ok";
@@ -27512,13 +27556,62 @@ const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
   })),
 }));
 
+/* WHAT A FAILED CALL ACTUALLY MEANS, COMPUTED FROM ITS STATUS (build 208).
+   One place, so every caller says the same true thing. */
+const httpSay = (status) => {
+  if (status === 401 || status === 403) {
+    return "Anthropic wouldn't accept the key in Settings — it may have expired, or been revoked. "
+      + "Nothing has changed here. Check the key and try again.";
+  }
+  if (status === 429) {
+    return "You've hit Anthropic's rate limit — too many requests too close together. "
+      + "Nothing is wrong with your key and nothing has changed. Wait a minute and tap it again.";
+  }
+  if (status === 529 || status === 503) {
+    return "Anthropic is overloaded right now. Nothing is wrong with your key and nothing has "
+      + "changed. Try again in a few minutes.";
+  }
+  if (status >= 500) {
+    return "Anthropic had a server error. That is their end, not yours and not your key. "
+      + "Nothing has changed — try again shortly.";
+  }
+  if (status === 400 || status === 413) {
+    return "The app sent something Anthropic couldn't read — usually a message with too large an "
+      + "image in it. That is a bug in this app, not anything you did. Nothing has changed. "
+      + "Try again without the photo, and tell your coach you saw this.";
+  }
+  return `The request failed${status ? ` (${status})` : ""}. Nothing has changed. `
+    + "If it keeps happening, check the key in Settings.";
+};
+
 const designBodyWork = async ({ area, mins, apiKey, context, onProgress, usage }) => {
   const say = (m) => { try { onProgress && onProgress(m); } catch (e) { /* nothing */ } };
   /* TWO calls, one bill. Both are added up here so the caller records what the
      whole design actually cost rather than half of it (build 159). */
   const u1 = {}, u2 = {};
+  /* AUDIT FINDING 41. The FIRST call sat outside the try, so when it completed,
+     was billed, and then came back in a shape parseReview could not read, the
+     error propagated out and the usage aggregation below — the only place u1
+     is ever copied into the caller's object — was skipped entirely. Full price
+     paid, nothing in the spend log, and she is shown "tap it again; it usually
+     works the second time".
+
+     maxTokens is 8000 on that call. It is the expensive one. Rule 36: a call
+     that costs money and appears nowhere is a rule 18 breach in the most
+     expensive possible place.
+
+     The spend is now banked BEFORE the error is allowed out. */
+  const bank = () => { if (!usage) return;
+    usage.in = (Number(u1.in) || 0) + (Number(u2.in) || 0);
+    usage.out = (Number(u1.out) || 0) + (Number(u2.out) || 0);
+    usage.cacheWrite = (Number(u1.cacheWrite) || 0) + (Number(u2.cacheWrite) || 0);
+    usage.cacheRead = (Number(u1.cacheRead) || 0) + (Number(u2.cacheRead) || 0);
+  };
   say("Writing lists 1 to 5…");
-  const first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [], usage: u1 });
+  let first;
+  try {
+    first = await designBatch({ area, mins, apiKey, context, count: 5, startAt: 1, avoid: [], usage: u1 });
+  } catch (e) { bank(); throw e; }
   let lists = shapeLists(first.lists.slice(0, 5), 1);
   let partial = false;
   try {
@@ -28392,8 +28485,8 @@ function BodyWork({ data, setData, coach, setSheet }) {
         ? "This one needs your Anthropic key, which lives in Settings. Everything else in the app works without it."
         : why === "unreadable"
         ? "The coach answered, but not as lists I could read back. Nothing has changed — tap it again; it usually works the second time."
-        : why === "request-failed"
-        ? "The coach refused the request. That is almost always the key in Settings — expired, or with no credit on it. Nothing has changed."
+        : /^http-/.test(why)
+        ? httpSay(Number(why.slice(5)) || 0)
         : `I couldn't reach the coach. Nothing has changed. What came back: "${why}"`);
     }
     noteSpend(setData, "bodywork", bwSpend, coach.t);
