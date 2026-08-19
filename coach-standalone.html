@@ -4609,7 +4609,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 229";
+const BUILD = "19 August 2026 · 230";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -21669,6 +21669,10 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
             ...(m.photoId ? { photoId: m.photoId } : {}),
             ...(m.photoWas ? { photoWas: m.photoWas } : {}), ...(m.cutOff ? { cutOff: true } : {}) })));
     }, [coach.t]);
+    /* BUILD 230: on open, and every time the live talk grows, ask whether it is
+       already finished. This is what makes a 187-message conversation fold the
+       moment she opens the app rather than after she has paid to send it again. */
+    useEffect(() => { finishIfLong(msgs); }, [msgs.length]);
     const [showOld, setShowOld] = useState(false);
     /* HER INSTRUCTION, 16 August. `showOld` opened every earlier day together;
        this is which ONE of them is open. */
@@ -21843,6 +21847,40 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
     /* build 229: shown once when a long talk has just been folded away */
     const [rolled, setRolled] = useState(null);
+    /* BUILD 230: the cutoff is a PROPERTY OF THE TALK, not an event in send.
+       ---------------------------------------------------------------------
+       Her screenshot on 229 still said "Earlier today (187 messages)", and she
+       was right: 229 only folded on the way out of a message, so a conversation
+       that was already too long when she opened it just sat there, and the next
+       thing she typed carried all 187 with it one more time.
+  
+       Past her own number the talk is finished, whenever that is noticed — on
+       open, when the store catches up, or after a reply. Every word of it stays
+       in her file, dated, listed under earlier conversations, and folded into
+       the running history the coach reads on every message (rules 15, 20). What
+       stops is it being sent again for the rest of the day (rule 36).
+  
+       It cannot loop: finishing starts a new session, and a new session is
+       empty, so the condition is false the moment it has done its work. */
+    const finishing = useRef(null);
+    const finishIfLong = (all) => {
+        const list = (all || []).filter((m) => m && (m.role === "user" || m.role === "assistant"));
+        const talkMax = Math.max(6, Number(formulas(data.settings).talkMax) || 30);
+        if (list.length < talkMax)
+            return false;
+        const closing = sessionId.current;
+        if (finishing.current === closing)
+            return false; /* already handled this one */
+        finishing.current = closing;
+        sessionId.current = newId();
+        setMsgs([]);
+        setRolled({ n: list.length });
+        setData((d) => ({ ...d,
+            chats: (d.chats || []).map((c) => (c && c.id === closing ? { ...c, closed: true } : c)),
+            unfolded: { at: Date.now(), date: coach.t, id: closing,
+                messages: list.map((m) => ({ role: m.role, text: m.content })) } }));
+        return true;
+    };
     /* THIS ONE WAS ALREADY RIGHT, and it is worth saying why (build 218).
        makeList reads `d.bodywork` INSIDE the setData updater, so it builds on
        her file as it is when the answer lands. That is the pattern applyEdits
@@ -23046,27 +23084,8 @@ Two or three sentences unless she asks for more.`;
                her settings if she wants it after every line. Her call, not mine. */
             if (((_c = data.settings) === null || _c === void 0 ? void 0 : _c.memoryFold) === "message")
                 foldMemory(done);
-            /* THE CUTOFF (build 229). Her instruction: "there's no cutoff where you
-               fold it into history and then start a new day... then it will not be
-               187 messages." Past her own number the talk is finished: marked to be
-               folded into the running history, closed so it is not resumed, and a
-               fresh one started under the same day. Every word of it is still in her
-               file and still listed under earlier conversations — what stops is it
-               being sent again on every message for the rest of the day (rule 36).
-               Rule 15 is not touched: nothing is trimmed out of the record, her
-               goals, her measurements or anything she has just asked about. */
-            const talkMax = Math.max(6, Number(formulas(data.settings).talkMax) || 30);
-            if (done.length >= talkMax) {
-                const closing = sessionId.current;
-                const kept = done.filter((m) => m && (m.role === "user" || m.role === "assistant"));
-                sessionId.current = newId();
-                setMsgs([]);
-                setRolled({ n: kept.length });
-                setData((d) => ({ ...d,
-                    chats: (d.chats || []).map((c) => (c && c.id === closing ? { ...c, closed: true } : c)),
-                    unfolded: { at: Date.now(), date: coach.t, id: closing,
-                        messages: kept.map((m) => ({ role: m.role, text: m.content })) } }));
-            }
+            /* THE CUTOFF (build 229, moved out of here at 230). */
+            finishIfLong(done);
         }
         catch (e) {
             setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
