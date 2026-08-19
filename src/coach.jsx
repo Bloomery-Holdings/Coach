@@ -4425,7 +4425,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 225";
+const BUILD = "19 August 2026 · 227";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -12567,7 +12567,27 @@ const imgOpen = () => new Promise((res, rej) => {
       const db = r.result;
       if (!db.objectStoreNames.contains(IMG_STORE)) db.createObjectStore(IMG_STORE);
     };
-    r.onsuccess = () => res(r.result);
+    r.onsuccess = () => {
+      const db = r.result;
+      /* THE SHELF CAN BE MISSING FROM A DATABASE THAT OPENS FINE (build 227b).
+         onupgradeneeded fires only when the database is created or its version
+         changes. A database left at version 1 WITHOUT the store — an upgrade
+         interrupted, anything else on this origin opening it first — opens
+         successfully and then throws "object store was not found" on every
+         read and write, forever. Every exercise photo and, since build 226,
+         every photo she sends her coach goes through here. */
+      if (db.objectStoreNames.contains(IMG_STORE)) { res(db); return; }
+      const v = (Number(db.version) || 1) + 1;
+      try { db.close(); } catch (e) {}
+      const again = indexedDB.open("coach-images", v);
+      again.onupgradeneeded = () => {
+        const d2 = again.result;
+        if (!d2.objectStoreNames.contains(IMG_STORE)) d2.createObjectStore(IMG_STORE);
+      };
+      again.onsuccess = () => res(again.result);
+      again.onerror = () => rej(again.error || new Error("idb"));
+      again.onblocked = () => rej(new Error("idb-blocked"));
+    };
     r.onerror = () => rej(r.error || new Error("idb"));
   } catch (e) { rej(e); }
 });
@@ -12590,11 +12610,230 @@ const imgDel = (key) => imgOpen().then((db) => new Promise((res, rej) => {
   tx.onerror = () => rej(tx.error);
 }));
 
+/* HER PHOTOS TO THE COACH, OUT OF HER FILE (build 226).
+   ---------------------------------------------------------------------------
+   Her instruction, 19 August: "save all the photos in a place that I can
+   access and delete." They were base64 text inside the messages inside
+   coach:data — the one store that has to fit in five megabytes and carry
+   years. The exercise photos have been in IndexedDB since the beginning for
+   exactly this reason; these never were.
+
+   Same store, a different prefix, so one place holds every picture the app
+   keeps and one delete works on both. */
+const chatPhotoKey = (id) => "chat:" + String(id || "");
+const dataUrlToBlob = (url) => {
+  const s2 = String(url || "");
+  const at = s2.indexOf(",");
+  if (at < 0) return null;
+  const mime = (s2.match(/^data:([^;]+)/) || [])[1] || "image/jpeg";
+  const bin = atob(s2.slice(at + 1));
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+};
+const blobToDataUrl = (blob) => new Promise((res, rej) => {
+  try {
+    const rd = new FileReader();
+    rd.onload = () => res(String(rd.result || ""));
+    rd.onerror = () => rej(rd.error || new Error("read"));
+    rd.readAsDataURL(blob);
+  } catch (e) { rej(e); }
+});
+/* every photo she has ever sent, newest first, read from her talks — which is
+   where the ids live, so nothing can be listed that is not really hers */
+const chatPhotos = (data) => {
+  const out = [];
+  (data.chats || []).forEach((c) => ((c && c.messages) || []).forEach((m, mi) => {
+    if (!m || (!m.image && !m.photoId)) return;
+    out.push({ chatId: c.id, date: c.date || "", mi,
+      photoId: m.photoId || null, inline: m.image || null,
+      said: String(m.text || m.content || ""),
+      bytes: m.image ? String(m.image).length : null });
+  }));
+  return out.sort((a, b) => (String(b.date) < String(a.date) ? -1 : String(b.date) > String(a.date) ? 1 : b.mi - a.mi));
+};
+
 /* A search rather than one particular video: a link chosen today could be
    taken down tomorrow, and a wrong video is worse than none. Hers wins. */
 const videoFor = (f) => f?.video
   || "https://www.youtube.com/results?search_query=" +
      encodeURIComponent("how to " + String(f?.label || "").trim() + " proper form");
+
+/* A PHOTO IN A CONVERSATION (build 226). It may be an id into the photo store
+   or, for anything sent before this build and not yet moved, the picture
+   itself sitting in her file. Both are shown; neither is treated as the only
+   possibility (rule 23). */
+function ChatPhoto({ m, style }) {
+  const [url, setUrl] = useState(m && m.image ? m.image : null);
+  useEffect(() => {
+    let dead = false;
+    if (m && m.image) { setUrl(m.image); return () => {}; }
+    if (!m || !m.photoId) { setUrl(null); return () => {}; }
+    let made = null;
+    imgGet(chatPhotoKey(m.photoId))
+      .then((b) => {
+        if (dead || !b) { if (!dead) setUrl(null); return; }
+        try { made = URL.createObjectURL(b); setUrl(made); } catch (e) { setUrl(null); }
+      })
+      .catch(() => { if (!dead) setUrl(null); });
+    return () => { dead = true; if (made) { try { URL.revokeObjectURL(made); } catch (e) {} } };
+  }, [m && m.image, m && m.photoId]);
+  if (url) return <img src={url} alt="what she sent" style={style} />;
+  if (m && (m.photoId || m.photoWas)) {
+    return (
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 8 }}>
+        {m.photoWas ? "A photo was here — you cleared it to free space." : "A photo was here; it is not on this device any more."}
+      </div>
+    );
+  }
+  return null;
+}
+
+/* HER PHOTOS, ALL OF THEM, WHERE SHE CAN DELETE THEM (build 226b).
+   Her instruction, 19 August: "save all the photos in a place that I can
+   access and delete." */
+function PhotosSheet({ data, setData, coach, close }) {
+  const shots = chatPhotos(data);
+  const [asking, setAsking] = useState(null);      /* which one she is removing */
+  const [moving, setMoving] = useState(false);
+  const [moved, setMoved] = useState(null);
+  const inFile = shots.filter((p) => p.inline);
+  const inFileBytes = inFile.reduce((a, p) => a + (p.bytes || 0), 0);
+  const mb = (n) => (n >= 100000 ? `${Math.round(n / 100000) / 10} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+
+  /* COPY FIRST, THEN TAKE IT OUT OF THE FILE. The other order loses the photo
+     if the write fails halfway (rule 20). */
+  const moveOut = async () => {
+    if (moving) return;
+    setMoving(true);
+    const done = {};
+    const why = [];
+    let freed = 0;
+    for (const p of inFile) {
+      try {
+        const pid = newId();
+        const blob = dataUrlToBlob(p.inline);
+        if (!blob) continue;
+        await imgPut(chatPhotoKey(pid), blob);
+        /* only now is it safe for it to leave her file */
+        done[p.chatId + "#" + p.mi] = pid;
+        freed += p.bytes || 0;
+      } catch (e) {
+        /* IT STAYS IN THE FILE, which is the safe end of the failure — and she
+           is told WHY rather than shown "moved 0" with no reason (rule 23). */
+        why.push(String((e && e.message) || e));
+      }
+    }
+    if (Object.keys(done).length) {
+      setData((d) => ({ ...d, chats: (d.chats || []).map((c) => {
+        if (!c) return c;
+        return { ...c, messages: (c.messages || []).map((m, mi) => {
+          const pid = done[c.id + "#" + mi];
+          if (!pid || !m || !m.image) return m;
+          const { image, ...rest } = m;
+          return { ...rest, photoId: pid };
+        }) };
+      }) }));
+    }
+    setMoved({ n: Object.keys(done).length, freed,
+      failed: inFile.length - Object.keys(done).length, why: why[0] || "" });
+    setMoving(false);
+  };
+
+  const removeOne = async (p) => {
+    if (p.photoId) { try { await imgDel(chatPhotoKey(p.photoId)); } catch (e) {} }
+    setData((d) => ({ ...d, chats: (d.chats || []).map((c) => {
+      if (!c || c.id !== p.chatId) return c;
+      return { ...c, messages: (c.messages || []).map((m, mi) => {
+        if (mi !== p.mi || !m) return m;
+        const { image, photoId, ...rest } = m;
+        return { ...rest, photoWas: `removed to free space on ${coach.t}` };
+      }) };
+    }) }));
+    setAsking(null);
+  };
+
+  return (
+    <div>
+      <Eyebrow color={C.ochre}>Your photos</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        {shots.length} photo{shots.length === 1 ? "" : "s"}
+      </h1>
+      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginBottom: 12 }}>
+        {shots.length
+          ? `${shots.length} photo${shots.length === 1 ? "" : "s"}, newest first. Removing one takes the picture and nothing else — what you wrote and what your coach said stay exactly as they are, and the message will still say a photo was there.`
+          : "You have not sent your coach a photo yet. When you do, it will be here, and you can remove any of them from this page."}
+      </div>
+
+      {/* everything sent before build 226 is still inside her file */}
+      {inFile.length > 0 && !moved && (
+        <div style={{ background: C.pist, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55, marginBottom: 9 }}>
+            <strong>{inFile.length} of these are stored inside your training file</strong>, which is
+            the part with only about five megabytes to work with. Photos do not belong there.
+            Moving them out frees about {mb(inFileBytes)} and changes nothing you can see — they
+            stay on this device, on this page, and your coach can still be shown them.
+          </div>
+          <Btn kind="signal" onClick={moveOut}>
+            {moving ? "moving them…" : `Move them out of my file — frees ${mb(inFileBytes)}`}
+          </Btn>
+        </div>
+      )}
+      {moved && (
+        <div style={{ background: C.mint, borderRadius: 12, padding: "12px 14px", marginBottom: 14,
+          fontSize: 12.5, color: C.ink, lineHeight: 1.55 }}>
+          Moved {moved.n} photo{moved.n === 1 ? "" : "s"} out of your file and freed {mb(moved.freed)}.
+          {moved.failed > 0 && ` ${moved.failed} could not be moved and are still in the file, untouched — nothing was lost. What went wrong: ${moved.why || "no reason given"}.`}
+        </div>
+      )}
+
+      {shots.map((p, i) => (
+        <div key={p.chatId + "#" + p.mi} style={{ background: C.card, border: `1px solid ${C.line}`,
+          borderRadius: 12, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
+            gap: 8, marginBottom: 8 }}>
+            <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+              {p.date ? dayAndMonth(p.date) : "no date"}
+            </span>
+            <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+              {p.inline ? `in your file · ${mb(p.bytes || 0)}` : "in the photo store"}
+            </span>
+          </div>
+          <ChatPhoto m={{ image: p.inline, photoId: p.photoId }}
+            style={{ maxWidth: "100%", borderRadius: 10, display: "block", marginBottom: 8 }} />
+          {p.said && (
+            <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 8 }}>
+              “{p.said.length > 220 ? p.said.slice(0, 220) + "…" : p.said}”
+            </div>
+          )}
+          {asking === i ? (
+            <div>
+              <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.5, marginBottom: 8 }}>
+                This removes the picture for good — it cannot come back. What you wrote and what
+                your coach said stay, and the message will still say a photo was here.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: "1 1 60%" }}>
+                  <Btn kind="signal" onClick={() => removeOne(p)}>Yes, remove it</Btn>
+                </span>
+                <button onClick={() => setAsking(null)} className="tap" style={{
+                  border: "none", background: "transparent", cursor: "pointer", padding: "6px 4px",
+                  fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>keep it</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setAsking(i)} className="tap" style={{
+              border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+              padding: "6px 11px", borderRadius: 8,
+              fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+              remove this photo
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ExercisePhoto({ id }) {
   const [url, setUrl] = useState(null);
@@ -18257,6 +18496,13 @@ function Settings({ data, setData, coach, setSheet }) {
                   <span className="mono" style={{ color: C.muted, whiteSpace: "nowrap" }}>{mb(r.bytes)}</span>
                 </div>
               ))}
+              {/* build 226b: the place she asked for, from the page that told
+                  her photos were using the room */}
+              <div style={{ marginTop: 10 }}>
+                <Btn kind="ghost" onClick={() => setSheet({ kind: "photos" })}>
+                  Your photos — see them and delete any
+                </Btn>
+              </div>
               <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
                 Your training record is the reason the app can tell you anything, so none of it
                 is worth removing. The daily copies look after themselves — they are capped, and
@@ -24416,7 +24662,8 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       if (seen.has(k)) return;
       seen.add(k);
       out.push({ role: m.role, content: m.text, ...(m.at ? { at: m.at } : {}),
-        ...(m.image ? { image: m.image } : {}), ...(m.cutOff ? { cutOff: true } : {}) });
+        ...(m.image ? { image: m.image } : {}), ...(m.photoId ? { photoId: m.photoId } : {}),
+        ...(m.photoWas ? { photoWas: m.photoWas } : {}), ...(m.cutOff ? { cutOff: true } : {}) });
     }));
     return out;
   })();
@@ -24466,6 +24713,33 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
      and continuing the day means continuing the real conversation. */
   const sessionId = useRef((todayChats.slice().sort((a, b) =>
     ((b.messages || []).length - (a.messages || []).length))[0] || {}).id || newId());
+
+  /* THE DAY TURNED UNDER AN OPEN SHEET (build 227).
+     ---------------------------------------------------------------------
+     Her report, 19 August: "the talk is going non stop from yesterday."
+     sessionId and msgs above are both decided ONCE, at mount. useToday
+     notices midnight; nothing told this. On a phone, where the app is
+     backgrounded rather than closed, that meant Monday's conversation
+     carried on into Tuesday — re-dated as Tuesday when it saved, and re-sent
+     in full on every message for as long as the app stayed open.
+
+     Now the session rolls with the day. Whatever she said before midnight
+     stays where it happened and appears under earlier days. */
+  const dayAtMount = useRef(coach.t);
+  useEffect(() => {
+    if (coach.t === dayAtMount.current) return;
+    dayAtMount.current = coach.t;
+    const live = (data || {}).chats || [];
+    const todays = live.filter((c) => c && c.date === coach.t);
+    const best = todays.slice().sort((a, b) =>
+      ((b.messages || []).length - (a.messages || []).length))[0];
+    sessionId.current = (best && best.id) || newId();
+    setMsgs(((best && best.messages) || []).map((m) => ({ role: m.role, content: m.text,
+      ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}),
+      ...(m.photoId ? { photoId: m.photoId } : {}),
+      ...(m.photoWas ? { photoWas: m.photoWas } : {}), ...(m.cutOff ? { cutOff: true } : {}) })));
+  }, [coach.t]);
+
   const [showOld, setShowOld] = useState(false);
   /* HER INSTRUCTION, 16 August. `showOld` opened every earlier day together;
      this is which ONE of them is open. */
@@ -25483,8 +25757,17 @@ Two or three sentences unless she asks for more.`;
     /* Build 143: what this conversation has cost, accumulated across its
        messages rather than overwritten, so the number on a conversation is
        the whole conversation and not its last exchange. */
-    const prev = (d.chats || []).find((c) => c.id === sessionId.current) || {};
-    const entry = { id: sessionId.current, date: coach.t, about: about || "open chat",
+    /* A CONVERSATION IS NOT MOVED TO ANOTHER DAY (build 227, rule 20). If the
+       entry this session is writing to already carries a DIFFERENT date, the
+       day turned underneath it — write today's under an id of today's own and
+       leave that day exactly where it happened. Derived from the date rather
+       than generated, so this is safe to compute inside the updater and gives
+       the same answer every time it runs. */
+    const held = (d.chats || []).find((c) => c.id === sessionId.current) || null;
+    const rolled = !!(held && held.date && held.date !== coach.t);
+    const useId = rolled ? sessionId.current + "@" + coach.t : sessionId.current;
+    const prev = rolled ? {} : (held || {});
+    const entry = { id: useId, date: coach.t, about: about || "open chat",
       tokensIn: (prev.tokensIn || 0) + ((spent && spent.in) || 0),
       tokensOut: (prev.tokensOut || 0) + ((spent && spent.out) || 0),
       cost: (prev.cost || 0) + (spent ? centsFor(spent, formulas(d.settings)) : 0),
@@ -25496,6 +25779,9 @@ Two or three sentences unless she asks for more.`;
            can be and is checked. */
         const mine = all.map((m) => ({ role: m.role, text: m.content,
           ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}),
+          /* build 226: where the picture is, when it is not in her file */
+          ...(m.photoId ? { photoId: m.photoId } : {}),
+          ...(m.photoWas ? { photoWas: m.photoWas } : {}),
           /* build 224: a reply that ran out of room still says so tomorrow */
           ...(m.cutOff ? { cutOff: true } : {}) }));
         return mergeChatMessages(prev.messages, mine);
@@ -25523,7 +25809,7 @@ Two or three sentences unless she asks for more.`;
        duplication the old line was afraid of is a READING problem, and it is
        solved where the chat reads itself back in, not by destroying rows. */
     const chats = [...(d.chats || [])];
-    const idx = chats.findIndex((c) => c.id === sessionId.current);
+    const idx = chats.findIndex((c) => c.id === useId);
     if (idx >= 0) chats[idx] = entry; else chats.push(entry);
     /* No cap. Conversations were capped at the last 200 and older ones
        silently dropped — roughly seven months at any real rate of use. They
@@ -25634,7 +25920,20 @@ Two or three sentences unless she asks for more.`;
     if ((!text && !photo) || busy) return;
     /* TIMED, so the app can measure her instead of assuming her (build 147).
        Only the moment is kept — no content, nothing new about her. */
-    const next = [...msgs, { role: "user", content: text, at: Date.now(), ...(photo ? { image: photo } : {}) }];
+    /* BUILD 226: the picture goes to the photo store and the message keeps an
+       id. If the browser will not keep pictures the old way still works —
+       losing her photo to be tidy would be the worse fault (rule 23). */
+    let shot = null;
+    if (photo) {
+      const pid = newId();
+      try {
+        const blob = dataUrlToBlob(photo);
+        if (!blob) throw new Error("no-blob");
+        await imgPut(chatPhotoKey(pid), blob);
+        shot = { photoId: pid };
+      } catch (e) { shot = { image: photo }; }
+    }
+    const next = [...msgs, { role: "user", content: text, at: Date.now(), ...(shot || {}) }];
     setMsgs(next); setDraft(""); setPhoto(null); setBusy(true);
     setData((d) => ({ ...d, chatDraft: "" }));
     /* the mic lets go of it at the same moment the box does */
@@ -25658,14 +25957,30 @@ Two or three sentences unless she asks for more.`;
          always inside the window and nothing changed at all (build 224b). */
       const stillPictures = new Set();
       for (let k = Math.max(0, next.length - photoTurns); k < next.length; k++) {
-        if (next[k] && next[k].image) stillPictures.add(k);
+        if (next[k] && (next[k].image || next[k].photoId)) stillPictures.add(k);
       }
-      const blockify = (m, k) => (m.image
-        ? (stillPictures.has(k)
+      /* BUILD 226: the bytes now live in the photo store, so they are read
+         back before the call rather than being taken off the message. Only
+         the ones the coach still needs to SEE are read — which is the whole
+         point of the window build 224 drew. */
+      const shots = {};
+      for (const k of stillPictures) {
+        const mk = next[k];
+        if (!mk) continue;
+        if (mk.image) { shots[k] = mk.image; continue; }
+        if (mk.photoId) {
+          try {
+            const b = await imgGet(chatPhotoKey(mk.photoId));
+            if (b) shots[k] = await blobToDataUrl(b);
+          } catch (e) { /* it stays a line of text, which is honest */ }
+        }
+      }
+      const blockify = (m, k) => ((m.image || m.photoId)
+        ? (shots[k]
           ? { role: m.role, content: [
               { type: "image", source: { type: "base64",
-                media_type: (m.image.match(/^data:([^;]+);/) || [])[1] || "image/jpeg",
-                data: String(m.image).split(",")[1] || "" } },
+                media_type: (String(shots[k]).match(/^data:([^;]+);/) || [])[1] || "image/jpeg",
+                data: String(shots[k]).split(",")[1] || "" } },
               ...(m.content ? [{ type: "text", text: m.content }] : []) ] }
           : { role: m.role, content: "[she sent you a photo here, earlier in this conversation — "
               + "your own reply to it is below. Ask her to send it again if you need to look at it.]"
@@ -26188,7 +26503,9 @@ Two or three sentences unless she asks for more.`;
               color: m.role === "user" ? C.chalk : C.ink,
               border: m.role === "user" ? "none" : `1px solid ${C.line}`,
             }}>
-              {m.image && <img src={m.image} alt="what she sent"
+              {/* build 226: the picture may be in the photo store rather than
+                  in her file, and both are shown the same way */}
+              {(m.image || m.photoId || m.photoWas) && <ChatPhoto m={m}
                 style={{ maxWidth: "100%", borderRadius: 10, display: "block",
                   marginBottom: m.content ? 8 : 0 }} />}
               {m.content}
@@ -27491,6 +27808,8 @@ function CoachApp() {
             <WhoopLog data={data} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "whoop" ? (
             <WhoopImport data={data} setData={setData} close={() => setSheet(null)} />
+          ) : sheet.kind === "photos" ? (
+            <PhotosSheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "notes" ? (
             <NotesArchive data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "program" ? (
