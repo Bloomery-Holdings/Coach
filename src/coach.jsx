@@ -227,10 +227,14 @@ const FORMULA_DEFAULTS = {
      Her decision, 14 August: "make it depend on what you asked." A flat cap
      paid essay prices for one-line questions. A hard morning always gets the
      long one — the ladder in rule 4 needs room to walk down. */
-  replyShort: 350,         /* a short question deserves a short answer         */
-  replyNormal: 550,        /* the ordinary case                                */
-  replyThinking: 800,      /* why, explain, should I, compare, plan            */
-  replyLong: 1000,         /* a hard morning, or anything that sounds like one */
+  /* RAISED AT BUILD 221, HER CHOICE. A ceiling is not a target: the model
+     writes what the answer needs and stops, so this only ever decides where a
+     reply is CUT OFF. Raising it costs nothing on a reply that was already
+     finishing — only on one that was being truncated. */
+  replyShort: 500,         /* a short question deserves a short answer         */
+  replyNormal: 900,        /* the ordinary case                                */
+  replyThinking: 1400,     /* why, explain, should I, compare, plan            */
+  replyLong: 1800,         /* a hard morning, or anything that sounds like one */
   replyShortChars: 60,     /* what counts as a short question, in characters   */
 
   /* ---- WHEN CACHING IS WORTH IT, MEASURED RATHER THAN ASSUMED -----------
@@ -4413,7 +4417,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 August 2026 · 220";
+const BUILD = "19 August 2026 · 221";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
