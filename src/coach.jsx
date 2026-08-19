@@ -395,6 +395,7 @@ const FORMULA_DEFAULTS = {
   storeWarnAt: 3500000,    /* bytes stored before the app warns her it is filling up  */
   photoKeepDays: 30,       /* days a photo in a talk is kept before she may clear it  */
   photoTurns: 4,           /* messages back a photo is still SENT as a picture         */
+  talkMax: 30,             /* messages before a talk is folded away and a new one starts */
 
   /* How she rates her own confidence, and what that permits */
   confidenceHigh: 8,       /* at or above: a good week to move a variable             */
@@ -4425,7 +4426,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 228";
+const BUILD = "19 August 2026 · 229";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -19520,7 +19521,8 @@ function Formulas({ data, setData, close }) {
              ["snapBudget", "Bytes all the copies together may take"],
              ["storeWarnAt", "Bytes stored before the app warns you"],
              ["photoKeepDays", "Days a photo stays in a talk before you may clear it"],
-             ["photoTurns", "Messages back a photo is still sent to your coach as a picture"]] },
+             ["photoTurns", "Messages back a photo is still sent to your coach as a picture"],
+             ["talkMax", "Messages before a talk is folded into your history and a fresh one starts"]] },
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
@@ -24674,8 +24676,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
      session logged today is gathered into it in the order it was said, and
      the day's entry is written back as one — so nothing is duplicated and
      nothing is dropped. Yesterday and before are below, read-only. */
-  const todayChats = (data.chats || []).filter((c) => c.date === coach.t);
-  const earlier = (data.chats || []).filter((c) => c.date !== coach.t)
+  /* A TALK THAT HAS BEEN FOLDED AWAY IS FINISHED (build 229). It stays in her
+     file, dated, and it is listed with the earlier conversations below — what
+     it stops doing is coming back into the live conversation and being sent
+     again on every message for the rest of the day. Her instruction: "there's
+     no cutoff where you fold it into history and then start a new day." */
+  const todayChats = (data.chats || []).filter((c) => c.date === coach.t && !c.closed);
+  const earlier = (data.chats || [])
+    .filter((c) => c.date !== coach.t || c.closed)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   /* De-duplicated on the way IN, which is where the old filter's worry
      actually belonged. Two entries under today can no longer produce the same
@@ -24714,7 +24722,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
      list is returned untouched, so this can never loop and never disturbs
      what she is in the middle of typing. */
   useEffect(() => {
-    const todays = (data.chats || []).filter((c) => c && c.date === coach.t);
+    const todays = (data.chats || []).filter((c) => c && c.date === coach.t && !c.closed);
     if (!todays.length) return;
     const best = todays.slice().sort((a, b) =>
       ((b.messages || []).length - (a.messages || []).length))[0];
@@ -24738,6 +24746,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
   /* THE SESSION ADOPTS WHAT TODAY ALREADY HOLDS. The LONGEST entry, not merely
      the first — after a day of reloads the first one written may be the stub,
      and continuing the day means continuing the real conversation. */
+  /* ONLY A TALK THAT IS STILL OPEN IS RESUMED (build 229) */
   const sessionId = useRef((todayChats.slice().sort((a, b) =>
     ((b.messages || []).length - (a.messages || []).length))[0] || {}).id || newId());
 
@@ -24757,10 +24766,23 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     if (coach.t === dayAtMount.current) return;
     dayAtMount.current = coach.t;
     const live = (data || {}).chats || [];
-    const todays = live.filter((c) => c && c.date === coach.t);
+    const todays = live.filter((c) => c && c.date === coach.t && !c.closed);
     const best = todays.slice().sort((a, b) =>
       ((b.messages || []).length - (a.messages || []).length))[0];
+    /* AND THE DAY THAT JUST ENDED IS FOLDED INTO HER HISTORY (build 229).
+       227 started the new day and left the old one unfolded, so what she said
+       before midnight never reached the running history unless she happened to
+       close the sheet tidily. The mark is a plain store write, which always
+       completes; the fold itself runs from the mark on the way back in. */
+    const ending = (msgsRef.current || []).filter((m) => m && (m.role === "user" || m.role === "assistant"));
+    const wasId = sessionId.current;
     sessionId.current = (best && best.id) || newId();
+    if (ending.some((m) => m.role === "user")) {
+      setData((d) => ({ ...d,
+        chats: (d.chats || []).map((c) => (c && c.id === wasId ? { ...c, closed: true } : c)),
+        unfolded: { at: Date.now(), date: dayAtMount.current, id: wasId,
+          messages: ending.map((m) => ({ role: m.role, text: m.content })) } }));
+    }
     setMsgs(((best && best.messages) || []).map((m) => ({ role: m.role, content: m.text,
       ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}),
       ...(m.photoId ? { photoId: m.photoId } : {}),
@@ -24932,6 +24954,8 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
   };
   const [listing, setListing] = useState(null);   /* index being turned into a list */
   const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
+  /* build 229: shown once when a long talk has just been folded away */
+  const [rolled, setRolled] = useState(null);
   /* THIS ONE WAS ALREADY RIGHT, and it is worth saying why (build 218).
      makeList reads `d.bodywork` INSIDE the setData updater, so it builds on
      her file as it is when the answer lands. That is the pattern applyEdits
@@ -26069,6 +26093,28 @@ Two or three sentences unless she asks for more.`;
          So: once per conversation by default, and `memoryFold: "message"` in
          her settings if she wants it after every line. Her call, not mine. */
       if (data.settings?.memoryFold === "message") foldMemory(done);
+
+      /* THE CUTOFF (build 229). Her instruction: "there's no cutoff where you
+         fold it into history and then start a new day... then it will not be
+         187 messages." Past her own number the talk is finished: marked to be
+         folded into the running history, closed so it is not resumed, and a
+         fresh one started under the same day. Every word of it is still in her
+         file and still listed under earlier conversations — what stops is it
+         being sent again on every message for the rest of the day (rule 36).
+         Rule 15 is not touched: nothing is trimmed out of the record, her
+         goals, her measurements or anything she has just asked about. */
+      const talkMax = Math.max(6, Number(formulas(data.settings).talkMax) || 30);
+      if (done.length >= talkMax) {
+        const closing = sessionId.current;
+        const kept = done.filter((m) => m && (m.role === "user" || m.role === "assistant"));
+        sessionId.current = newId();
+        setMsgs([]);
+        setRolled({ n: kept.length });
+        setData((d) => ({ ...d,
+          chats: (d.chats || []).map((c) => (c && c.id === closing ? { ...c, closed: true } : c)),
+          unfolded: { at: Date.now(), date: coach.t, id: closing,
+            messages: kept.map((m) => ({ role: m.role, text: m.content })) } }));
+      }
     } catch (e) {
       setMsgs((m) => [...m, { role: "assistant", content: e.message === "no-key"
         ? "I need an API key to talk to you outside the Claude app. Settings, then Your data, then paste one in — it stays on this device."
@@ -26206,6 +26252,33 @@ Two or three sentences unless she asks for more.`;
     "I don't want to train today.",
     "Is this actually working?",
   ];
+
+  /* THE COACH OPENS, AND IT ASKS (build 229).
+     ---------------------------------------------------------------------
+     Her instruction, 19 August: "the coach does not ask what I do from the
+     first couple of messages. I keep trying to help you do things."
+
+     Rule 3: the coach leads and never waits. Until this build, opening a talk
+     produced a heading and four chips, and the coach said nothing at all — so
+     every conversation started with her starting it, and during calibration,
+     where its whole job is to see that nothing goes unlogged (rule 7), it
+     never asked the obvious question.
+
+     Computed from her file, so it is never a guess (rule 23): what is logged
+     today, how she recovered, and whether the battery is due. */
+  const openingLine = () => {
+    const did = doneOnDay(data, coach.t) || [];
+    const rec = Number(((data.morning || {})[coach.t] || {}).recovery);
+    const has = did.filter((r) => r && r.what);
+    const named = has.slice(0, 3).map((r) => r.what).join(", ");
+    if (!has.length) {
+      return "Nothing is logged for today yet, so I am starting from you rather than from the file. "
+        + "What have you done today, or what are you about to do?"
+        + (isFinite(rec) && rec > 0 ? ` Your recovery came in at ${Math.round(rec)}%, and I will work with whatever you tell me.` : "");
+    }
+    return `Today I have ${named}${has.length > 3 ? ` and ${has.length - 3} more` : ""} down for you. `
+      + "Is that everything, and how did it actually feel? Anything you did that is not in there, tell me and I will get it logged.";
+  };
 
   return (
     <div>
@@ -26504,6 +26577,21 @@ Two or three sentences unless she asks for more.`;
         </div>
       )}
 
+      {/* build 229: the coach is already talking, and it has asked her something */}
+      {msgs.length === 0 && (
+        <div style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 14,
+          padding: "11px 14px", marginBottom: 12, fontSize: 13.5, lineHeight: 1.55, color: C.ink }}>
+          {openingLine()}
+        </div>
+      )}
+      {rolled && (
+        <div style={{ background: C.mint, borderRadius: 12, padding: "10px 13px", marginBottom: 12,
+          fontSize: 12, lineHeight: 1.5, color: C.ink }}>
+          That talk reached {rolled.n} messages, so I have folded it into what I remember about you
+          and started a fresh one. Nothing is lost — it is under "earlier conversations" below, and
+          everything in it is still mine to draw on. This keeps what you pay for down.
+        </div>
+      )}
       {msgs.length === 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
           {openers.map((o) => (
