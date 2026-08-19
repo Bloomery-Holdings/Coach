@@ -4425,7 +4425,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 224";
+const BUILD = "19 August 2026 · 225";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -24656,42 +24656,60 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         secs: formulas(data.settings).callSecs,
       });
       const out = parseReview(raw);
-      if (!out || !Array.isArray(out.exercises) || !out.exercises.length) {
+      /* BUILD 225: it may answer with several lists, each naming its own tab.
+         The old single-list shape is still read, so nothing that worked
+         before stops working. */
+      const wanted = (out && Array.isArray(out.lists) && out.lists.length)
+        ? out.lists
+        : (out && Array.isArray(out.exercises) && out.exercises.length ? [out] : []);
+      const usable = wanted.filter((l) => l && Array.isArray(l.exercises) && l.exercises.length);
+      if (!usable.length) {
         setListMade({ error: "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
         return;
       }
-      const area = String(out.area || "the coach's list").trim();
       setData((d) => {
-        const pgs = d.bodywork || [];
-        /* THE SCATTERING (build 222). This compared the area name the model
-           invented against hers with EXACT lowercase equality — so "shoulder
-           mobility", "Shoulder mobility work" and "Shoulders, hips, back" were
-           three different tabs, and every list she asked for founded another
-           one. She ended up with eleven. Matched the way the rest of the app
-           matches her words, and a near-name now joins the tab it belongs to. */
-        const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
-        const hit = findByName(live.map((x) => ({ ...x.pg, name: x.pg.area })), area, (x) => x.area);
-        const at = hit >= 0 ? live[hit].k : -1;
-        /* An area she already has gains a list; a new area becomes a
-           programme of its own. Nothing existing is touched (rule 20). */
-        if (at >= 0) {
-          const n = (pgs[at].lists || []).length + 1;
-          const shaped = shapeLists([{ title: out.title, focus: out.focus, exercises: out.exercises }], n);
-          setListMade({ area, n, count: out.exercises.length });
-          return { ...d, bodyFocus: { pg: pgs[at].id, list: shaped[0].id },
-            bodywork: pgs.map((pg, k) => (k !== at ? pg
-            : { ...pg, lists: [...(pg.lists || []), ...shaped] })) };
-        }
-        setListMade({ area, n: 1, count: out.exercises.length });
-        const pgId = newId();
-        const shapedNew = shapeLists([{ title: out.title, focus: out.focus, exercises: out.exercises }], 1);
-        return { ...d, bodyFocus: { pg: pgId, list: shapedNew[0].id },
-          bodywork: [...pgs, {
-          id: pgId, area, line: "Written for you in conversation.",
-          mins: Math.max(1, Math.round(out.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
-          created: coach.t, fromChat: true,
-          lists: shapedNew,
-          log: {}, rounds: [], status: "active" }] };
+        /* EACH LIST GOES WHERE IT SAID (build 225). One pass per list, folding
+           the result forward, so two lists naming the same tab land in the same
+           tab rather than the second one founding a copy of it. */
+        let pgs = d.bodywork || [];
+        const landed = [];
+        let focus = null;
+        usable.forEach((one) => {
+          const area = String(one.area || "the coach's list").trim();
+          /* THE SCATTERING (build 222). This compared the area name the model
+             invented against hers with EXACT lowercase equality — so "shoulder
+             mobility", "Shoulder mobility work" and "Shoulders, hips, back"
+             were three different tabs, and every list she asked for founded
+             another one. She ended up with eleven. Matched the way the rest of
+             the app matches her words. */
+          const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
+          const hit = findAreaLike(live.map((x) => ({ ...x.pg, name: x.pg.area })), area);
+          const at = hit >= 0 ? live[hit].k : -1;
+          /* An area she already has gains a list; a new area becomes a
+             programme of its own. Nothing existing is touched (rule 20). */
+          if (at >= 0) {
+            const n = (pgs[at].lists || []).length + 1;
+            const shaped = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], n);
+            landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
+            if (!focus) focus = { pg: pgs[at].id, list: shaped[0].id };
+            pgs = pgs.map((pg, k) => (k !== at ? pg
+              : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
+            return;
+          }
+          const pgId = newId();
+          const shapedNew = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], 1);
+          landed.push({ area, n: 1, count: one.exercises.length, made: true });
+          if (!focus) focus = { pg: pgId, list: shapedNew[0].id };
+          pgs = [...pgs, {
+            id: pgId, area, line: "Written for you in conversation.",
+            mins: Math.max(1, Math.round(one.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
+            created: coach.t, fromChat: true,
+            lists: shapedNew,
+            log: {}, rounds: [], status: "active" }];
+        });
+        setListMade({ landed, area: (landed[0] || {}).area, n: (landed[0] || {}).n,
+          count: landed.reduce((a2, l) => a2 + l.count, 0) });
+        return { ...d, ...(focus ? { bodyFocus: focus } : {}), bodywork: pgs };
       });
     } catch (e) {
       const why = String((e && e.message) || e || "unknown");
@@ -26317,9 +26335,30 @@ Two or three sentences unless she asks for more.`;
         {listMade && (
           <div style={{ background: listMade.error ? C.pist : C.mint, borderRadius: 12,
             padding: "12px 14px", marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
+            {/* BUILD 225: one line per list, naming the tab and saying whether
+                it was already there. "It scattered them again" and "it put them
+                exactly where it said" looked identical until this (rule 23). */}
             {listMade.error
               ? listMade.error
-              : `Done — ${listMade.count} exercise${listMade.count === 1 ? "" : "s"} are now list ${listMade.n} under "${listMade.area}" on your Body page, each with its weight, reps and hold boxes, a timer, a note and a video. Everything about them is editable.`}
+              : (
+                <>
+                  <div style={{ marginBottom: (listMade.landed || []).length > 1 ? 6 : 0 }}>
+                    Done — {listMade.count} exercise{listMade.count === 1 ? "" : "s"}
+                    {(listMade.landed || []).length > 1 ? `, in ${listMade.landed.length} lists:` : ":"}
+                  </div>
+                  {(listMade.landed || []).map((l, li) => (
+                    <div key={li} style={{ paddingLeft: 2, lineHeight: 1.5 }}>
+                      · list {l.n} under <strong>"{l.area}"</strong>
+                      {l.made ? " — a new tab, because none of yours fitted" : " — a tab you already had"}
+                    </div>
+                  ))}
+                  <div style={{ marginTop: 6 }}>
+                    Each exercise has its weight, reps and hold boxes, a timer, a note and a video.
+                    Everything about them is editable, and you can move any list to another tab
+                    from the Body page.
+                  </div>
+                </>
+              )}
             {!listMade.error && (
               <div style={{ marginTop: 10 }}>
                 {/* HER REPORT, 13 August: this only closed the chat and left
@@ -28159,8 +28198,17 @@ RULES.
   hers could honestly hold it, because a new name makes a new tab, and she has ended up
   with tabs she never chose that way.
 
+YOU DECIDE WHICH TAB EACH LIST GOES IN, AND YOU MAY MAKE MORE THAN ONE LIST (build 225).
+Until this build one message could only ever become ONE list in ONE tab, so shoulder work,
+hip work and ankle work written in a single answer all landed in the same place. If what you
+wrote belongs in two or three different parts of her body page, RETURN TWO OR THREE LISTS,
+each with its own "area". Keep every exercise in the list it belongs to, and do not repeat
+one across lists.
+
 Return ONLY a JSON object, no prose, no code fence:
 {
+  "lists": [
+   {
   "area": "one of her existing tabs, copied exactly — or, only if none fits, one or two words",
   "title": "what this list is, four or five words",
   "focus": "the quality or tissue it is after",
@@ -28176,7 +28224,11 @@ Return ONLY a JSON object, no prose, no code fence:
           "search": "standard name of the movement", "video": "a real URL or empty",
           "targets": "the muscles, tendons or ligaments it reaches" }
   ]
+   }
+  ]
 }
+One entry in "lists" is perfectly normal — most answers are one list. Use more only when the
+work genuinely belongs in different tabs.
 Do NOT write a how-to paragraph — she asked for the variables and the video, not prose.
 "loadKind" must be right: a band is "band", a dumbbell or barbell is "weight", her own
 bodyweight is "none".`;
@@ -28236,7 +28288,9 @@ Return ONLY a JSON object, no prose, no code fence:
     { "where": "area", "op": "rename", "target": "<the tab's name now>", "name": "<the new name>", "why": "..." },
     { "where": "area", "op": "remove|restore", "target": "<the tab's name>", "why": "..." },
 
-    { "where": "list", "op": "add", "area": "<the tab it goes in>", "name": "<what the list is called>", "why": "..." },
+    { "where": "list", "op": "add", "area": "<the tab it goes in>", "name": "<what the list is called>",
+      "exercises": [ { "name": "...", "sets": 3, "reps": 12, "hold": 0, "how": "...", "targets": "..." } ],
+      "why": "..." },
     { "where": "list", "op": "rename", "target": "<the list's name now>", "name": "<the new name>", "why": "..." },
     { "where": "list", "op": "move", "target": "<the list's name>", "to": "<the tab to move it into>", "why": "..." },
     { "where": "list", "op": "remove|restore", "target": "<the list's name>", "why": "..." },
@@ -28256,7 +28310,9 @@ which applied nothing at all, twice, while she waited and paid. You can do all o
   where="area"  op="add"      makes a NEW TAB on her Body page, empty. Give it a name.
   where="area"  op="rename"   renames a tab. Everything in it is untouched.
   where="area"  op="remove"   sets a whole tab aside — kept, dated, she can put it back.
-  where="list"  op="add"      makes a new empty list inside a tab you name in "area".
+  where="list"  op="add"      makes a new list inside a tab you name in "area" — and you may put
+                              the exercises straight into it, so "make a tab called Mobility and
+                              put these eight in it" is ONE change, not two you cannot finish.
   where="list"  op="rename"   renames a list.
   where="list"  op="move"     MOVES A LIST INTO ANOTHER TAB, with its exercises, everything she
                               logged against them, and the days she ticked it off.
@@ -28346,6 +28402,46 @@ const findByName = (rows, want, nameOf) => {
   }));
   /* exactly one, or nothing — never a choice made on her behalf */
   return near.length === 1 ? near[0].i : -1;
+};
+
+/* THE SAME TAB, SAID DIFFERENTLY (build 225b).
+   ---------------------------------------------------------------------------
+   Body areas are named in a way that defeats substring matching: "Shoulders,
+   hips, back" and "shoulders hips and back" are the same tab to anyone
+   reading them and share no containing substring, because of the "and". That
+   one word founded her fifth tab.
+
+   Words she never means as part of the name. Kept deliberately short: this
+   only ever runs when findByName has already failed, so being wrong here
+   costs a merge she can undo, while being absent costs a tab she did not ask
+   for. */
+const AREA_NOISE = new Set(["and", "or", "the", "a", "an", "my", "your", "for", "of", "with",
+  "work", "working", "workout", "exercise", "exercises", "list", "lists", "routine",
+  "programme", "program", "area", "areas", "day", "stuff", "some"]);
+const areaWords = (x) => new Set(nameKey(x).split(" ")
+  .filter(Boolean)
+  /* fold a plural, so "shoulders" and "shoulder" are one word */
+  .map((t) => (t.length > 3 && /s$/.test(t) && !/ss$/.test(t) ? t.slice(0, -1) : t))
+  .filter((t) => !AREA_NOISE.has(t)));
+const areaLike = (a, b) => {
+  const A = areaWords(a), B = areaWords(b);
+  if (!A.size || !B.size) return false;
+  const small = A.size <= B.size ? A : B;
+  const big = A.size <= B.size ? B : A;
+  let hit = 0;
+  small.forEach((t) => { if (big.has(t)) hit += 1; });
+  return hit === small.size;
+};
+/* findByName first, unchanged, so nothing that matched before matches
+   differently. This is only what happens when it has already given up. */
+const findAreaLike = (rows, want) => {
+  const i = findByName(rows, want, (x) => x.area);
+  if (i >= 0) return i;
+  const live = (rows || []).map((x, k) => ({ x, k }))
+    .filter(({ x }) => x && x.status !== "removed");
+  const near = live.filter(({ x }) => areaLike(x && x.area, want));
+  /* exactly one, or nothing — never a choice made on her behalf */
+  return near.length === 1 ? near[0].k : -1;
 };
 
 /* One apply for every registry entry: set aside, patch, or add. */
@@ -28490,7 +28586,9 @@ const applyShapeEdits = (data, changes, today) => {
     .filter((p) => p && (off ? p.status === "removed" : p.status !== "removed"));
   const findArea = (want, off) => {
     const pool = areas(off);
-    const i = findByName(pool.map((p) => ({ ...p, name: p.area, status: undefined })), want, (x) => x.area);
+    /* build 225b: and "shoulders hips and back" is the tab she calls
+       "Shoulders, hips, back" */
+    const i = findAreaLike(pool.map((p) => ({ ...p, name: p.area, status: undefined })), want);
     return i >= 0 ? pool[i] : null;
   };
   const findList = (pg, want, off) => {
@@ -28556,7 +28654,23 @@ const applyShapeEdits = (data, changes, today) => {
       const made = (fresh.lists || [])[(fresh.lists || []).length - 1];
       const title = String(c.name || "").trim();
       if (title) out = bwOps.renameList(out, pg.id, made.id, title);
-      done.push({ what: `added a list${title ? ` "${title}"` : ""} to "${pg.area}"`, why: c.why || "" });
+      /* AND IT MAY ARRIVE WITH EXERCISES IN IT (build 225). Until this build
+         op="add" made an EMPTY list and the exercise operations could only
+         reach lists that already existed — so "make a tab called Mobility and
+         put these eight in it" was two things it could each half-do and not
+         one thing it could do. Built through shapeLists, the same way her own
+         lists are, so they arrive with sets, reps, hold, a timer, a note and
+         a video like everything else. */
+      const bring = Array.isArray(c.exercises) ? c.exercises : [];
+      if (bring.length) {
+        const shaped = shapeLists([{ title: title || "New list", focus: c.focus || "", exercises: bring }], made.n || 1);
+        out = { ...out, bodywork: (out.bodywork || []).map((p) => (p.id !== pg.id ? p
+          : { ...p, lists: (p.lists || []).map((l) => (l.id !== made.id ? l
+            : { ...l, focus: String(c.focus || l.focus || ""), exercises: shaped[0].exercises })) })) };
+      }
+      done.push({ what: `added a list${title ? ` "${title}"` : ""} to "${pg.area}"`
+        + (bring.length ? ` with ${bring.length} exercise${bring.length === 1 ? "" : "s"} in it` : ""),
+        why: c.why || "" });
       return;
     }
 
