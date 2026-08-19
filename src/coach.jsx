@@ -394,6 +394,7 @@ const FORMULA_DEFAULTS = {
   snapBudget: 1200000,     /* bytes all the copies together may take                  */
   storeWarnAt: 3500000,    /* bytes stored before the app warns her it is filling up  */
   photoKeepDays: 30,       /* days a photo in a talk is kept before she may clear it  */
+  photoTurns: 4,           /* messages back a photo is still SENT as a picture         */
 
   /* How she rates her own confidence, and what that permits */
   confidenceHigh: 8,       /* at or above: a good week to move a variable             */
@@ -4350,6 +4351,12 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
      case that actually happens most. */
   if (!res.ok) throw new Error("http-" + (res.status || 0));
   const data = await res.json();
+  /* WHY IT STOPPED (build 224). "max_tokens" means the answer was cut off at
+     the ceiling, not finished — and until this build nothing anywhere read it,
+     so a fragment was rendered as an answer (rule 23). Written onto the same
+     out-param the cost already uses, so every caller that cares can see it and
+     none of them has to change shape. */
+  if (usage && data) usage.stopReason = String(data.stop_reason || "");
   if (usage && data && data.usage) {
     /* input_tokens EXCLUDES anything served from or written to the cache, so
        all three are kept separately — otherwise the app would report a cached
@@ -4418,7 +4425,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 223";
+const BUILD = "19 August 2026 · 224";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -19239,7 +19246,8 @@ function Formulas({ data, setData, close }) {
              ["snapMin", "Never fewer than this, however big the file"],
              ["snapBudget", "Bytes all the copies together may take"],
              ["storeWarnAt", "Bytes stored before the app warns you"],
-             ["photoKeepDays", "Days a photo stays in a talk before you may clear it"]] },
+             ["photoKeepDays", "Days a photo stays in a talk before you may clear it"],
+             ["photoTurns", "Messages back a photo is still sent to your coach as a picture"]] },
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
@@ -24408,7 +24416,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       if (seen.has(k)) return;
       seen.add(k);
       out.push({ role: m.role, content: m.text, ...(m.at ? { at: m.at } : {}),
-        ...(m.image ? { image: m.image } : {}) });
+        ...(m.image ? { image: m.image } : {}), ...(m.cutOff ? { cutOff: true } : {}) });
     }));
     return out;
   })();
@@ -25469,7 +25477,9 @@ Two or three sentences unless she asks for more.`;
         /* audit finding 6 — see mergeChatMessages at module level, where it
            can be and is checked. */
         const mine = all.map((m) => ({ role: m.role, text: m.content,
-          ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}) }));
+          ...(m.at ? { at: m.at } : {}), ...(m.image ? { image: m.image } : {}),
+          /* build 224: a reply that ran out of room still says so tomorrow */
+          ...(m.cutOff ? { cutOff: true } : {}) }));
         return mergeChatMessages(prev.messages, mine);
       })() };
     /* HER REPORT, 17 August: "everything is there except today!!!!! and it
@@ -25616,12 +25626,32 @@ Two or three sentences unless she asks for more.`;
     try {
       /* a message with a photo goes to the model as a real image block, so
          the coach SEES it rather than being told about it */
-      const blockify = (m) => (m.image
-        ? { role: m.role, content: [
-            { type: "image", source: { type: "base64",
-              media_type: (m.image.match(/^data:([^;]+);/) || [])[1] || "image/jpeg",
-              data: String(m.image).split(",")[1] || "" } },
-            ...(m.content ? [{ type: "text", text: m.content }] : []) ] }
+      /* A PHOTO IS SENT ONCE, NOT EVERY TIME (build 224). This mapped over the
+         WHOLE of today's conversation, so a photo sent at nine went up again on
+         every message until midnight — thousands of tokens each time, in the
+         uncached half, paid for in full (rule 36). The recent ones still go as
+         real pictures, because what she is talking about now is exactly what a
+         window may never trim (rule 15). Older ones say a photo was there; the
+         coach's own description of it is still in the conversation underneath.
+         How many is hers, in the formulas. */
+      const photoTurns = Math.max(1, Number(formulas(data.settings).photoTurns) || 4);
+      /* THE LAST photoTurns MESSAGES, not the last photoTurns PHOTOS. Written
+         the second way first, which meant the single photo in a day's talk was
+         always inside the window and nothing changed at all (build 224b). */
+      const stillPictures = new Set();
+      for (let k = Math.max(0, next.length - photoTurns); k < next.length; k++) {
+        if (next[k] && next[k].image) stillPictures.add(k);
+      }
+      const blockify = (m, k) => (m.image
+        ? (stillPictures.has(k)
+          ? { role: m.role, content: [
+              { type: "image", source: { type: "base64",
+                media_type: (m.image.match(/^data:([^;]+);/) || [])[1] || "image/jpeg",
+                data: String(m.image).split(",")[1] || "" } },
+              ...(m.content ? [{ type: "text", text: m.content }] : []) ] }
+          : { role: m.role, content: "[she sent you a photo here, earlier in this conversation — "
+              + "your own reply to it is below. Ask her to send it again if you need to look at it.]"
+              + (m.content ? "\n" + m.content : "") })
         : { role: m.role, content: m.content });
       /* Build 143, her question of 14 August: "is this the amount I actually
          used by the app so far?" The app could not answer, because this call
@@ -25650,7 +25680,9 @@ Two or three sentences unless she asks for more.`;
         usage: spend,
         secs: formulas(data.settings).callSecs,
       }) || "I couldn't get a response just then. Try again in a moment.";
-      const done = [...next, { role: "assistant", content: reply }];
+      /* build 224: cut off at the ceiling is not the same as finished */
+      const cutOff = spend.stopReason === "max_tokens";
+      const done = [...next, { role: "assistant", content: reply, ...(cutOff ? { cutOff: true } : {}) }];
       setMsgs(done);
       persist(done, spend);
       /* AND THEN FOLD IT FORWARD (build 145). Her instruction was that the
@@ -25676,6 +25708,48 @@ Two or three sentences unless she asks for more.`;
         ? "I couldn't reach you at all just then — that's the connection rather than anything you said. Everything you wrote is saved. Try again when you have signal."
         : "Couldn't reach me just then — check your connection and try again." }]);
     } finally { setBusy(false); }
+  };
+
+  /* CARRYING ON FROM WHERE IT STOPPED (build 224).
+     ---------------------------------------------------------------------
+     It asks for the rest of the answer and JOINS IT ON, so what she ends up
+     with is one message rather than two bubbles that overlap. The instruction
+     that asks for it is never written into her conversation — she did not say
+     it, and rule 15 protects her words, it does not licence putting words in
+     her mouth. If the continuation runs out of room too, the mark comes back
+     and she can tap again. */
+  const [carrying, setCarrying] = useState(null);
+  const carryOn = async (i) => {
+    if (carrying !== null || busy) return;
+    setCarrying(i);
+    const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
+    try {
+      const upto = msgs.slice(0, i + 1);
+      const more = await askModel({
+        cache: false,
+        maxTokens: Math.max(500, Number(formulas(data.settings).replyLong) || 1800),
+        apiKey: data.settings?.apiKey,
+        system: { stable: payloadStable(), live: liveContext() },
+        messages: [...upto.map((m) => ({ role: m.role, content: m.content })),
+          { role: "user", content: "You ran out of room and stopped mid-sentence. "
+            + "Carry straight on from where you stopped. Do not start again, do not "
+            + "summarise what you already said, and do not apologise — just continue." }],
+        usage: spent,
+        secs: formulas(data.settings).callSecs,
+      });
+      if (!more) return;
+      const joined = msgs.map((m, k) => (k !== i ? m : {
+        ...m,
+        content: String(m.content || "").replace(/\s+$/, "")
+          + (/[\s]$/.test(String(m.content || "")) ? "" : " ") + String(more).trim(),
+        ...(spent.stopReason === "max_tokens" ? { cutOff: true } : { cutOff: undefined }) }));
+      setMsgs(joined);
+      persist(joined, spent);
+    } catch (e) {
+      setMsgs((m) => m.map((x, k) => (k !== i ? x : { ...x,
+        content: String(x.content || "") + "\n\n(I could not pick that up again just now — "
+          + "the connection, not what you asked. Tap it once more.)" })));
+    } finally { setCarrying(null); }
   };
 
   /* THE FOLD, WHEN SHE PUTS THE CONVERSATION DOWN. One call, catching
@@ -26108,6 +26182,24 @@ Two or three sentences unless she asks for more.`;
             {/* HER INSTRUCTION, 13 August: a set of exercises should be
                 loggable where the Body page logs everything else, not read
                 out of a chat bubble. One tap turns it into a real list. */}
+            {/* BUILD 224: a reply that hit the ceiling used to be shown in
+                exactly the bubble a finished one gets. It says so now, and
+                the way to get the rest is on the message itself (rule 11). */}
+            {m.cutOff && (
+              <div style={{ marginTop: 6, display: "flex", alignItems: "center",
+                gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45 }}>
+                  I ran out of room and stopped mid-sentence — there is more.
+                </span>
+                <button className="tap" disabled={carrying !== null || busy}
+                  onClick={() => carryOn(i)} style={{
+                    border: `1.5px solid ${C.signal}`, background: "transparent", cursor: "pointer",
+                    padding: "6px 11px", borderRadius: 8,
+                    fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                  {carrying === i ? "carrying on…" : "carry on"}
+                </button>
+              </div>
+            )}
             {m.role !== "user" && setData && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 <button className="tap" disabled={listing !== null || editingLists !== null}
