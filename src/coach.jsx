@@ -393,6 +393,7 @@ const FORMULA_DEFAULTS = {
   snapMin: 3,              /* never trimmed below this many, however big the file     */
   snapBudget: 1200000,     /* bytes all the copies together may take                  */
   storeWarnAt: 3500000,    /* bytes stored before the app warns her it is filling up  */
+  photoKeepDays: 30,       /* days a photo in a talk is kept before she may clear it  */
 
   /* How she rates her own confidence, and what that permits */
   confidenceHigh: 8,       /* at or above: a good week to move a variable             */
@@ -4417,7 +4418,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 221";
+const BUILD = "19 August 2026 · 223";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -7490,6 +7491,106 @@ const storeBytes = () => {
     }
     return n;
   } catch (e) { return null; }
+};
+
+/* WHAT IS ACTUALLY IN HER FILE (build 223).
+   ---------------------------------------------------------------------------
+   HER QUESTION, 19 August, holding a warning that told her "the usual cause is
+   photos sent to your coach" — a sentence the app wrote without looking. This
+   looks. Every key on the device, every store inside her file, and the photos
+   counted where they really live: base64 inside the messages in her talks.
+
+   Sizes are the length of the JSON as it is actually stored, which is the
+   number that matters, because that is what fills the browser's five megabytes
+   and nothing else. Rule 23: measured, or not said. */
+const PHOTO_MARK = "removed to free space";
+const storeSizes = (data) => {
+  const size = (v) => { try { return JSON.stringify(v === undefined ? null : v).length; } catch (e) { return 0; } };
+  const rows = [];
+  const d = data || {};
+
+  /* the photos first, because they are the only thing here she can act on */
+  let photoBytes = 0, photoCount = 0, oldestPhoto = null;
+  (d.chats || []).forEach((c) => ((c && c.messages) || []).forEach((m) => {
+    if (!m || !m.image) return;
+    photoBytes += String(m.image).length;
+    photoCount += 1;
+    if (c.date && (!oldestPhoto || String(c.date) < oldestPhoto)) oldestPhoto = String(c.date);
+  }));
+
+  /* everything she has, named the way she would name it */
+  const NAMED = [
+    ["chats", "your talks with your coach"],
+    ["logs", "every day you have logged"],
+    ["bwlog", "what you logged against your own lists"],
+    ["bodywork", "your Body page — the tabs and the lists"],
+    ["weekly", "your weekly battery"],
+    ["monthly", "your monthly benchmarks"],
+    ["mobility", "your mobility tests"],
+    ["morning", "your mornings, including WHOOP"],
+    ["reads", "every monthly read, kept forever"],
+    ["journal", "what you have written"],
+    ["issues", "your record"],
+    ["notes", "your daily notes"],
+    ["goals", "what you want to be able to do"],
+    ["library", "your class library"],
+    ["profile", "what your coach has come to believe"],
+    ["plan", "your programme"],
+    ["settings", "your settings"],
+  ];
+  NAMED.forEach(([k, label]) => {
+    if (d[k] === undefined) return;
+    let n = size(d[k]);
+    /* a talk's size WITHOUT its photos, so the two lines do not double-count */
+    if (k === "chats") n = Math.max(0, n - photoBytes);
+    if (n > 0) rows.push({ key: k, label, bytes: n });
+  });
+  const known = new Set(NAMED.map(([k]) => k));
+  const rest = Object.keys(d).filter((k) => !known.has(k))
+    .reduce((a, k) => a + size(d[k]), 0);
+  if (rest > 0) rows.push({ key: "rest", label: "everything else in your file", bytes: rest });
+  if (photoBytes > 0) {
+    rows.push({ key: "photos", label: `photos you sent your coach${photoCount ? ` (${photoCount})` : ""}`,
+      bytes: photoBytes, photos: true, count: photoCount, oldest: oldestPhoto });
+  }
+
+  /* and what is on the device that is NOT her file */
+  let snaps = 0, place = 0, other = 0, total = null;
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      const n = (k || "").length + (window.localStorage.getItem(k) || "").length;
+      total = (total || 0) + n;
+      if (k === SNAP_KEY) snaps += n;
+      else if (k === PLACE_KEY) place += n;
+      else if (k !== KEY) other += n;
+    }
+  } catch (e) { total = null; }
+  if (snaps > 0) rows.push({ key: "snapshots", label: "the daily safety copies of your file", bytes: snaps });
+  if (place > 0) rows.push({ key: "place", label: "where you were when you last closed it", bytes: place });
+  if (other > 0) rows.push({ key: "other", label: "anything else this browser is keeping", bytes: other });
+
+  rows.sort((a, b) => b.bytes - a.bytes);
+  return { rows, total, photoBytes, photoCount, oldestPhoto };
+};
+
+/* Clearing them is a real deletion, so it happens ONLY when she taps it, and
+   it keeps the fact: her words, the coach's reply and a dated line saying a
+   photo was here are all untouched. Rule 20 — what is destroyed is the picture
+   bytes she asked to be rid of, and nothing else. */
+const clearPhotosBefore = (data, before) => {
+  let freed = 0, n = 0;
+  const chats = (data.chats || []).map((c) => {
+    if (!c || !c.date || String(c.date) >= String(before)) return c;
+    if (!(c.messages || []).some((m) => m && m.image)) return c;
+    return { ...c, messages: (c.messages || []).map((m) => {
+      if (!m || !m.image) return m;
+      freed += String(m.image).length; n += 1;
+      const { image, ...rest } = m;
+      return { ...rest, photoWas: `${PHOTO_MARK} on ${c.date}` };
+    }) };
+  });
+  return { data: { ...data, chats }, freed, count: n };
 };
 
 const saveData = async (d) => {
@@ -17542,6 +17643,9 @@ const mergeInto = (prev, incoming) => {
 };
 
 function Settings({ data, setData, coach, setSheet }) {
+  /* build 223: what is using the space, and the one thing she can clear */
+  const [askClear, setAskClear] = useState(false);
+  const [cleared, setCleared] = useState(null);
   const s = data.settings;
   const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
 
@@ -18104,6 +18208,96 @@ function Settings({ data, setData, coach, setSheet }) {
               : "Daily snapshots start once you log something."}
           </div>
         </div>
+
+        {/* ---- WHAT IS USING THE SPACE (build 223) -----------------------
+             HER QUESTION, 19 August: "what shall I do about the memory
+             filling up." The warning told her "the usual cause is photos"
+             without having looked, and sent her here, where there was nothing
+             about space at all. Measured now, biggest first (rule 23), and
+             the only line she can act on has the action on it (rule 11). */}
+        {(() => {
+          const sz = storeSizes(data);
+          if (!sz.rows.length) return null;
+          const mb = (n) => (n >= 100000 ? `${Math.round(n / 100000) / 10} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+          const keep = Math.max(0, Number(formulas(data.settings).photoKeepDays) || 30);
+          const before = addDays(coach.t, -keep);
+          const older = (data.chats || []).reduce((a, c) => a + (
+            c && c.date && String(c.date) < before
+              ? (c.messages || []).reduce((b, m) => b + (m && m.image ? String(m.image).length : 0), 0)
+              : 0), 0);
+          const olderN = (data.chats || []).reduce((a, c) => a + (
+            c && c.date && String(c.date) < before
+              ? (c.messages || []).filter((m) => m && m.image).length : 0), 0);
+          const doClear = () => {
+            const r = clearPhotosBefore(data, before);
+            setData((d) => ({ ...d, chats: clearPhotosBefore(d, before).data.chats }));
+            setCleared({ freed: r.freed, count: r.count });
+            setAskClear(false);
+          };
+          return (
+            <div style={{ background: C.chalk, borderRadius: 12, padding: "11px 13px", marginBottom: 12 }}>
+              <Eyebrow color={C.moss}>What is using the space</Eyebrow>
+              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, margin: "6px 0 9px" }}>
+                {sz.total === null
+                  ? "Measured from your file as it is now."
+                  : `${mb(sz.total)} on this device altogether, measured just now — not an estimate.`}
+              </div>
+              {sz.rows.map((r) => (
+                <div key={r.key} style={{ display: "flex", justifyContent: "space-between",
+                  gap: 10, fontSize: 12.5, lineHeight: 1.6, padding: "2px 0",
+                  borderTop: `1px solid ${C.line}` }}>
+                  <span style={{ color: C.ink }}>{r.label}</span>
+                  <span className="mono" style={{ color: C.muted, whiteSpace: "nowrap" }}>{mb(r.bytes)}</span>
+                </div>
+              ))}
+              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 }}>
+                Your training record is the reason the app can tell you anything, so none of it
+                is worth removing. The daily copies look after themselves — they are capped, and
+                the oldest drops off as new ones arrive.
+                {sz.photoBytes > 0 && " The copies hold the photos too, so clearing photos "
+                  + "makes tomorrow's copies smaller as well as today's file."}
+              </div>
+              {cleared ? (
+                <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginTop: 8 }}>
+                  Cleared {cleared.count} photo{cleared.count === 1 ? "" : "s"} and freed{" "}
+                  {mb(cleared.freed)}. What you wrote and what your coach said are untouched,
+                  and each of those messages still says a photo was there.
+                </div>
+              ) : older > 0 ? (
+                askClear ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55, marginBottom: 8 }}>
+                      This removes {olderN} photo{olderN === 1 ? "" : "s"} from talks before{" "}
+                      {dayAndMonth(before)} and frees about {mb(older)}. The pictures themselves
+                      cannot come back. Everything you and your coach wrote stays, and each
+                      message will still say a photo was there.
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <span style={{ flex: "1 1 60%" }}>
+                        <Btn kind="signal" onClick={doClear}>Yes, clear them</Btn>
+                      </span>
+                      <button onClick={() => setAskClear(false)} className="tap" style={{
+                        border: "none", background: "transparent", cursor: "pointer", padding: "6px 4px",
+                        fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>keep them</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10 }}>
+                    <Btn kind="ghost" onClick={() => setAskClear(true)}>
+                      Clear photos older than {keep} days — frees {mb(older)}
+                    </Btn>
+                  </div>
+                )
+              ) : (
+                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 8 }}>
+                  {sz.photoCount
+                    ? `All ${sz.photoCount} of your photos are inside the last ${keep} days, so there is nothing here to clear yet. The window is yours, in the formulas.`
+                    : "You have not sent your coach any photos, so they are not what is using the space."}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ---- GOOGLE DRIVE ----------------------------------------------
              HER INSTRUCTION, 11–12 August: "I want to connect the Drive to the
@@ -19044,7 +19238,8 @@ function Formulas({ data, setData, close }) {
       rows: [["snapKeep", "Daily copies kept on this device"],
              ["snapMin", "Never fewer than this, however big the file"],
              ["snapBudget", "Bytes all the copies together may take"],
-             ["storeWarnAt", "Bytes stored before the app warns you"]] },
+             ["storeWarnAt", "Bytes stored before the app warns you"],
+             ["photoKeepDays", "Days a photo stays in a talk before you may clear it"]] },
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
@@ -24366,11 +24561,16 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         drills: now218.drills || [], goals: now218.goals || [], mobTests: now218.mobTests || [],
         fields: now218.fields || {}, library: now218.library || [], issues: now218.issues || [] }));
       const legacy = (out.changes || []).filter((c) => !c.where);
-      const registry = (out.changes || []).filter((c) => c.where);
+      /* build 222: areas and lists are their own shape, applied by bwOps */
+      const shape = (out.changes || []).filter((c) => c && (c.where === "area" || c.where === "list"));
+      const registry = (out.changes || []).filter((c) => c.where && c.where !== "area" && c.where !== "list");
       const { bodywork, drills, goals, mobTests, done } = applyListEdits(now218, legacy, coach.t);
       /* HER INSTRUCTION, 13 August: everything, not just the lists. */
-      const after = applyRegistryEdits({ ...now218, bodywork, drills, goals, mobTests },
-        registry, coach.t);
+      /* the shape changes go first, so a list the coach adds is there for an
+         exercise it then puts into it (build 222) */
+      const shaped = applyShapeEdits({ ...now218, bodywork, drills, goals, mobTests }, shape, coach.t);
+      done.push(...shaped.done);
+      const after = applyRegistryEdits(shaped.data, registry, coach.t);
       done.push(...after.done);
       if (!done.length) {
         /* HER REPORT, 16 August, and proved against the engine the same day:
@@ -24383,10 +24583,15 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
            it — no rename, no add, no move, no set-aside for a list or an area.
            Rule 32: never name a route that does not exist. It exists now, and
            this says where it is rather than just where it is not. */
-        setEditsMade({ error: "Nothing changed. I can take off, swap or add an individual exercise, drill, measure, mobility test or class — but not a whole list or a whole body area. Those two are yours, on the Body page: open the area, open the list, and there is rename, move up, move down, move to another area and take this list off. Nothing here has been touched." });
+        /* BUILD 222: this said whole lists and whole areas were beyond it. They
+           are not, as of this build, so saying so would be a plain untruth
+           (rule 23). What is left when nothing applied is a NAME that did not
+           reach anything — usually because it fits two things at once, where
+           findByName changes nothing rather than guess. */
+        setEditsMade({ error: "Nothing changed — I could not tell which one you meant. I can add, rename, move and take off whole tabs and whole lists now, as well as single exercises, drills, measures, mobility tests and classes. What I cannot do is choose between two things with similar names, so I change neither. Tell me the name exactly as it reads on your Body page and I will do it. Nothing here has been touched — and you can always do it yourself: open the area, open the list, and there is rename, move up, move down, move to another area and take this list off." });
         return;
       }
-      setData((d) => ({ ...d, bodywork,
+      setData((d) => ({ ...d, bodywork: shaped.data.bodywork || bodywork,
         drills: after.data.drills, goals: after.data.goals, mobTests: after.data.mobTests,
         fields: after.data.fields, library: after.data.library,
         /* build 212 — see the note on the snapshot above */
@@ -24430,7 +24635,13 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       const raw = await askModel({
         apiKey: data.settings?.apiKey,
         system: LIST_FROM_CHAT_SYSTEM,
-        messages: [{ role: "user", content: String(msgs[i]?.content || "") }],
+        /* build 222: it could not pick one of her tabs without being shown them */
+        messages: [{ role: "user", content:
+          'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
+          + 'exactly, unless none of them could honestly hold this list:\n'
+          + (((data.bodywork || []).filter((pg) => pg && pg.status !== "removed")
+              .map((pg) => '  "' + (pg.area || "") + '"').join('\n')) || '  (she has none yet)')
+          + '\n\nWHAT I WROTE FOR HER:\n' + String(msgs[i]?.content || "") }],
         maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
         usage: listSpend,
         search: data.settings?.webSearch === true,
@@ -24444,8 +24655,15 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       const area = String(out.area || "the coach's list").trim();
       setData((d) => {
         const pgs = d.bodywork || [];
-        const at = pgs.findIndex((pg) => pg && pg.status !== "removed"
-          && String(pg.area || "").toLowerCase() === area.toLowerCase());
+        /* THE SCATTERING (build 222). This compared the area name the model
+           invented against hers with EXACT lowercase equality — so "shoulder
+           mobility", "Shoulder mobility work" and "Shoulders, hips, back" were
+           three different tabs, and every list she asked for founded another
+           one. She ended up with eleven. Matched the way the rest of the app
+           matches her words, and a near-name now joins the tab it belongs to. */
+        const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
+        const hit = findByName(live.map((x) => ({ ...x.pg, name: x.pg.area })), area, (x) => x.area);
+        const at = hit >= 0 ? live[hit].k : -1;
         /* An area she already has gains a list; a new area becomes a
            programme of its own. Nothing existing is touched (rule 20). */
         if (at >= 0) {
@@ -26870,6 +27088,10 @@ function StoreWarning({ data }) {
   const nearly = !failed && bytes !== null && bytes > warnAt;
   if (!failed && !nearly) return null;
   const mb = bytes === null ? null : Math.round(bytes / 100000) / 10;
+  /* BUILD 223: this used to assert "the usual cause is photos sent to your
+     coach" without ever looking at her file. Now it looks (rule 23). */
+  const big = (storeSizes(data).rows || [])[0] || null;
+  const bigMb = big ? Math.round(big.bytes / 100000) / 10 : 0;
   return (
     <div style={{ background: failed ? C.pist : C.mint, border: `1px solid ${failed ? C.signal : C.moss}`,
       borderRadius: 12, padding: "12px 14px", marginBottom: 12, fontSize: 12.5,
@@ -26883,8 +27105,22 @@ function StoreWarning({ data }) {
       ) : (
         <>
           <strong>Storage on this device is filling up{mb ? ` — about ${mb} MB used` : ""}.</strong>{" "}
-          Nothing is lost and nothing has failed yet. The usual cause is photos sent to your coach.
-          Worth taking a backup: Settings, then Your data.
+          Nothing is lost and nothing has failed yet.{" "}
+          {big
+            ? <>The biggest single thing in it is <strong>{big.label}</strong>, at about {bigMb} MB.{" "}
+                {/* build 223c: this said "that is your training record, so it
+                    stays" whatever won, which is untrue of the safety copies
+                    and of anything else in the file (rule 23) */}
+                {big.photos
+                  ? "Photos are the one thing here you can clear without losing anything you wrote."
+                  : big.key === "snapshots"
+                    ? "Those are the daily copies of your own file, they are already capped, and they shrink on their own."
+                    : big.key === "rest" || big.key === "other" || big.key === "place"
+                      ? "Nothing there is worth removing by hand."
+                      : "That is your training record, so it stays."}{" "}
+                Settings, then Your data, shows you the whole breakdown and what can be freed.</>
+            : <>Settings, then Your data, shows you what is using it.</>}{" "}
+          Worth taking a backup while you are there.
         </>
       )}
     </div>
@@ -27825,10 +28061,15 @@ RULES.
 - If you know a real demonstration video URL, put it in "video". If not, leave "video" empty
   and put the standard name of the movement in "search".
 - If the message contains no exercises at all, return {"exercises": []}.
+- "area" IS WHICH TAB ON HER BODY PAGE THIS JOINS. Her tabs are listed for you in the
+  message. Copy one of them EXACTLY, character for character, if the work belongs there
+  at all — an existing tab is almost always right. Invent a new name ONLY when none of
+  hers could honestly hold it, because a new name makes a new tab, and she has ended up
+  with tabs she never chose that way.
 
 Return ONLY a JSON object, no prose, no code fence:
 {
-  "area": "which part of her this list is for, one or two words",
+  "area": "one of her existing tabs, copied exactly — or, only if none fits, one or two words",
   "title": "what this list is, four or five words",
   "focus": "the quality or tissue it is after",
   "exercises": [
@@ -27899,6 +28140,15 @@ Return ONLY a JSON object, no prose, no code fence:
                 "mins": 2, "search": "...",
                 "video": "", "how": "...", "targets": "..." } },
 
+    { "where": "area", "op": "add", "name": "Mobility and flexibility", "why": "..." },
+    { "where": "area", "op": "rename", "target": "<the tab's name now>", "name": "<the new name>", "why": "..." },
+    { "where": "area", "op": "remove|restore", "target": "<the tab's name>", "why": "..." },
+
+    { "where": "list", "op": "add", "area": "<the tab it goes in>", "name": "<what the list is called>", "why": "..." },
+    { "where": "list", "op": "rename", "target": "<the list's name now>", "name": "<the new name>", "why": "..." },
+    { "where": "list", "op": "move", "target": "<the list's name>", "to": "<the tab to move it into>", "why": "..." },
+    { "where": "list", "op": "remove|restore", "target": "<the list's name>", "why": "..." },
+
     { "where": "drill|weekly|monthly|mobility|class|goal", "op": "remove",
       "target": "<id or its exact name>", "why": "..." },
     { "where": "...", "op": "set", "target": "<id or name>",
@@ -27906,6 +28156,26 @@ Return ONLY a JSON object, no prose, no code fence:
     { "where": "...", "op": "add", "fields": { "the whole new thing" }, "why": "..." }
   ]
 }
+
+WHOLE TABS AND WHOLE LISTS ARE YOURS NOW (build 222). Until this build you could only reach
+individual exercises, and you told her you would "create a new tab and move four lists into it" —
+which applied nothing at all, twice, while she waited and paid. You can do all of it:
+
+  where="area"  op="add"      makes a NEW TAB on her Body page, empty. Give it a name.
+  where="area"  op="rename"   renames a tab. Everything in it is untouched.
+  where="area"  op="remove"   sets a whole tab aside — kept, dated, she can put it back.
+  where="list"  op="add"      makes a new empty list inside a tab you name in "area".
+  where="list"  op="rename"   renames a list.
+  where="list"  op="move"     MOVES A LIST INTO ANOTHER TAB, with its exercises, everything she
+                              logged against them, and the days she ticked it off.
+  where="list"  op="remove"   sets a list aside — kept whole, one tap back.
+
+Name a tab or a list by the words she sees, not an id. If a name fits two of them, NOTHING
+happens rather than the wrong one being changed — so be specific.
+
+TIDYING HER TABS IS A REAL JOB AND YOU CAN NOW DO IT. She has ended up with tabs she did not
+choose, because until this build every list you wrote founded a new one. If she asks you to
+gather scattered lists, do it in one set of changes: add the tab, then move each list into it.
 
 THE SECOND SHAPE reaches everything else she owns, listed for you with where= and id=:
   where="drill"     her ten minutes
@@ -28108,6 +28378,118 @@ const bodyInventory = (data) => (data.bodywork || [])
         .map((x) => `    id=${x.id} "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"`)
         .join("\n")).join("\n");
   }).join("\n\n");
+
+/* WHOLE AREAS AND WHOLE LISTS, WHICH THE COACH COULD NEVER TOUCH (build 222).
+   ---------------------------------------------------------------------------
+   HER SCREENSHOT, 19 August: the coach offered to create a tab and move four
+   lists into it, and had no way to do either. Everything here is bwOps — the
+   same operations her own buttons on the Body page call, so the two can never
+   drift and every one of them freezes the ticks before it moves anything.
+
+   An area or a list is named the way she names it, through findByName, so
+   "the full body" reaches "Full body". Ambiguity changes nothing rather than
+   guessing (rules 20, 23). */
+const applyShapeEdits = (data, changes, today) => {
+  const done = [];
+  let out = data;
+  /* "off" means the set-aside ones — restoring looks in the only pool that can
+     hold what it is looking for, which is the pool the other operations skip */
+  const areas = (off) => (out.bodywork || [])
+    .filter((p) => p && (off ? p.status === "removed" : p.status !== "removed"));
+  const findArea = (want, off) => {
+    const pool = areas(off);
+    const i = findByName(pool.map((p) => ({ ...p, name: p.area, status: undefined })), want, (x) => x.area);
+    return i >= 0 ? pool[i] : null;
+  };
+  const findList = (pg, want, off) => {
+    const pool = (pg.lists || [])
+      .filter((l) => l && (off ? l.status === "removed" : l.status !== "removed"));
+    const i = findByName(pool.map((l) => ({ ...l, name: l.title, status: undefined })), want, (x) => x.title);
+    return i >= 0 ? pool[i] : null;
+  };
+
+  (changes || []).forEach((c) => {
+    if (!c || c.where !== "area" && c.where !== "list") return;
+
+    if (c.where === "area") {
+      if (c.op === "add") {
+        const name = String(c.name || "").trim();
+        if (!name) return;
+        if (findArea(name)) { done.push({ what: `"${name}" is already one of your tabs — nothing added`, why: c.why || "" }); return; }
+        out = bwOps.addArea(out, today);
+        const made = (out.bodywork || [])[(out.bodywork || []).length - 1];
+        out = bwOps.renameArea(out, made.id, name);
+        /* an area she asked for arrives EMPTY — the placeholder list bwOps
+           gives a hand-made one would be a list she never asked for */
+        out = { ...out, bodywork: (out.bodywork || []).map((p) =>
+          (p.id === made.id ? { ...p, lists: [] } : p)) };
+        done.push({ what: `made a new tab, "${name}"`, why: c.why || "" });
+        return;
+      }
+      const pg = findArea(c.target, c.op === "restore");
+      if (!pg) return;
+      if (c.op === "rename" && String(c.name || "").trim()) {
+        const to = String(c.name).trim();
+        out = bwOps.renameArea(out, pg.id, to);
+        done.push({ what: `renamed the tab "${pg.area}" to "${to}"`, why: c.why || "" });
+      } else if (c.op === "remove") {
+        out = { ...out, bodywork: (out.bodywork || []).map((p) =>
+          (p.id === pg.id ? { ...p, status: "removed", removedOn: today } : p)) };
+        done.push({ what: `took the tab "${pg.area}" off — set aside whole, and you can put it back`, why: c.why || "" });
+      } else if (c.op === "restore") {
+        out = bwOps.putAreaBack(out, pg.id);
+        done.push({ what: `put the tab "${pg.area}" back`, why: c.why || "" });
+      }
+      return;
+    }
+
+    /* ---- a list ---------------------------------------------------------- */
+    const inArea = c.area ? findArea(c.area) : null;
+    /* SEARCH EVERY TAB AND COLLECT ALL OF THEM. Asking each tab in turn and
+       taking the first that answers is not a search, it is a race — she has
+       four tabs with one mobility list in each, and "the mobility list" was
+       unambiguous in all four. Two hits change nothing (rules 20, 23). */
+    const hunt = (want, off) => {
+      const pool = inArea ? [inArea] : areas();
+      const hits = [];
+      pool.forEach((pg) => { const l = findList(pg, want, off); if (l) hits.push({ pg, l }); });
+      return hits.length === 1 ? hits[0] : null;
+    };
+
+    if (c.op === "add") {
+      const pg = inArea || findArea(c.target);
+      if (!pg) return;
+      out = bwOps.addList(out, pg.id, today);
+      const fresh = (out.bodywork || []).find((p) => p.id === pg.id);
+      const made = (fresh.lists || [])[(fresh.lists || []).length - 1];
+      const title = String(c.name || "").trim();
+      if (title) out = bwOps.renameList(out, pg.id, made.id, title);
+      done.push({ what: `added a list${title ? ` "${title}"` : ""} to "${pg.area}"`, why: c.why || "" });
+      return;
+    }
+
+    const hit = hunt(c.target, c.op === "restore");
+    if (!hit) return;
+    if (c.op === "rename" && String(c.name || "").trim()) {
+      const to = String(c.name).trim();
+      out = bwOps.renameList(out, hit.pg.id, hit.l.id, to);
+      done.push({ what: `renamed the list "${hit.l.title}" to "${to}"`, why: c.why || "" });
+    } else if (c.op === "move") {
+      const to = findArea(c.to);
+      if (!to || to.id === hit.pg.id) return;
+      out = bwOps.moveListToArea(out, hit.pg.id, hit.l.id, to.id, today);
+      done.push({ what: `moved "${hit.l.title}" from "${hit.pg.area}" to "${to.area}" — with everything logged against it`, why: c.why || "" });
+    } else if (c.op === "remove") {
+      out = bwOps.setListAside(out, hit.pg.id, hit.l.id, today);
+      done.push({ what: `took the list "${hit.l.title}" off — set aside, and you can put it back`, why: c.why || "" });
+    } else if (c.op === "restore") {
+      out = bwOps.putListBack(out, hit.pg.id, hit.l.id);
+      done.push({ what: `put the list "${hit.l.title}" back`, why: c.why || "" });
+    }
+  });
+
+  return { data: out, done };
+};
 
 /* Applying them. Nothing is destroyed: a removed or replaced exercise keeps
    its place in the store, marked and dated, so it can come back and so what
