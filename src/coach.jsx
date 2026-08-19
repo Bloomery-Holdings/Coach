@@ -4425,7 +4425,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 227";
+const BUILD = "19 August 2026 · 228";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6304,6 +6304,33 @@ exercises, WRITE THE EXERCISES — one per line, each with its dose — and tell
 button. Never tell her you cannot make her a list, and never tell her to type it in herself.
 The two buttons do different jobs: "change my lists" edits things that already exist, one at a
 time; "put these on my Body page" creates a new list out of what you just wrote.
+
+WHOLE TABS AND WHOLE LISTS ARE YOURS TOO (builds 222–225). This is new, and you have been
+telling her otherwise. You are not limited to single exercises, and you CAN control which tab
+anything lands in. Through "change my lists" you can:
+
+  · MAKE A NEW TAB on her Body page, with the name you choose
+  · RENAME a tab, or a list
+  · MOVE A WHOLE LIST FROM ONE TAB INTO ANOTHER, with its exercises, everything she logged
+    against them, and the days she ticked it off
+  · ADD a list to a named tab — and put the exercises straight into it, so "make a tab called
+    Mobility and put these eight in it" is ONE thing you do, not two you half-do
+  · take a tab or a list off — set aside, dated, one tap back
+
+And through "put these on my Body page" you choose the tab for EACH list you wrote. One message
+can become two or three lists in two or three different tabs; say which part of her body each
+list is for and it goes there. A name close to one she already has joins that tab rather than
+founding a new one, so "shoulders hips and back" lands in "Shoulders, hips, back".
+
+SO IF SHE ASKS YOU TO GATHER SCATTERED LISTS UNDER ONE HEADING, THAT IS A REAL JOB AND YOU CAN
+DO IT. Say what you will do — the tab you will make and each list you will move into it — and
+tell her to tap "change my lists". Do not call it a limitation. Do not tell her to do it herself
+from the Body page unless she asks to. She has eleven tabs she did not choose because for months
+every list you wrote founded a new one; tidying that up is yours to offer.
+
+The one thing that stops you: a name that fits two of her lists or two of her tabs changes
+NEITHER, on purpose, rather than the wrong one being moved. So name them exactly as they read on
+her Body page.
 
 REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes back with its
 numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REPLACING: rebuild
@@ -25991,6 +26018,9 @@ Two or three sentences unless she asks for more.`;
          never asked. It does now, and what it costs is written on the
          conversation and totalled in Settings. */
       const cachePlan = cachePolicy(data, formulas(data.settings));
+      /* held, because knowing what the ceiling WAS is how the app can tell
+         afterwards whether the ceiling is what stopped it (build 228) */
+      const ceiling = replyBudget(text, coach, formulas(data.settings));
       const spend = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
       const reply = await askModel({
         /* the only call worth caching: the same system prompt goes out again
@@ -26001,7 +26031,7 @@ Two or three sentences unless she asks for more.`;
         cache: cachePlan.mode !== "off",
         cacheTtl: cachePlan.mode === "1h" ? "1h" : "5m",
         /* her decision, 14 August: the answer's room depends on what she asked */
-        maxTokens: replyBudget(text, coach, formulas(data.settings)),
+        maxTokens: ceiling,
         apiKey: data.settings?.apiKey,
         /* BUILD 159, HER INSTRUCTION OF 15 AUGUST. The summary page IS the
            payload. `context()` — every day, every entry, every conversation —
@@ -26013,8 +26043,15 @@ Two or three sentences unless she asks for more.`;
         usage: spend,
         secs: formulas(data.settings).callSecs,
       }) || "I couldn't get a response just then. Try again in a moment.";
-      /* build 224: cut off at the ceiling is not the same as finished */
-      const cutOff = spend.stopReason === "max_tokens";
+      /* BUILD 224: cut off at the ceiling is not the same as finished.
+         BUILD 228: and there are TWO ways to know it. stop_reason is what the
+         API reports and stays the first test. The second is arithmetic: a
+         reply that came back with as many output tokens as the ceiling allowed
+         was stopped BY the ceiling. Neither is a guess (rule 23), and either
+         one marks it — because a reply that ends mid-sentence with nothing
+         saying so is the fault she reported, whichever signal was missing. */
+      const cutOff = spend.stopReason === "max_tokens"
+        || (Number(ceiling) > 0 && Number(spend.out) >= Number(ceiling));
       const done = [...next, { role: "assistant", content: reply, ...(cutOff ? { cutOff: true } : {}) }];
       setMsgs(done);
       persist(done, spend);
