@@ -460,7 +460,8 @@ const FORMULA_DEFAULTS = {
        much room that costs. snapMin is the floor the budget may not trim past. */
     snapKeep: 10, /* daily copies kept on the device                         */
     snapMin: 3, /* never trimmed below this many, however big the file     */
-    snapBudget: 1200000, /* bytes all the copies together may take                  */
+    snapBudget: 1200000, /* bytes all the copies together may take, on this device  */
+    snapVaultBudget: 60000000, /* bytes they may take in the roomier store (build 231)   */
     storeWarnAt: 3500000, /* bytes stored before the app warns her it is filling up  */
     photoKeepDays: 30, /* days a photo in a talk is kept before she may clear it  */
     photoTurns: 4, /* messages back a photo is still SENT as a picture         */
@@ -4609,7 +4610,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 August 2026 · 230";
+const BUILD = "20 August 2026 · 231";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7271,7 +7272,108 @@ const SNAP_KEEP = 10;
    snapshot. So the safety net gets a budget, and drops its oldest copies
    rather than ever crowding out the thing it exists to protect. */
 const SNAP_BUDGET = 1200000;
-const snapRead = () => {
+/* In the vault the budget is not fighting anything: ten copies of a megabyte
+   is twelve megabytes, against the five hundred that store reported. */
+const SNAP_VAULT_BUDGET = 60000000;
+/* THE COPIES DO NOT BELONG IN THE FIVE MEGABYTES THEY EXIST TO PROTECT
+   (build 231).
+   ---------------------------------------------------------------------------
+   HER SCREEN, 20 August: 4.9 MB used, of which the safety copies were 3.8 MB —
+   seventy-eight per cent of everything, three whole copies of a file that is
+   barely one, and her ninety-three per cent of the way to a wall measured at
+   5,242,880 characters. The thing that would have failed next is the save of a
+   day she actually trained.
+
+   Why three copies and not the one the budget allows: the trim loop stops at
+   snapMin, and snapMin is 3. The floor was added at build 200 because the net
+   used to collapse silently to a single copy exactly when her history was
+   biggest. That reasoning was right. The remedy was wrong — it answered a
+   SILENT collapse by refusing to collapse at all, in a space that cannot
+   afford it.
+
+   So the copies move to IndexedDB, which reports half a gigabyte against
+   localStorage's five megabytes. Same shelf her photos moved to at build 226,
+   same discipline: COPY FIRST, REMOVE SECOND, fall back rather than lose.
+
+   A SEPARATE DATABASE, ON PURPOSE. Putting a store into `coach-images` means
+   bumping its version, and a version bump blocks on any other tab holding the
+   old one open. That would take her exercise photos down with it. Nothing here
+   is allowed to put the photos at risk. */
+const VAULT_DB = "coach-vault", VAULT_STORE = "keep", VAULT_SNAPS = "snapshots";
+/* The same self-repair as imgOpen, and for the same reason (build 227b): a
+   database left at version 1 WITHOUT its store opens perfectly and then throws
+   on every read and write, forever, in silence. */
+const vaultOpen = () => new Promise((res, rej) => {
+    try {
+        if (typeof indexedDB === "undefined") {
+            rej(new Error("no-idb"));
+            return;
+        }
+        const r = indexedDB.open(VAULT_DB, 1);
+        r.onupgradeneeded = () => {
+            const db = r.result;
+            if (!db.objectStoreNames.contains(VAULT_STORE))
+                db.createObjectStore(VAULT_STORE);
+        };
+        r.onsuccess = () => {
+            const db = r.result;
+            if (db.objectStoreNames.contains(VAULT_STORE)) {
+                res(db);
+                return;
+            }
+            const v = (Number(db.version) || 1) + 1;
+            try {
+                db.close();
+            }
+            catch (e) { }
+            const again = indexedDB.open(VAULT_DB, v);
+            again.onupgradeneeded = () => {
+                const d2 = again.result;
+                if (!d2.objectStoreNames.contains(VAULT_STORE))
+                    d2.createObjectStore(VAULT_STORE);
+            };
+            again.onsuccess = () => res(again.result);
+            again.onerror = () => rej(again.error || new Error("vault"));
+            again.onblocked = () => rej(new Error("vault-blocked"));
+        };
+        r.onerror = () => rej(r.error || new Error("vault"));
+    }
+    catch (e) {
+        rej(e);
+    }
+});
+const vaultPut = (key, val) => vaultOpen().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction(VAULT_STORE, "readwrite");
+    tx.objectStore(VAULT_STORE).put(val, key);
+    tx.oncomplete = () => { try {
+        db.close();
+    }
+    catch (e) { } res(true); };
+    tx.onerror = () => { try {
+        db.close();
+    }
+    catch (e) { } rej(tx.error); };
+    tx.onabort = () => { try {
+        db.close();
+    }
+    catch (e) { } rej(tx.error || new Error("vault-abort")); };
+}));
+const vaultGet = (key) => vaultOpen().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction(VAULT_STORE, "readonly");
+    const q = tx.objectStore(VAULT_STORE).get(key);
+    q.onsuccess = () => { try {
+        db.close();
+    }
+    catch (e) { } res(q.result); };
+    q.onerror = () => { try {
+        db.close();
+    }
+    catch (e) { } rej(q.error); };
+}));
+/* WHAT IS IN THE FIVE MEGABYTES, WHICH IS WHERE THEY USED TO BE. Kept because
+   the move reads from here, and because it is still the fallback if this
+   browser will not keep a vault. */
+const snapReadLocal = () => {
     try {
         return JSON.parse(window.localStorage.getItem(SNAP_KEY) || "[]") || [];
     }
@@ -7279,19 +7381,90 @@ const snapRead = () => {
         return [];
     }
 };
+/* WHAT THE LAST ONE MANAGED, AND WHERE IT PUT IT.
+   Build 200 wrote this meta "so the backup screen says so" and then nothing
+   ever read it — a write-only field, which rule 18 calls a bug. Build 231
+   reads it, because a net that has quietly moved is as bad as one that has
+   quietly shrunk. */
+const snapMetaRead = () => {
+    try {
+        return JSON.parse(window.localStorage.getItem(SNAP_META) || "null");
+    }
+    catch (e) {
+        return null;
+    }
+};
+/* The copies, from wherever they actually are. Async because the roomier
+   store is async; every caller of this either sets state or ignores it. */
+const snapRead = async () => {
+    try {
+        const v = await vaultGet(VAULT_SNAPS);
+        if (Array.isArray(v))
+            return v;
+    }
+    catch (e) { /* fall through to the five megabytes */ }
+    return snapReadLocal();
+};
+/* ONCE TODAY'S COPY IS TAKEN, THE REST OF THE DAY COSTS NOTHING (build 231b).
+   saveData runs from an effect keyed on `data`, so it fires on every change she
+   makes — including each character she types into a note. Build 230 read and
+   JSON-parsed the entire snapshot key on every one of those, which on her phone
+   on 20 August was 3.8 MB of parsing per keystroke, only to find out it had
+   already taken today's copy. This is a day-stamp, not a cache of anything:
+   nothing is decided from it except whether to look. */
+let snapTakenOn = null;
 /* One snapshot per day. Taking one every save would burn storage for nothing;
    a day is the granularity anything here is measured in anyway. */
-const snapshotIfDue = (d) => {
+const snapshotIfDue = async (d) => {
     try {
         /* Never snapshot the demo data. Rule 7: sample data must not be allowed to
            pass as her own logging — and a snapshot is exactly how it would sneak
            back in months later, wearing a date. */
         if (!d || d.sample)
-            return snapRead();
+            return snapReadLocal();
         const day = today();
-        const snaps = snapRead();
-        if (snaps.length && snaps[0].day === day)
+        if (snapTakenOn === day)
+            return null; /* already done today — touch nothing */
+        /* ---- WHERE THEY LIVE, AND THE MOVE, ONCE (build 231) ---------------
+           Copy first, remove second. A failure anywhere in here leaves the copies
+           exactly where they already were, which is the safe direction: the worst
+           case is the old behaviour, never a lost copy. */
+        let snaps = null, inVault = false;
+        try {
+            const v = await vaultGet(VAULT_SNAPS);
+            if (Array.isArray(v)) {
+                snaps = v;
+                inVault = true;
+            }
+        }
+        catch (e) {
+            inVault = false;
+        }
+        if (!inVault) {
+            const here = snapReadLocal();
+            try {
+                await vaultPut(VAULT_SNAPS, here);
+                const back = await vaultGet(VAULT_SNAPS);
+                if (Array.isArray(back) && back.length === here.length) {
+                    /* only now, and only when the vault has proved it has them */
+                    if (here.length) {
+                        try {
+                            window.localStorage.removeItem(SNAP_KEY);
+                        }
+                        catch (e2) { }
+                    }
+                    snaps = back;
+                    inVault = true;
+                }
+            }
+            catch (e) { /* this browser will not keep a vault; stay put */ }
+            if (!inVault)
+                snaps = here;
+        }
+        if (snaps.length && snaps[0].day === day) {
+            snapTakenOn = day;
             return snaps;
+        }
         const entry = {
             day,
             at: new Date().toISOString(),
@@ -7303,7 +7476,12 @@ const snapshotIfDue = (d) => {
            survives is exactly the kind she should be able to move. */
         const F = formulas(d.settings);
         const keepN = Math.max(1, Number(F.snapKeep) || SNAP_KEEP);
-        const budget = Math.max(200000, Number(F.snapBudget) || SNAP_BUDGET);
+        /* THE BUDGET DEPENDS ON WHERE THEY ARE, because the two places are not
+           remotely alike: five megabytes for everything she owns, against the
+           hundreds the vault reported. */
+        const budget = inVault
+            ? Math.max(1000000, Number(F.snapVaultBudget) || SNAP_VAULT_BUDGET)
+            : Math.max(200000, Number(F.snapBudget) || SNAP_BUDGET);
         const floorN = Math.max(1, Math.min(keepN, Number(F.snapMin) || 3));
         let next = [entry, ...snaps].slice(0, keepN);
         const size = (list) => list.reduce((a, x) => a + (x.json || "").length, 0);
@@ -7318,14 +7496,24 @@ const snapshotIfDue = (d) => {
            It now stops at a floor. That is safe because the write below already
            halves and retries on a store that genuinely will not take them, so the
            floor is a floor on INTENT, not a promise to exceed the quota. */
-        while (next.length > floorN && size(next) > budget)
+        /* IN THE VAULT the floor costs nothing and she keeps all ten.
+           ON THIS DEVICE the floor and the budget were fighting and the floor won
+           — three whole copies, 3.8 MB of her 5 MB, measured on her own phone on
+           20 August. Here the BUDGET wins. That is not a return to the silent
+           collapse build 200 fixed: the reason is written into the meta below and
+           the backup card now READS it, which is what "silent" actually meant. */
+        const stopAt = inVault ? floorN : 1;
+        while (next.length > stopAt && size(next) > budget)
             next = next.slice(0, -1);
         /* Even inside the budget the store can be full for reasons of its own.
            Halve and retry rather than lose the day's copy outright; and if even a
            single copy will not fit, leave what is already there untouched. */
         while (next.length) {
             try {
-                window.localStorage.setItem(SNAP_KEY, JSON.stringify(next));
+                if (inVault)
+                    await vaultPut(VAULT_SNAPS, next);
+                else
+                    window.localStorage.setItem(SNAP_KEY, JSON.stringify(next));
                 /* WHAT IT ACTUALLY MANAGED, WRITTEN DOWN (rule 23). If it kept fewer
                    than she asked for, the reason is recorded and the backup screen
                    says so — a safety net that has quietly shrunk is worse than one
@@ -7334,12 +7522,16 @@ const snapshotIfDue = (d) => {
                     window.localStorage.setItem(SNAP_META, JSON.stringify({
                         at: day, wanted: keepN, kept: next.length,
                         bytes: size(next),
+                        /* WHERE, not just how many. She should never have to guess which
+                           shelf her safety net is standing on. */
+                        where: inVault ? "vault" : "device",
                         why: next.length >= keepN ? "" : (size(next) > budget
                             ? "your file is big enough that this many copies is all that fits"
                             : "the browser would not take any more"),
                     }));
                 }
                 catch (e2) { /* the meta is a courtesy; never let it cost a snapshot */ }
+                snapTakenOn = day;
                 return next;
             }
             catch (e) {
@@ -7348,10 +7540,30 @@ const snapshotIfDue = (d) => {
                 next = next.slice(0, Math.max(1, Math.floor(next.length / 2)));
             }
         }
-        return snapRead();
+        return snapReadLocal();
     }
     catch (e) {
-        return snapRead();
+        return snapReadLocal();
+    }
+};
+/* WHILE WE ARE MOVING HER HISTORY ONTO A SHELF THE BROWSER MAY RECLAIM.
+   ---------------------------------------------------------------------------
+   Rule 20 says her data is permanent. The app had never once asked the browser
+   to treat it that way, and storage that is not marked persistent is exactly
+   what a browser evicts first when the device runs short. Asking is free, it
+   is granted silently for an installed app, and a refusal changes nothing —
+   so this can never make anything worse, and it is the single cheapest thing
+   in the file that defends years of history. */
+const askToPersist = async () => {
+    try {
+        if (!navigator.storage || !navigator.storage.persist)
+            return null;
+        if (await navigator.storage.persisted())
+            return true;
+        return await navigator.storage.persist();
+    }
+    catch (e) {
+        return null;
     }
 };
 /* AUDIT FINDING 42. The four Google Drive and OneDrive calls had no
@@ -8095,7 +8307,7 @@ const saveData = async (d) => {
     /* A snapshot a day, kept separately, so a bad restore or a corrupted write
        can never take the history with it. */
     try {
-        snapshotIfDue(d);
+        Promise.resolve(snapshotIfDue(d)).catch(() => { });
     }
     catch (e) { }
 };
@@ -16728,13 +16940,21 @@ function Settings({ data, setData, coach, setSheet }) {
         return false;
     };
     const [snaps, setSnaps] = useState([]);
+    /* build 231: what the last snapshot managed and where it put it. Written
+       since build 200, read by nobody until now (rule 18). */
+    const [snapMeta, setSnapMeta] = useState(null);
     const ageDays = backupAgeDays();
     useEffect(() => {
         let alive = true;
         dirLoad().then((h) => { if (alive && h)
             setFolderName(h.name || "your folder"); });
         try {
-            setSnaps(snapRead());
+            snapRead().then((r) => { if (alive)
+                setSnaps(r || []); }).catch(() => { });
+        }
+        catch (e) { }
+        try {
+            setSnapMeta(snapMetaRead());
         }
         catch (e) { }
         return () => { alive = false; };
@@ -16807,7 +17027,7 @@ function Settings({ data, setData, coach, setSheet }) {
                 return next;
             });
             setBackupMsg(`Put back the copy from ${prettyShort(snap.day)}${added ? `, which brought back ${added} item${added === 1 ? "" : "s"}` : ""}. ${snapLost.length ? `Tell me before you do anything else — this looks like it shortened: ${snapLost.join(", ")}.` : "Nothing already here was removed — I checked every part of it."}`);
-            setSnaps(snapRead());
+            snapRead().then((r) => setSnaps(r || [])).catch(() => { });
         }
         catch (e) {
             setBackupMsg("That snapshot couldn't be read.");
@@ -17071,7 +17291,9 @@ function Settings({ data, setData, coach, setSheet }) {
                     React.createElement("strong", null, folderName),
                     " each time the app opens.")),
                 React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 4, lineHeight: 1.45 } }, snaps.length
-                    ? `${snaps.length} daily snapshot${snaps.length === 1 ? "" : "s"} kept on the device as well.`
+                    ? `${snaps.length} daily snapshot${snaps.length === 1 ? "" : "s"} kept on the device as well${snapMeta && snapMeta.where === "vault"
+                        ? ", in the roomier store, off the five megabytes your training file has to fit in"
+                        : ""}.${snapMeta && snapMeta.why ? ` Not the ${snapMeta.wanted} you asked for, because ${snapMeta.why}.` : ""}`
                     : "Daily snapshots start once you log something.")),
             (() => {
                 const sz = storeSizes(data);
@@ -17815,7 +18037,8 @@ function Formulas({ data, setData, close }) {
         { title: "The safety net on this device", note: "Snapshots are whole copies of your file, taken once a day, kept separately so a bad write can never take your history with it. These decide how many are kept and how much room they may take. The floor is the important one: below build 200 the net quietly shrank to a single copy the moment your file got big, which is exactly when you need it most.",
             rows: [["snapKeep", "Daily copies kept on this device"],
                 ["snapMin", "Never fewer than this, however big the file"],
-                ["snapBudget", "Bytes all the copies together may take"],
+                ["snapBudget", "Bytes all the copies together may take, if they have to sit in the five megabytes"],
+                ["snapVaultBudget", "Bytes they may take in the roomier store, which is where they go now"],
                 ["storeWarnAt", "Bytes stored before the app warns you"],
                 ["photoKeepDays", "Days a photo stays in a talk before you may clear it"],
                 ["photoTurns", "Messages back a photo is still sent to your coach as a picture"],
@@ -24299,6 +24522,12 @@ function CoachApp() {
         return Array.isArray(p.sheets) ? p.sheets : [];
     });
     useEffect(() => {
+        /* Rule 20, and it had never been asked. Silent either way: it cannot fail
+           in a way she needs to hear about, and it cannot make anything worse. */
+        try {
+            askToPersist();
+        }
+        catch (e) { }
         loadData().then((d) => {
             setDataRaw(d);
             setReady(true);
