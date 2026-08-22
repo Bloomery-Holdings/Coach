@@ -4427,7 +4427,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 232";
+const BUILD = "20 August 2026 · 233";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -28148,6 +28148,8 @@ function CoachApp() {
             <WhoopLog data={data} setSheet={setSheet} close={() => setSheet(null)} />
           ) : sheet.kind === "whoop" ? (
             <WhoopImport data={data} setData={setData} close={() => setSheet(null)} />
+          ) : sheet.kind === "tidy" ? (
+            <TidySheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "photos" ? (
             <PhotosSheet data={data} setData={setData} coach={coach} close={() => setSheet(null)} />
           ) : sheet.kind === "notes" ? (
@@ -30244,6 +30246,26 @@ const bwOps = {
     }) };
   },
 
+  /* THE ORDER OF THE TABS THEMSELVES (build 233). moveList has reordered
+     lists inside a tab since 219; nothing has ever reordered the tabs, so the
+     eleven she did not choose sit in the order they were accidentally made. */
+  moveArea: (d, pgId, dir) => {
+    const all = d.bodywork || [];
+    const live = all.map((p, i) => ({ p, i })).filter((x) => x.p && x.p.status !== "removed");
+    const at = live.findIndex((x) => x.p.id === pgId);
+    const to = at + (dir === "up" ? -1 : 1);
+    if (at < 0 || to < 0 || to >= live.length) return d;
+    const out = all.slice();
+    out[live[at].i] = all[live[to].i];
+    out[live[to].i] = all[live[at].i];
+    return { ...d, bodywork: out };
+  },
+
+  /* the same shape the Body page's own "remove this body area" writes, so the
+     two cannot drift — set aside, dated, never deleted (rule 20) */
+  setAreaAside: (d, pgId, today) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== pgId ? pg : { ...pg, status: "removed", removedOn: today })) }),
+
   addArea: (d, today) => ({ ...d, bodywork: [...(d.bodywork || []), {
     id: newId(), area: "New body area", own: true, mins: 10, created: today,
     status: "active", log: {}, rounds: [],
@@ -30252,6 +30274,177 @@ const bwOps = {
   putAreaBack: (d, pgId) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
     (pg.id !== pgId ? pg : { ...pg, status: "active", removedOn: undefined })) }),
 };
+
+/* ONE SCREEN WHERE EVERYTHING IS REACHABLE (build 233).
+   Her list, in her words, and every one of them is a row here:
+   change the sequence of the lists · rename a tab · rename a list · take a
+   list out of one tab and put it in another · take a whole tab off · take a
+   whole list off. Nothing is deleted; everything set aside comes back with
+   its numbers under it (rule 20). */
+function TidySheet({ data, setData, coach, close }) {
+  const all = data.bodywork || [];
+  const live = all.filter((p) => p && p.status !== "removed");
+  const off = all.filter((p) => p && p.status === "removed");
+  /* one editor at a time, so no hook is created inside a map */
+  const [edit, setEdit] = useState(null);   /* { kind, pgId, listId, text } */
+  const start = (kind, pgId, listId, text) => setEdit({ kind, pgId, listId, text: text || "" });
+  const save = () => {
+    if (!edit) return;
+    const v = String(edit.text || "").trim();
+    if (v) setData((d) => (edit.kind === "area"
+      ? bwOps.renameArea(d, edit.pgId, v)
+      : bwOps.renameList(d, edit.pgId, edit.listId, v)));
+    setEdit(null);
+  };
+  const editing = (kind, pgId, listId) => edit && edit.kind === kind
+    && edit.pgId === pgId && (kind === "area" || edit.listId === listId);
+
+  const Field = () => (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
+      <input value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+        autoFocus placeholder="What do you want it called?"
+        style={{ flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 9,
+          border: `1.5px solid ${C.signal}`, background: C.card, color: C.ink,
+          fontSize: 13, fontFamily: "inherit" }} />
+      <button onClick={save} className="tap" style={{ flexShrink: 0, padding: "8px 12px",
+        borderRadius: 9, border: "none", background: C.signal, color: C.chalk,
+        cursor: "pointer", fontSize: 12, fontWeight: 600, fontFamily: "inherit" }}>Save</button>
+      <button onClick={() => setEdit(null)} className="tap" style={{ flexShrink: 0,
+        border: "none", background: "transparent", cursor: "pointer", fontSize: 11.5,
+        color: C.muted, fontFamily: "inherit" }}>cancel</button>
+    </div>
+  );
+
+  const Tiny = ({ onClick, children, dim, off: isOff }) => (
+    <button onClick={onClick} disabled={isOff} className="tap" style={{
+      border: "none", background: "transparent", cursor: isOff ? "default" : "pointer",
+      padding: "3px 0", fontSize: 11, fontFamily: "inherit", whiteSpace: "nowrap",
+      color: isOff ? C.line : (dim ? C.muted : C.signal), fontWeight: 600 }}>{children}</button>
+  );
+  const Row = ({ children }) => (
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center",
+      marginTop: 4 }}>{children}</div>
+  );
+
+  return (
+    <div>
+      <Eyebrow color={C.signal}>Your Body page</Eyebrow>
+      <h1 className="disp" style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1, margin: "0 0 6px" }}>
+        Arrange your tabs and lists
+      </h1>
+      <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>
+        Everything is on this one screen, and every control is one tap. Rename a tab or a list,
+        change the order, move a list into another tab, take a tab or a list off.
+        <strong> Nothing here is deleted</strong> — anything taken off is set aside, dated, and comes
+        back with everything you logged against it still under it.
+      </div>
+
+      {live.map((pg, pi) => {
+        const lists = (pg.lists || []).filter((l) => l && l.status !== "removed");
+        const gone = (pg.lists || []).filter((l) => l && l.status === "removed");
+        const others = live.filter((x) => x.id !== pg.id);
+        return (
+          <Card key={pg.id} style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+              <Eyebrow color={C.signal}>{pg.area || "Untitled tab"}</Eyebrow>
+              <span className="mono" style={{ fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                {lists.length} list{lists.length === 1 ? "" : "s"}
+              </span>
+            </div>
+            {editing("area", pg.id) ? <Field /> : (
+              <Row>
+                <Tiny onClick={() => start("area", pg.id, null, pg.area)}>rename this tab</Tiny>
+                <Tiny dim off={pi === 0} onClick={() => setData((d) => bwOps.moveArea(d, pg.id, "up"))}>tab up</Tiny>
+                <Tiny dim off={pi === live.length - 1} onClick={() => setData((d) => bwOps.moveArea(d, pg.id, "down"))}>tab down</Tiny>
+                <Tiny dim onClick={() => setData((d) => bwOps.setAreaAside(d, pg.id, coach.t))}>take this tab off</Tiny>
+              </Row>
+            )}
+
+            <div style={{ marginTop: 10 }}>
+              {lists.length === 0 && (
+                <div style={{ fontSize: 12, color: C.muted, marginBottom: 6 }}>
+                  Nothing in this tab yet.
+                </div>
+              )}
+              {lists.map((l, li) => (
+                <div key={l.id} style={{ borderTop: `1px solid ${C.line}`, paddingTop: 8, marginTop: 8 }}>
+                  <div style={{ fontSize: 13, color: C.ink, fontWeight: 600 }}>
+                    {li + 1}. {l.title || "Untitled list"}
+                    <span className="mono" style={{ fontSize: 10, color: C.muted, fontWeight: 400 }}>
+                      {"  "}{((l.exercises || []).filter((x) => x && x.status !== "removed")).length} exercises
+                    </span>
+                  </div>
+                  {editing("list", pg.id, l.id) ? <Field /> : (
+                    <Row>
+                      <Tiny onClick={() => start("list", pg.id, l.id, l.title)}>rename</Tiny>
+                      <Tiny dim off={li === 0} onClick={() => setData((d) => bwOps.moveList(d, pg.id, l.id, "up"))}>up</Tiny>
+                      <Tiny dim off={li === lists.length - 1} onClick={() => setData((d) => bwOps.moveList(d, pg.id, l.id, "down"))}>down</Tiny>
+                      <Tiny dim onClick={() => setData((d) => bwOps.setListAside(d, pg.id, l.id, coach.t))}>take off</Tiny>
+                      {others.length > 0 && (
+                        <select value="" onChange={(e) => { const to = e.target.value;
+                            if (to) setData((d) => bwOps.moveListToArea(d, pg.id, l.id, to, coach.t)); }}
+                          style={{ fontSize: 11, fontFamily: "inherit", color: C.signal,
+                            background: "transparent", border: `1px solid ${C.line}`,
+                            borderRadius: 7, padding: "3px 6px", fontWeight: 600 }}>
+                          <option value="">move to another tab…</option>
+                          {others.map((o) => <option key={o.id} value={o.id}>{o.area || "Untitled tab"}</option>)}
+                        </select>
+                      )}
+                    </Row>
+                  )}
+                </div>
+              ))}
+              {gone.length > 0 && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+                  {gone.map((l) => (
+                    <div key={l.id} style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>
+                      {l.title || "Untitled list"} — set aside{" "}
+                      <button onClick={() => setData((d) => bwOps.putListBack(d, pg.id, l.id))}
+                        className="tap" style={{ border: "none", background: "transparent",
+                          cursor: "pointer", fontSize: 11.5, color: C.signal, fontWeight: 600,
+                          fontFamily: "inherit" }}>put it back</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>
+                <Tiny onClick={() => setData((d) => bwOps.addList(d, pg.id, coach.t))}>+ add a list to this tab</Tiny>
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+
+      <button onClick={() => setData((d) => bwOps.addArea(d, coach.t))} className="tap" style={{
+        border: `1.5px dashed ${C.line}`, borderRadius: 12, background: "transparent",
+        cursor: "pointer", padding: "12px 0", width: "100%", marginBottom: 14,
+        fontSize: 13, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+        + add an empty tab
+      </button>
+
+      {off.length > 0 && (
+        <Card style={{ marginBottom: 14 }}>
+          <Eyebrow color={C.muted}>Tabs you have set aside</Eyebrow>
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, margin: "6px 0 4px" }}>
+            Kept whole, with every list and every number in them.
+          </div>
+          {off.map((pg) => (
+            <div key={pg.id} style={{ fontSize: 12.5, color: C.ink, marginTop: 6 }}>
+              {pg.area || "Untitled tab"}{" "}
+              <button onClick={() => setData((d) => bwOps.putAreaBack(d, pg.id))} className="tap"
+                style={{ border: "none", background: "transparent", cursor: "pointer",
+                  fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+                put it back
+              </button>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Btn kind="quiet" onClick={close}>Done</Btn>
+    </div>
+  );
+}
 
 function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
   /* HER INSTRUCTION, 11 August: "put the lists under the area's tab — I
@@ -30858,6 +31051,21 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
             <Btn kind="quiet" onClick={() => setJustMade(null)}>Got it</Btn>
           </div>
         </Card>
+      )}
+
+      {/* BUILD 233. Driven at her scale — eleven tabs, the default view — the
+          page she opens has NOT ONE editing control on it, because every one
+          of them lives inside a card that is folded until she singles the tab
+          out, and the list controls need a third tap after that. This is the
+          door to the screen where all of it is visible at once. It sits above
+          the chips on purpose: it has to be on the view she lands on. */}
+      {progs.length > 0 && (
+        <button onClick={() => setSheet({ kind: "tidy" })} className="tap" style={{
+          border: `1.5px solid ${C.signal}`, borderRadius: 10, background: "transparent",
+          cursor: "pointer", padding: "9px 12px", marginBottom: 12, width: "100%",
+          fontSize: 12.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+          Arrange your tabs and lists — rename, reorder, move, take off
+        </button>
       )}
 
       {parts.length > 0 && (
