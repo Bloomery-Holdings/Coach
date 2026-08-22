@@ -1339,7 +1339,7 @@ const SEED_MOBILITY = [
     why: "Shoulder internal and external rotation combined. The classic test for the shoulder capsule, and the one that tends to reveal a restriction before it starts to hurt.",
     needs: ["shoulders", "arms"], drills: ["shoulderpass", "sleeper", "doorway"] },
 
-  { id: "rotate", mins: 1, inWeekly: false, label: "Seated rotation", unit: "/10", better: "higher", max: 10, side: true,
+  { id: "rotate", mins: 1, inWeekly: true, label: "Seated rotation", unit: "/10", better: "higher", max: 10, side: true,
     how: "Sit tall on a chair, arms crossed on your chest, and turn as far as you can each way without your hips moving. Score how far you get out of ten, judged against a full ninety degrees.",
     why: "Thoracic rotation. It protects the lower back and the shoulder by letting the mid-back do the work they otherwise take on.",
     needs: ["back", "core"], drills: ["thoracic", "catcow", "openbook"] },
@@ -4456,7 +4456,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "22 August 2026 · 237";
+const BUILD = "22 August 2026 · 238";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4987,6 +4987,166 @@ const pauseRehab = (list, d, t) => {
       retestWeeks: wks(p.area), retestOn: addDays(t, 7 * wks(p.area)), feels: [] };
     return f;
   });
+};
+
+/* ============================================================================
+   THE BATTERY SHE AND I DESIGNED, 22 AUGUST — installed by one tap, never
+   automatically. Nothing here happens to her file until she presses it.
+   ==========================================================================*/
+const BATTERY_V2 = 238;
+
+/* The five that need a tape measure. Two of them need a second person. */
+const MOB_V2_ASIDE = ["wallreach", "scratch", "slr", "quadlen", "straddle"];
+const MOB_V2_WHY = "it needed a tape measure, and you asked for a battery you can take on your own";
+
+/* HER WORDS, 10 August, and every scale below obeys them: "centimetres doesn't
+   make sense — I won't have a measure next to me while I'm working." */
+const MOB_V2_TESTS = [
+  { id: "overheadlie", mins: 1.25, inWeekly: true, label: "Arms overhead, lying down",
+    type: "steps", unit: "step", better: "higher", side: true, max: 4,
+    steps: ["My arm stops well short of the floor",
+            "About halfway down",
+            "Within a hand's width of the floor",
+            "My thumb touches the floor",
+            "The back of my hand rests on the floor, elbow straight, back still down"],
+    how: "Lie on your back, knees bent, feet flat. Press your lower back into the floor so there is no gap under it — you should feel your stomach switch on to hold it there. Keeping it pressed, take ONE arm overhead toward the floor behind you, elbow straight. Stop the moment your back lifts. Tap the step, then do the other arm.",
+    why: "This is the test that tells the truth about your shoulder. In every other overhead measurement your lower back can arch and make up the difference without you noticing — on the floor it cannot. The gap between your two sides matters more than either side on its own.",
+    needs: ["shoulders", "back"], drills: ["thoracic", "latstretch", "shoulderpass"] },
+
+  { id: "backreach", mins: 1.25, inWeekly: true, label: "Behind-the-back reach",
+    type: "steps", unit: "step", better: "higher", side: true, max: 6,
+    steps: ["More than a hand's width apart",
+            "About a hand's width apart",
+            "Two or three fingers' width apart",
+            "Fingertips almost brushing",
+            "Fingertips touch",
+            "Fingers hook together",
+            "I can hold my whole hand"],
+    how: "One hand over the shoulder and down your back, the other coming up from below. Bring the fingertips toward each other without forcing. Judge the gap against your own hand. Score the side by whichever hand is on TOP, then swap and score the other way.",
+    why: "Shoulder internal and external rotation together. The test that tends to reveal a restriction before it starts to hurt.",
+    needs: ["shoulders", "arms"], drills: ["shoulderpass", "sleeper", "doorway"] },
+
+  { id: "legraise", mins: 1.25, inWeekly: true, label: "Straight-leg raise",
+    type: "steps", unit: "step", better: "higher", side: true, max: 5,
+    steps: ["Well short of halfway",
+            "Nearly halfway",
+            "About halfway — my leg at 45°",
+            "Past halfway",
+            "About three-quarters of the way up",
+            "Almost vertical, and the other leg stayed flat"],
+    how: "Lie on your back, both legs straight, arms by your sides. Keep one leg flat on the floor — that is the rule; the moment it lifts you have gone past the score. Raise the other leg with the knee straight. Flat is the start, straight up is the top, and halfway is the landmark you can be honest about. Then the other leg.",
+    why: "Hamstring length on its own — no back, no calves, no balance. The most sensitive flexibility test there is, and where a left-right difference shows up first.",
+    needs: ["legs"], drills: ["hamstring", "pigeon"] },
+
+  { id: "heelbottom", mins: 1.25, inWeekly: true, label: "Heel to bottom",
+    type: "steps", unit: "step", better: "higher", side: true, max: 4,
+    steps: ["More than two hand-widths away",
+            "About two hand-widths",
+            "About one hand-width",
+            "Two or three fingers fit in the gap",
+            "My heel touches my bottom, hips still flat"],
+    how: "Lie face down, hips flat and staying flat. Bend one knee and bring the heel toward your bottom, using your hand or a strap if you need it. The hip stays on the floor — the moment it lifts, that is where the score stops. Judge the gap with your other hand. Then the other leg.",
+    why: "Quadriceps and the front of the hip — the pair that shorten most from sitting and pull the pelvis out of position. Nothing else here measures the front of your leg. Stop at the first hint of knee pain and score it where it stopped; this is a range test, never something to push into.",
+    needs: ["legs"], drills: ["quadstretch", "hipflexor"] },
+
+  { id: "anklepull", mins: 1.25, inWeekly: true, label: "Ankle pull-back",
+    type: "steps", unit: "step", better: "higher", side: true, max: 4,
+    steps: ["My foot barely comes back past straight",
+            "My toes come back a little",
+            "About halfway to square with my shin",
+            "Close to square with my shin",
+            "Square or past square, knee still straight"],
+    how: "Sit with one leg straight out in front of you, on the floor or on a bed, knee straight. Point the foot away first to loosen it, then pull the toes back toward you as far as they go with the knee still straight. Score the pull-back. Then the other foot.",
+    why: "Ankle stiffness is one of the commonest reasons a leg stops improving, and nothing else in your battery reaches it. You retired knee-to-wall — this is not that test: it is done sitting, with no wall, no squat and no lunge.",
+    needs: ["legs"], drills: ["ankledrag", "calf"] },
+
+  { id: "apart2", mins: 1, inWeekly: false, label: "Legs apart, sitting",
+    type: "steps", unit: "step", better: "higher", side: false, max: 5,
+    steps: ["My ankles are inside my shoulders",
+            "About shoulder width apart",
+            "Wider than my shoulders, back tall",
+            "Wider, and my hands go flat on the floor in front",
+            "And my elbows reach the floor",
+            "And my chest reaches the floor"],
+    how: "Sit on the floor, back tall, and open your legs as wide as they go with your kneecaps facing the ceiling. Sit on the edge of a cushion if your back rounds — the score only means something with a tall back. Judge the width against your own shoulders, then, holding that width, walk your hands forward.",
+    why: "The adductors, the inside of the thighs. Nothing else in the battery reaches them, and they are what closes the hips down as the rest of the leg tightens.",
+    needs: ["legs"], drills: ["straddlework", "pigeon", "hipopen"] },
+
+  { id: "neckturn", mins: 1, inWeekly: false, label: "Neck rotation",
+    type: "steps", unit: "step", better: "higher", side: true, max: 4,
+    steps: ["My chin barely passes my collarbone",
+            "My chin is over the inside of my collarbone",
+            "About halfway to my shoulder",
+            "Nearly over my shoulder",
+            "Over my shoulder, easily"],
+    how: "Sit or stand tall, shoulders still and chin level. Turn your head to look over one shoulder without letting the shoulder come round to meet it. Then the other way.",
+    why: "Nothing else covers it, it costs fifteen seconds, and it is one of the first ranges to go quietly.",
+    needs: ["back"], drills: [] },
+];
+
+/* HER INSTRUCTION, 22 August: "remove anything that has to do with the wall
+   because I have no wall currently." CURRENTLY — so these are set aside, not
+   deleted, and one tap brings them back the day she has a wall again. */
+const DRILLS_V2_ASIDE = [
+  { id: "deepsquat", why: "squats hurt your knees, so this one is paused with them" },
+  { id: "ankle", why: "it needs a wall, and you have no wall at the moment" },
+];
+/* and the ankle test must have somewhere to send her that she can actually do */
+const DRILL_V2_ADD = { id: "ankledrag", side: true, label: "Ankle pull with a strap", mins: 2,
+  how: "Sit with the leg straight out in front, a strap or a towel around the ball of the foot. Keep the knee straight and pull the toes toward you until you feel it through the calf. Hold, release, repeat. Both sides, even if only one is stiff.",
+  targets: "ankle pull-back, calf and Achilles — no wall needed" };
+
+/* THE THREE SQUATS THAT WALKED THROUGH THE PAUSE. They are in fields.weekly
+   with inWeekly:false — rotating rows, asked in the monthly sitting — so
+   pauseRehab did run over them. What it never did was NAME them: its map holds
+   squat, press and raise and stops there. A pause built to stop squats reaching
+   her let three squats through for four months. */
+const KNEE_V2_PAUSE = ["goblet", "splitsq", "wallsit"];
+const KNEE_V2 = { area: "knee", why: "Squats hurt your knees",
+  instead: "Hip thrust and hip abduction, which load the same muscles with the knee near straight",
+  note: "Paused on 22 August, in her words: \"it hurts my knees\". The squat anchor was paused at build 151 and these three were not, because the pause only ever ran on the weekly list." };
+
+/* One pure function, so what she is shown and what is written cannot drift. */
+const installBatteryV2 = (d, t) => {
+  const F = formulas(d.settings || {});
+  const wks = retestWeeksFor(KNEE_V2.area, F);
+  const pauseShape = { status: "paused", area: KNEE_V2.area, pausedOn: t,
+    pausedWhy: KNEE_V2.why, pausedNote: KNEE_V2.note, pausedInstead: KNEE_V2.instead,
+    retestWeeks: wks, retestOn: addDays(t, 7 * wks), feels: [] };
+
+  const rows = (d.mobTests && d.mobTests.length) ? d.mobTests : SEED_MOBILITY;
+  const have = new Set(rows.map((m) => m && m.id));
+  const mobTests = [
+    ...rows.map((m) => (m && MOB_V2_ASIDE.includes(m.id) && m.status !== "removed"
+      ? { ...m, status: "removed", removedOn: t, removedWhy: MOB_V2_WHY } : m)),
+    ...MOB_V2_TESTS.filter((m) => !have.has(m.id)),
+  ];
+
+  const dr = (d.drills && d.drills.length) ? d.drills : SEED_DRILLS;
+  const haveDr = new Set(dr.map((x) => x && x.id));
+  const drills = [
+    ...dr.map((x) => { const hit = DRILLS_V2_ASIDE.find((y) => y.id === (x && x.id));
+      return (hit && x.status !== "removed")
+        ? { ...x, status: "removed", removedOn: t, removedWhy: hit.why } : x; }),
+    ...(haveDr.has(DRILL_V2_ADD.id) ? [] : [DRILL_V2_ADD]),
+  ];
+
+  const f = d.fields || {};
+  const fields = { ...f,
+    /* the anchor was already paused in August; its clock is restarted from
+       today, because a retest date that passed months ago is not an offer */
+    /* both lists, because a row she or the coach has moved could be in
+       either, and a fix that only knows about one list is the fault this
+       whole entry exists to correct */
+    weekly: (f.weekly || []).map((x) => (!x ? x
+      : x.id === "squat" && x.status === "paused"
+        ? { ...x, retestWeeks: wks, retestOn: addDays(t, 7 * wks) }
+        : KNEE_V2_PAUSE.includes(x.id) && !x.status ? { ...x, ...pauseShape } : x)),
+    monthly: (f.monthly || []).map((x) => (x && KNEE_V2_PAUSE.includes(x.id) && !x.status
+      ? { ...x, ...pauseShape } : x)) };
+
+  return { ...d, mobTests, drills, fields,
+    settings: { ...(d.settings || {}), batteryV2: BATTERY_V2 } };
 };
 
 /* ---- A KILOMETRE IS NOT A KILOMETRE ---------------------------------------
@@ -22870,12 +23030,104 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
     </div>
   );
 
+  /* BUILD 238 — the battery she and I designed on 22 August, installed by one
+     tap. It is an OFFER, never automatic: nothing reaches her file until she
+     presses the button, and everything it does is reversible. */
+  const [v2, setV2] = useState(null);   /* null | "open" | "done" */
+  const v2Installed = Number((data.settings || {}).batteryV2 || 0) >= BATTERY_V2;
+  const doInstall = () => { setData((d) => installBatteryV2(d, coach.t)); setV2("done"); };
+
   return (
     <>
       <Eyebrow color={C.ochre}>Yours to change</Eyebrow>
       <h2 className="disp" style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px" }}>
         The mobility battery
       </h2>
+      {!v2Installed && v2 !== "done" && (
+        <Card style={{ background: C.mint, marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, marginBottom: 6 }}>
+            The battery you designed on 22 August
+          </div>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, marginBottom: 8 }}>
+            Seven tests scored by named steps and by your own hand, shoulders and collarbone.
+            No tape measure, no second person, no wall, no squat and no lunge. Every one goes
+            up, so you never have to remember which way a score runs.
+          </div>
+          {v2 !== "open" ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={() => setV2("open")} className="tap" style={{
+                border: `1.5px solid ${C.signal}`, background: "transparent", color: C.signal,
+                borderRadius: 9, padding: "8px 12px", cursor: "pointer", fontSize: 12.5,
+                fontWeight: 600, fontFamily: "inherit" }}>
+                Show me exactly what it would change
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, margin: "8px 0 4px" }}>
+                It would ADD these {MOB_V2_TESTS.length} tests:
+              </div>
+              {MOB_V2_TESTS.map((m) => (
+                <div key={m.id} style={{ fontSize: 11.5, color: C.ink, lineHeight: 1.45, marginBottom: 3 }}>
+                  · <strong>{m.label}</strong> — {m.steps.length} steps you tap
+                  {m.side ? ", left and right" : ""}
+                  {m.inWeekly === false ? ", monthly only" : ", weekly"}
+                </div>
+              ))}
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, margin: "10px 0 4px" }}>
+                It would SET ASIDE these, keeping every reading:
+              </div>
+              {MOB_V2_ASIDE.map((id) => {
+                const m = (tests || []).find((x) => x && x.id === id);
+                return (
+                  <div key={id} style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 3 }}>
+                    · {(m && m.label) || id} — {MOB_V2_WHY}
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.ink, margin: "10px 0 4px" }}>
+                And your knees:
+              </div>
+              <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45 }}>
+                · Goblet squat, split squat and wall sit paused — {KNEE_V2.why.toLowerCase()}.
+                They were never paused alongside the squat itself, because the August pause named
+                only the squat and not its three variants.<br />
+                · Hip thrust and hip abduction carry the lower body instead.<br />
+                · The retest comes round in six weeks from today, not from August — and you can
+                move it, or say never.<br />
+                · Deep squat hold and Knee-to-wall rocking set aside; a strap ankle pull goes in.
+              </div>
+              <div style={{ fontSize: 11.5, color: C.moss, margin: "10px 0 0", lineHeight: 1.45 }}>
+                Standing fold, seated fold and seated rotation are untouched — same tests, same
+                scale, history unbroken. Nothing here is deleted.
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <button onClick={doInstall} className="tap" style={{
+                  border: "none", background: C.signal, color: C.chalk, borderRadius: 9,
+                  padding: "9px 13px", cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                  fontFamily: "inherit" }}>
+                  Make this my battery
+                </button>
+                <button onClick={() => setV2(null)} className="tap" style={{
+                  border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                  borderRadius: 9, padding: "9px 13px", cursor: "pointer", fontSize: 12.5,
+                  fontWeight: 600, fontFamily: "inherit" }}>
+                  Not now
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+      {v2 === "done" && (
+        <Card style={{ background: C.mint, marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
+            Done. {MOB_V2_TESTS.length} tests are in, the five that needed a tape measure are set
+            aside with every reading still under them, and the three squats are paused with a
+            retest six weeks from today. Everything on this screen is yours to change.
+          </div>
+        </Card>
+      )}
       <p style={{ fontSize: 12.5, color: C.muted, margin: "0 0 16px", lineHeight: 1.5 }}>
         Add a test, drop one, rename it, change what it measures or which drills it sends you to.
         Nothing here is fixed. Every reading you have already taken stays where it is — a test you
