@@ -1647,6 +1647,31 @@ const sittingKey = (which, key) => which + ":" + key;
    being trained instead, and the date it is worth trying again.
    ==========================================================================*/
 const isLive = (x) => !!x && x.status !== "removed" && x.status !== "paused" && x.status !== "retired";
+/* THE FIVE TABS, IN ONE PLACE (build 234).
+   ---------------------------------------------------------------------------
+   Rule 27 says five tabs and names them. Until this build the only list of
+   them was inside the shell, below the two things that needed to check it —
+   so neither checked, and `goTab("workouts")` pushed a tab id that does not
+   exist onto the screen stack. Nothing matched it, so she got a blank page;
+   and because where she was is saved and restored for ninety minutes, she got
+   it again every time she reopened the app.
+
+   One list, module level, read by everything that decides what a tab is.
+   The tab bar keeps its own labels; a suite asserts the two never drift. */
+const TAB_IDS = ["today", "plan", "body", "progress", "settings"];
+const validTab = (t) => TAB_IDS.includes(String(t || ""));
+/* A saved stack from an older build may hold an id this build does not have.
+   Drop what is not a tab rather than rendering nothing (rules 11, 23). */
+const validStack = (a) => {
+    const out = (Array.isArray(a) ? a : []).filter(validTab);
+    return out.length ? out : ["today"];
+};
+/* IS THERE A VALUE IN THIS BOX, OR ONLY A KEY (build 234).
+   An empty string, a whitespace string and an absent key are the same thing:
+   she has not entered this. readMeasure has said so since build 179 and
+   sittingProgress agrees; Progress asked "is the key present" instead, and a
+   box she typed into and then CLEARED is a present key holding "". */
+const hasEntry = (e, k) => { var _a; return String((_a = (e && e[k])) !== null && _a !== void 0 ? _a : "").trim() !== ""; };
 /* THE CLASSES SHE CAN STILL BE OFFERED (build 209).
 
    Removing a class used to delete the library row outright. Her logged
@@ -4610,7 +4635,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 233";
+const BUILD = "20 August 2026 · 234";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -15772,7 +15797,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         REGIONS.filter((r) => ((s.body || BODY_BY_GOAL[s.goal] || {})[r.id] || 0) > 0)
                             .map((r) => `${r.label.toLowerCase()} ${(s.body || BODY_BY_GOAL[s.goal])[r.id]}/3`).join(" · "),
                         " — ",
-                        React.createElement("button", { onClick: () => goTab && goTab("workouts"), className: "tap", style: {
+                        React.createElement("button", { onClick: () => goTab && goTab("plan"), className: "tap", style: {
                                 border: "none", background: "transparent", padding: 0, cursor: "pointer",
                                 fontSize: 10.5, color: C.signal, fontFamily: "inherit"
                             } }, "not what the class did? Correct it in Workouts"))),
@@ -16227,15 +16252,20 @@ function Progress({ data, setData, coach, setSheet }) {
     const wKeys = Object.keys(data.weekly).sort();
     const numeric = data.fields.weekly.filter((f) => f.type !== "note");
     const trendLabel = (id) => coach.trendFor(id);
+    /* BUILD 234. These three asked whether the KEY was there, not whether a
+       NUMBER was. The battery writes what is in the box straight through, so
+       clearing a box she had typed into leaves "" — present, and empty. Two of
+       those and Progress drew her a line for a week she entered nothing in,
+       which is the app asserting something it has not computed (rule 23). */
     const hasValue = (entry, f) => {
         var _a;
         if (!entry)
             return false;
-        if (((_a = f.rungs) === null || _a === void 0 ? void 0 : _a.length) > 1 && entry[f.id + "__rung"] !== undefined)
+        if (((_a = f.rungs) === null || _a === void 0 ? void 0 : _a.length) > 1 && hasEntry(entry, f.id + "__rung"))
             return true;
-        if (f.bilateral && (entry[f.id + "__L"] !== undefined || entry[f.id + "__R"] !== undefined))
+        if (f.bilateral && (hasEntry(entry, f.id + "__L") || hasEntry(entry, f.id + "__R")))
             return true;
-        if (f.type === "weightreps" && entry[f.id + "__w"] !== undefined)
+        if (f.type === "weightreps" && hasEntry(entry, f.id + "__w"))
             return true;
         return !isNaN(readMeasure(entry, f));
     };
@@ -24531,7 +24561,9 @@ function CoachApp() {
        here recently — see placeFresh. */
     const [stack, setStack] = useState(() => {
         const p = placeFresh() ? readPlace() : {};
-        return Array.isArray(p.stack) && p.stack.length ? p.stack : ["today"];
+        /* build 234, and this is the half that matters most: a bad id already
+           saved would come back on every open for ninety minutes. */
+        return validStack(p.stack);
     });
     const [sheets, setSheets] = useState(() => {
         const p = placeFresh() ? readPlace() : {};
@@ -24648,7 +24680,9 @@ function CoachApp() {
     const clock_ = useClock();
     const coach = useCoach(data, today_, clock_);
     const tab = stack[stack.length - 1];
-    const go = (t) => { if (t !== tab)
+    /* build 234: an id that is not a tab renders nothing at all, so it is
+       refused here rather than becoming a blank screen she has to escape. */
+    const go = (t) => { if (validTab(t) && t !== tab)
         setStack((s) => [...s.slice(-9), t]); };
     /* HER REPORT, 16 August. Written on every move rather than on the way out:
        a phone reclaiming a backgrounded app does not run anything on the way
