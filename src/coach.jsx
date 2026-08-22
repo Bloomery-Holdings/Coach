@@ -4456,7 +4456,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 236";
+const BUILD = "22 August 2026 · 237";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -29319,6 +29319,90 @@ const findAreaLike = (rows, want) => {
   return near.length === 1 ? near[0].k : -1;
 };
 
+/* WHAT A MOBILITY TEST NEEDS BEYOND WHAT THE MODEL ACTUALLY STATED.
+   HER REPORT, 16 August: a test arrived with four fields on it and every
+   screen that reads one expects more, so it is completed rather than rendered
+   half-drawn. Lifted out of applyRegistryEdits at build 237 because the
+   Arrange screen's "make this my mobility battery" needs the same shape, and
+   two copies of a shape is how the two payload builders drifted six times. */
+const MOB_ADD_SHAPE = { unit: "cm", better: "higher", side: false, how: "", why: "", drills: [], needs: [] };
+
+/* ONE PROPOSED TEST, MADE SAFE TO STORE — or dropped and reported.
+   A row without a way to score it is not a kindness, it is a dash on her
+   battery screen for ever (rule 23). A test must have a name and either a
+   unit or at least two named steps, or it does not become a row. Drill names
+   are resolved against the drills she actually has; anything that does not
+   resolve is dropped rather than left as a dangling id. */
+const cleanMobTest = (t, drills) => {
+  if (!t || typeof t !== "object") return null;
+  const label = String(t.label || "").trim();
+  if (!label) return null;
+  const steps = Array.isArray(t.steps)
+    ? t.steps.map((x) => String(x || "").trim()).filter(Boolean) : [];
+  const isSteps = String(t.type || "") === "steps" && steps.length >= 2;
+  const unit = String(t.unit || "").trim();
+  if (!isSteps && !unit) return null;
+  const pool = (drills || []).filter((d) => d && d.status !== "removed");
+  const ids = (Array.isArray(t.drillNames) ? t.drillNames : []).map((n) => {
+    const i = findByName(pool, n, (x) => x.label);
+    return i >= 0 ? pool[i].id : null;
+  }).filter(Boolean);
+  return { ...MOB_ADD_SHAPE,
+    label,
+    mins: Math.max(0.25, Math.min(5, Number(t.mins) || 1)),
+    /* the weekly battery takes every live test that is not marked monthly,
+       so this is only ever false when the model says so on purpose */
+    inWeekly: t.inWeekly !== false,
+    how: String(t.how || "").trim(),
+    why: String(t.why || "").trim(),
+    better: t.better === "lower" ? "lower" : "higher",
+    side: t.side === true,
+    needs: Array.isArray(t.needs) ? t.needs.map((x) => String(x || "").trim()).filter(Boolean) : [],
+    drills: ids,
+    ...(isSteps
+      ? { type: "steps", steps, unit: unit || "step", max: steps.length - 1 }
+      : { unit, ...(Number(t.max) > 0 ? { max: Number(t.max) } : {}) }) };
+};
+
+/* HER WORDS, 10 August, and this prompt exists to obey them: "centimetres
+   doesn't make sense — I won't have a measure next to me while I'm working."
+   A number she cannot take is worse than no number. */
+const TO_BATTERY_SYSTEM = `You are turning one of her own exercise lists into MOBILITY TESTS for her weekly battery.
+
+She is 51, maintaining muscle through her fifties, with a rehabilitating right shoulder. She trains
+at home and in classes. She will not have a tape measure, a goniometer or a partner beside her.
+
+A LIST EXERCISE is a thing to do. A TEST is a thing to SCORE. Your whole job is the difference.
+For each exercise, write the test that measures what that exercise is training.
+
+Return JSON and nothing else:
+
+{"tests":[{"label":"","how":"","why":"","type":"steps","steps":["",""],"unit":"","better":"higher","side":false,"mins":1,"needs":[""],"drillNames":[""],"inWeekly":true}],
+ "left":[{"name":"","why":""}]}
+
+RULES, and they are not optional:
+
+1. SCORING SHE CAN ACTUALLY TAKE ALONE. Where a real number needs equipment she will not have,
+   use "type":"steps" with 3 to 7 NAMED steps in plain English, each unmistakable from the inside
+   ("Half of each palm is flat on the floor"), ordered worst to best. Otherwise give a "unit" she
+   can produce herself: seconds, reps in a fixed time, or a self-rated /10. Never centimetres
+   unless the thing genuinely rests against a wall or the floor and can be counted in hand-widths.
+2. "better" is "higher" or "lower" and must be right for the unit. Heel-to-bottom distance is
+   "lower". Seconds held is "higher".
+3. "side": true where the two sides can differ — anything one-armed, one-legged, or rotational.
+   An asymmetry is the thing a single number hides, and hers is a shoulder.
+4. "how" is the protocol: position, what to do, when to stop, how to read the score. Two or three
+   sentences. Anyone could follow it without asking a question.
+5. "why" is what it tells her about her body, in her terms, one sentence.
+6. Time-box anything counted in reps so the number means something ("reps in 30s").
+7. "mins" is how long the test itself takes, 0.25 to 5.
+8. "drillNames" may only name drills from the list you are given, exactly. Empty is fine.
+9. "inWeekly": false ONLY for a test too long or too fiddly to want every week. Default true.
+10. NEVER invent an exercise she did not give you. If one of them cannot honestly be turned into
+    something she can score alone, do not force it — put it in "left" with a plain reason.
+11. Do not write the same measurement twice under two names. Where two of her exercises would
+    produce the same test, write it once and put the other in "left" saying which test covers it.`;
+
 /* One apply for every registry entry: set aside, patch, or add. */
 const applyRegistryEdits = (data, changes, today) => {
   const done = [];
@@ -29335,7 +29419,7 @@ const applyRegistryEdits = (data, changes, today) => {
          and every screen that reads one expects more, so it is completed here
          rather than rendering half a row. Anything the coach did state wins. */
       const shape = e.where === "mobility"
-        ? { unit: "cm", better: "higher", side: false, how: "", why: "", drills: [], needs: [] }
+        ? { ...MOB_ADD_SHAPE }
         : e.where === "record"
         /* the same shape her own "Anything you've noticed" writes, so an entry
            the coach makes is indistinguishable from one she made herself —
@@ -30506,6 +30590,78 @@ function TidySheet({ data, setData, coach, close }) {
   const editing = (kind, pgId, listId) => edit && edit.kind === kind
     && edit.pgId === pgId && (kind === "area" || edit.listId === listId);
 
+  /* TURNING A LIST INTO HER MOBILITY BATTERY (build 237). One at a time, so
+     no hook is created inside a map — the same discipline as `edit` above.
+     { pgId, listId, title, busy? , tests? , left? , err? , done? } */
+  const [conv, setConv] = useState(null);
+  const herDrills = (data.drills && data.drills.length ? data.drills : coach.drills) || [];
+
+  const toBattery = async (pg, l) => {
+    const exs = (l.exercises || []).filter((x) => x && x.status !== "removed");
+    const head = { pgId: pg.id, listId: l.id, title: l.title || "that list" };
+    if (!exs.length) {
+      setConv({ ...head, err: "There is nothing in that list to score. Nothing has changed." });
+      return;
+    }
+    setConv({ ...head, busy: true });
+    const bSpend = {};
+    try {
+      const raw = await askModel({
+        apiKey: data.settings?.apiKey,
+        system: TO_BATTERY_SYSTEM,
+        usage: bSpend,
+        messages: [{ role: "user", content:
+          `THE LIST SHE WANTS AS HER MOBILITY BATTERY — "${l.title || "untitled"}", in her tab "${pg.area || "untitled"}":\n`
+          + exs.map((x) => `  "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"${x.how ? ` how="${x.how}"` : ""}`).join("\n")
+          + `\n\nTHE DRILLS SHE ALREADY HAS. Only these names may appear in drillNames:\n`
+          + (herDrills.filter((d) => d && d.status !== "removed")
+              .map((d) => `  "${d.label}"`).join("\n") || "  (none)") }],
+        maxTokens: Math.max(1000, Number(formulas(data.settings).editTokens) || 3000),
+        secs: formulas(data.settings).callSecs,
+      });
+      const out = parseReview(raw);
+      const raws = (out && Array.isArray(out.tests)) ? out.tests : [];
+      const tests = raws.map((t) => cleanMobTest(t, herDrills)).filter(Boolean);
+      /* WHAT DID NOT MAKE IT, NAMED (rule 23). Two sources: the ones it said
+         it was leaving, and the ones it returned that could not be scored. */
+      const left = [
+        ...((out && Array.isArray(out.left)) ? out.left : []),
+        ...raws.filter((t) => !cleanMobTest(t, herDrills)).map((t) => ({
+          name: String((t && t.label) || "one of them"),
+          why: "it came back with no way to score it — no unit and no steps" })),
+      ];
+      if (!tests.length) {
+        setConv({ ...head, left,
+          err: "Nothing in that list came back as something you could score on your own. Nothing has changed." });
+      } else setConv({ ...head, tests, left });
+    } catch (e) {
+      const why = String((e && e.message) || e || "unknown");
+      setConv({ ...head, err: why === "no-key"
+        ? "This one needs your Anthropic key, which lives in Settings. Nothing has changed."
+        : why === "timed-out"
+        ? "That took too long and I stopped waiting. Nothing has changed — tap it again."
+        : why === "no-connection"
+        ? "I couldn't reach your coach at all — that is the connection, not your list. Nothing has changed."
+        : `I could not read that list into tests. Nothing has changed. What came back: "${why}"` });
+    }
+    /* rule 36: every model call records what it spent and shows it */
+    noteSpend(setData, "battery", bSpend, coach.t);
+  };
+
+  /* HER TAP, NOT THE APP'S (rule 15). Nothing above this line has changed
+     anything. This adds the tests and sets the list aside — kept, dated, with
+     everything she logged still under it and one tap from coming back. */
+  const acceptBattery = () => {
+    if (!conv || !(conv.tests || []).length) return;
+    const made = conv.tests.map((t) => ({ ...t, id: newId(), addedBy: "coach", addedOn: coach.t }));
+    setData((d) => {
+      const rows = (d.mobTests && d.mobTests.length) ? d.mobTests : SEED_MOBILITY;
+      return bwOps.setListAside({ ...d, mobTests: [...rows, ...made] },
+        conv.pgId, conv.listId, coach.t);
+    });
+    setConv({ ...conv, done: made.length });
+  };
+
   const Field = () => (
     <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 6 }}>
       <input value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })}
@@ -30541,7 +30697,8 @@ function TidySheet({ data, setData, coach, close }) {
       </h1>
       <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.55, marginBottom: 14 }}>
         Everything is on this one screen, and every control is one tap. Rename a tab or a list,
-        change the order, move a list into another tab, take a tab or a list off.
+        change the order, move a list into another tab, take a tab or a list off — and turn a list
+        into your weekly mobility battery, which writes a real test for each exercise in it.
         <strong> Nothing here is deleted</strong> — anything taken off is set aside, dated, and comes
         back with everything you logged against it still under it.
       </div>
@@ -30587,6 +30744,9 @@ function TidySheet({ data, setData, coach, close }) {
                       <Tiny dim off={li === 0} onClick={() => setData((d) => bwOps.moveList(d, pg.id, l.id, "up"))}>up</Tiny>
                       <Tiny dim off={li === lists.length - 1} onClick={() => setData((d) => bwOps.moveList(d, pg.id, l.id, "down"))}>down</Tiny>
                       <Tiny dim onClick={() => setData((d) => bwOps.setListAside(d, pg.id, l.id, coach.t))}>take off</Tiny>
+                      {/* HER REPORT, 22 August, three times. There was no route
+                          at all from a list to the battery — this is it. */}
+                      <Tiny onClick={() => toBattery(pg, l)}>make this my mobility battery</Tiny>
                       {others.length > 0 && (
                         <select value="" onChange={(e) => { const to = e.target.value;
                             if (to) setData((d) => bwOps.moveListToArea(d, pg.id, l.id, to, coach.t)); }}
@@ -30598,6 +30758,74 @@ function TidySheet({ data, setData, coach, close }) {
                         </select>
                       )}
                     </Row>
+                  )}
+                  {conv && conv.listId === l.id && (
+                    <div style={{ marginTop: 8, padding: 10, borderRadius: 10, background: C.mint }}>
+                      {conv.busy ? (
+                        <div style={{ fontSize: 12, color: C.moss }}>
+                          Reading "{conv.title}" into tests you can score…
+                        </div>
+                      ) : conv.done ? (
+                        <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.5 }}>
+                          Done — {conv.done} test{conv.done === 1 ? "" : "s"} are in your weekly
+                          mobility battery, and this list is set aside with everything you logged
+                          still under it.{" "}
+                          <button onClick={() => setConv(null)} className="tap" style={{
+                            border: "none", background: "transparent", cursor: "pointer",
+                            fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>close</button>
+                        </div>
+                      ) : conv.err ? (
+                        <div style={{ fontSize: 12, color: C.ink, lineHeight: 1.5 }}>
+                          {conv.err}{" "}
+                          <button onClick={() => setConv(null)} className="tap" style={{
+                            border: "none", background: "transparent", cursor: "pointer",
+                            fontSize: 12, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>close</button>
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 6 }}>
+                            {conv.tests.length} test{conv.tests.length === 1 ? "" : "s"} for your
+                            weekly battery. Nothing has changed yet.
+                          </div>
+                          {conv.tests.map((t, k) => (
+                            <div key={k} style={{ fontSize: 11.5, color: C.ink, lineHeight: 1.45, marginBottom: 5 }}>
+                              · <strong>{t.label}</strong> — {t.type === "steps"
+                                ? `${t.steps.length} named steps to tap` : `in ${t.unit}`}
+                              {t.better === "lower" ? ", lower is better" : ", higher is better"}
+                              {t.side ? ", left and right" : ""}
+                              {t.inWeekly === false ? ", monthly only" : ""}
+                            </div>
+                          ))}
+                          {(conv.left || []).length > 0 && (
+                            <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+                              <div style={{ fontSize: 11.5, fontWeight: 600, color: C.ink }}>
+                                And what I did not turn into a test:
+                              </div>
+                              {conv.left.map((x, k) => (
+                                <div key={k} style={{ fontSize: 11.5, color: C.muted, marginTop: 3, lineHeight: 1.45 }}>
+                                  · {String((x && x.name) || "one of them")}
+                                  {x && x.why ? ` — ${x.why}` : ""}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                            <button onClick={acceptBattery} className="tap" style={{
+                              border: "none", background: C.signal, color: C.chalk, borderRadius: 9,
+                              padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600,
+                              fontFamily: "inherit" }}>
+                              Add these and set the list aside
+                            </button>
+                            <button onClick={() => setConv(null)} className="tap" style={{
+                              border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                              borderRadius: 9, padding: "8px 12px", cursor: "pointer", fontSize: 12,
+                              fontWeight: 600, fontFamily: "inherit" }}>
+                              Not now
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
