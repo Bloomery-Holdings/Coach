@@ -462,6 +462,7 @@ const FORMULA_DEFAULTS = {
     snapMin: 3, /* never trimmed below this many, however big the file     */
     snapBudget: 1200000, /* bytes all the copies together may take, on this device  */
     snapVaultBudget: 60000000, /* bytes they may take in the roomier store (build 231)   */
+    memKeepInFile: 2, /* earlier memory versions kept in the file; the rest move  */
     storeWarnAt: 3500000, /* bytes stored before the app warns her it is filling up  */
     photoKeepDays: 30, /* days a photo in a talk is kept before she may clear it  */
     photoTurns: 4, /* messages back a photo is still SENT as a picture         */
@@ -4636,7 +4637,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 235";
+const BUILD = "20 August 2026 · 236";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7399,6 +7400,103 @@ const vaultGet = (key) => vaultOpen().then((db) => new Promise((res, rej) => {
     }
     catch (e) { } rej(q.error); };
 }));
+/* THE ARCHIVE OF WHAT HER COACH REMEMBERS (build 236).
+   ---------------------------------------------------------------------------
+   Every fold keeps the version it replaced, for ever, and nothing has ever
+   trimmed it. That is right — rule 20, a fold that drops something has to be
+   recoverable — but it does not have to live in the five megabytes her
+   training file has to fit in.
+
+   The newest few stay in the file so the archive screen opens instantly. The
+   rest go to the vault, and the file keeps a dated index of them so she can
+   still see every version she has and open any of them.
+
+   AND THEY GO IN EVERY BACKUP. A snapshot is a copy of the file the backup
+   already holds, so leaving it out cost nothing. This is the only copy of what
+   her coach used to think, and losing it on a new phone would be exactly the
+   thing she said she cannot take. See backupText below. */
+const VAULT_MEM = "memversions";
+const memArchiveRead = async () => {
+    try {
+        const v = await vaultGet(VAULT_MEM);
+        return Array.isArray(v) ? v : [];
+    }
+    catch (e) {
+        return null;
+    } /* null means the vault could not be read AT ALL */
+};
+/* COPY FIRST, REMOVE SECOND. If anything here fails the versions stay in the
+   file, which is where they already were — the safe direction (build 226). */
+/* A VERSION'S IDENTITY, so the same one is never archived twice. */
+const memKeyOf = (v) => `${(v && v.at) || ""}|${(v && v.upto) || ""}|${String((v && v.text) || "").length}`;
+const memSpill = async (d) => {
+    const m = (d && d.memory) || {};
+    const inFile = Array.isArray(m.versions) ? m.versions : [];
+    const keep = Math.max(0, Number(formulas(d && d.settings).memKeepInFile) || 0);
+    if (inFile.length <= keep)
+        return null;
+    const moving = inFile.slice(0, inFile.length - keep); /* oldest first */
+    const had = await memArchiveRead();
+    if (had === null)
+        return null; /* no vault; leave it alone */
+    /* NOT TWICE. The trim can fail to land — it did, at 236b — and the next open
+       would otherwise append the same versions again, and again. */
+    const seen = new Set(had.map(memKeyOf));
+    const fresh = moving.filter((v) => !seen.has(memKeyOf(v)));
+    const next = fresh.length ? [...had, ...fresh] : had;
+    if (fresh.length) {
+        try {
+            await vaultPut(VAULT_MEM, next);
+            const back = await vaultGet(VAULT_MEM);
+            if (!Array.isArray(back) || back.length !== next.length)
+                return null;
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    /* HOW MANY CAME OUT, NOT WHAT THE FILE LOOKED LIKE WHEN WE STARTED. The
+       caller applies this to the CURRENT state, so anything she did while the
+       vault was being written survives (see the note in 236c). */
+    return { drop: moving.length,
+        archived: next.map((v) => ({ at: (v && v.at) || null, upto: (v && v.upto) || null })) };
+};
+/* Applied to whatever her file is NOW: take the oldest `drop` versions off,
+   and record the dated index. Versions are only ever appended, so the oldest
+   `drop` are exactly the ones that were archived. */
+const memTrim = (cur, out) => {
+    if (!cur || !out || !out.drop)
+        return cur;
+    const m = cur.memory || {};
+    const v = Array.isArray(m.versions) ? m.versions : [];
+    if (v.length < out.drop)
+        return cur; /* something else changed it; leave it alone */
+    return { ...cur, memory: { ...m, versions: v.slice(out.drop), archived: out.archived } };
+};
+/* EVERYTHING, AS ONE OBJECT, FOR ANYTHING THAT LEAVES THE DEVICE. */
+const memGather = async (d) => {
+    const m = (d && d.memory) || {};
+    const had = await memArchiveRead();
+    if (!had || !had.length)
+        return d;
+    const inFile = Array.isArray(m.versions) ? m.versions : [];
+    return { ...d, memory: { ...m, versions: [...had, ...inFile] } };
+};
+/* ONE SERIALISER FOR EVERYTHING THAT LEAVES THIS DEVICE (build 236, rule 33).
+   Her file was written out in six separate places — a folder, Drive, OneDrive,
+   a download, the share sheet and "show my data as text". A gather applied to
+   five of them is precisely the fault this project keeps producing, so there
+   is one of these and all six call it. */
+const backupText = async (d, pretty) => {
+    let out = d;
+    try {
+        out = await memGather(d);
+    }
+    catch (e) {
+        out = d;
+    }
+    return pretty === false ? JSON.stringify(out) : JSON.stringify(out, null, 2);
+};
 /* WHAT IS IN THE FIVE MEGABYTES, WHICH IS WHERE THEY USED TO BE. Kept because
    the move reads from here, and because it is still the fallback if this
    browser will not keep a vault. */
@@ -7696,7 +7794,7 @@ const writeToFolder = async (d) => {
         }
         const fh = await dir.getFileHandle(backupName(), { create: true });
         const w = await fh.createWritable();
-        await w.write(JSON.stringify(d, null, 2));
+        await w.write(await backupText(d));
         await w.close();
         try {
             window.localStorage.setItem("coach:lastFolderBackup", today());
@@ -7885,7 +7983,7 @@ const uploadToDrive = async (d, clientId, quiet) => {
         const body = "--" + B + CRLF + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
             + JSON.stringify(meta)
             + CRLF + "--" + B + CRLF + "Content-Type: application/json" + CRLF + CRLF
-            + JSON.stringify(d, null, 2)
+            + (await backupText(d))
             + CRLF + "--" + B + "--";
         const res = await withClock(fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", {
             method: "POST",
@@ -8062,7 +8160,7 @@ const uploadToOneDrive = async (d, clientId) => {
     try {
         const res = await withClock(fetch("https://graph.microsoft.com/v1.0/me/drive/special/approot:/" + backupName() + ":/content", { method: "PUT",
             headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
-            body: JSON.stringify(d, null, 2) }), 30, "onedrive");
+            body: await backupText(d) }), 30, "onedrive");
         if (!res.ok)
             return "failed";
         try {
@@ -8119,11 +8217,11 @@ const backupDue = (d) => {
         return days >= 7;
     return age >= 14;
 };
-const downloadBackup = (d) => {
+const downloadBackup = async (d) => {
     if (!d || d.sample)
         return false; /* rule 7: demo data never leaves as a backup */
     try {
-        const blob = new Blob([JSON.stringify(d, null, 2)], { type: "application/json" });
+        const blob = new Blob([await backupText(d)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -8142,7 +8240,7 @@ const shareBackup = async (d) => {
     if (!d || d.sample)
         return "failed"; /* rule 7: demo data never leaves as a backup */
     try {
-        const file = new File([JSON.stringify(d, null, 2)], backupName(), { type: "application/json" });
+        const file = new File([await backupText(d)], backupName(), { type: "application/json" });
         await navigator.share({ files: [file], title: "Coach backup" });
         markFileBackup();
         return "ok";
@@ -8258,7 +8356,22 @@ const storeSizes = (data) => {
         if (n > 0)
             rows.push({ key: k, label, bytes: n });
     });
-    const known = new Set(NAMED.map(([k]) => k));
+    /* THE ARCHIVE OF WHAT HER COACH REMEMBERS, BY NAME (build 236). It used to
+       land in "everything else in your file", which on her phone was 0.5 MB and
+       the second biggest thing she owned — a row she could not act on because it
+       had no name (rule 11). */
+    const memVers = ((d.memory && d.memory.versions) || []);
+    /* an empty archive is two characters of JSON, not a row worth showing her */
+    const memBytes = memVers.length ? size(memVers) : 0;
+    if (memBytes > 0)
+        rows.push({ key: "memversions",
+            label: "earlier versions of what your coach remembers", bytes: memBytes });
+    const known = new Set([...NAMED.map(([k]) => k), "memory"]);
+    /* memory is counted in two named parts now: the live text and the archive */
+    const memLive = Math.max(0, size(d.memory) - memBytes);
+    if (memLive > 0)
+        rows.push({ key: "memory",
+            label: "what your coach remembers about you", bytes: memLive });
     const rest = Object.keys(d).filter((k) => !known.has(k))
         .reduce((a, k) => a + size(d[k]), 0);
     if (rest > 0)
@@ -17067,8 +17180,9 @@ function Settings({ data, setData, coach, setSheet }) {
             setBackupMsg("That snapshot couldn't be read.");
         }
     };
-    const exportData = () => {
-        setExportText(JSON.stringify(data, null, 2));
+    const exportData = async () => {
+        /* build 236: what she copies out must contain the archive too */
+        setExportText(await backupText(data));
         setCopied(false);
     };
     const [restoring, setRestoring] = useState(false);
@@ -17893,7 +18007,22 @@ function MemorySheet({ data, setData, close }) {
     const m = data.memory || {};
     const [showOld, setShowOld] = useState(false);
     const setHers = (v) => setData((d) => ({ ...d, memory: { ...(d.memory || {}), hers: v } }));
-    const versions = (m.versions || []).slice().reverse();
+    /* build 236: the older ones live in the vault now. The index in her file
+       says how many and when, and they are fetched when she opens them — so the
+       list is still complete and the sheet still opens instantly. */
+    const [fetched, setFetched] = useState(null);
+    useEffect(() => {
+        if (!showOld || fetched)
+            return;
+        let alive = true;
+        memArchiveRead().then((a) => { if (alive)
+            setFetched(Array.isArray(a) ? a : []); })
+            .catch(() => { if (alive)
+            setFetched([]); });
+        return () => { alive = false; };
+    }, [showOld, fetched]);
+    const archived = (m.archived || []).length;
+    const versions = [...(fetched || []), ...((m.versions || []))].slice().reverse();
     return (React.createElement("div", null,
         React.createElement(Eyebrow, { color: C.signal }, "What your coach remembers"),
         React.createElement("h1", { className: "disp", style: { fontSize: 25, fontWeight: 400, lineHeight: 1.12, margin: "0 0 8px" } }, "Your history, in its words"),
@@ -18073,6 +18202,7 @@ function Formulas({ data, setData, close }) {
                 ["snapMin", "Never fewer than this, however big the file"],
                 ["snapBudget", "Bytes all the copies together may take, if they have to sit in the five megabytes"],
                 ["snapVaultBudget", "Bytes they may take in the roomier store, which is where they go now"],
+                ["memKeepInFile", "Earlier versions of your coach's memory kept in your file — the rest move to the roomier store, and all of them are in your backups"],
                 ["storeWarnAt", "Bytes stored before the app warns you"],
                 ["photoKeepDays", "Days a photo stays in a talk before you may clear it"],
                 ["photoTurns", "Messages back a photo is still sent to your coach as a picture"],
@@ -24631,6 +24761,22 @@ function CoachApp() {
         loadData().then((d) => {
             setDataRaw(d);
             setReady(true);
+            /* THE MEMORY ARCHIVE MOVES TO THE VAULT, ONCE, ON THE WAY IN (236).
+               Here rather than above, because the file she actually has is only in
+               hand once loadData has resolved. It returns null and changes nothing
+               if the vault will not have it, so the worst case is the old
+               behaviour. Never blocks opening the app. */
+            try {
+                Promise.resolve().then(async () => {
+                    if (!d || d.sample)
+                        return;
+                    const out = await memSpill(d);
+                    /* applied to the CURRENT file, not the one we started from — see 236c */
+                    if (out)
+                        setDataRaw((cur) => memTrim(cur, out));
+                }).catch(() => { });
+            }
+            catch (e) { }
             /* If she has granted a folder — her OneDrive folder, say — put a dated
                copy in it now. Silent on purpose: it either works or the Settings
                card tells her how long it has been. Never blocks opening the app. */
