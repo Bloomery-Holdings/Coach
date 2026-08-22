@@ -4427,7 +4427,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 231";
+const BUILD = "20 August 2026 · 232";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6332,7 +6332,10 @@ every list you wrote founded a new one; tidying that up is yours to offer.
 
 The one thing that stops you: a name that fits two of her lists or two of her tabs changes
 NEITHER, on purpose, rather than the wrong one being moved. So name them exactly as they read on
-her Body page.
+her Body page. As of build 232 this is no longer silent — when it happens she is shown which two
+clashed and asked which she meant, instead of a report that lists only what worked. And a tab can
+also be named by its id, which reaches exactly one; the id is listed beside every tab in what you
+are given when you edit her lists.
 
 REMOVING IS NEVER DELETING. Anything taken off is set aside, dated, and comes back with its
 numbers under it. Say so, so a removal never sounds final. And ADDING IS NOT REPLACING: rebuild
@@ -26907,13 +26910,37 @@ Two or three sentences unless she asks for more.`;
             {editsMade.error ? editsMade.error : (
               <>
                 <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                  {editsMade.done.length === 1 ? "One change made to your lists:" : `${editsMade.done.length} changes made to your lists:`}
+                  {(() => {
+                    /* BUILD 232: `done` now also carries what could NOT be done,
+                       so counting the whole list as "changes made" would be the
+                       app asserting something it has not computed (rule 23). */
+                    const n = editsMade.done.filter((x) => !x.missed).length;
+                    return n === 0 ? "Nothing changed:"
+                      : n === 1 ? "One change made to your lists:" : `${n} changes made to your lists:`;
+                  })()}
                 </div>
-                {editsMade.done.map((x, k) => (
+                {editsMade.done.filter((x) => !x.missed).map((x, k) => (
                   <div key={k} style={{ marginBottom: 4 }}>
                     · {x.what}{x.why ? ` — ${x.why}` : ""}
                   </div>
                 ))}
+                {/* AND WHAT IT COULD NOT DO — her report, 20 August, that a day
+                    of editing ends with nothing changed. It ended that way
+                    because the things it dropped were dropped in silence. */}
+                {editsMade.done.some((x) => x.missed) && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.moss}` }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      And what I could not do, so you are not left to find out:
+                    </div>
+                    {editsMade.done.filter((x) => x.missed).map((x, k) => (
+                      <div key={k} style={{ marginBottom: 4 }}>· {x.what}</div>
+                    ))}
+                    <div style={{ fontSize: 11.5, color: C.moss, marginTop: 6 }}>
+                      You can also do any of it yourself: open the tab, open the list, and there is
+                      rename, move up, move down, move to another tab, and take this list off.
+                    </div>
+                  </div>
+                )}
                 <div style={{ fontSize: 11.5, color: C.moss, marginTop: 6 }}>
                   Nothing was deleted. Anything taken off is set aside and can come back.
                 </div>
@@ -28950,8 +28977,15 @@ which applied nothing at all, twice, while she waited and paid. You can do all o
                               logged against them, and the days she ticked it off.
   where="list"  op="remove"   sets a list aside — kept whole, one tap back.
 
-Name a tab or a list by the words she sees, not an id. If a name fits two of them, NOTHING
-happens rather than the wrong one being changed — so be specific.
+Name a tab or a list by the words she sees. If a name fits two of them, NOTHING happens rather
+than the wrong one being changed — and she is now TOLD which two, so say the name exactly.
+
+WHEN TWO OF HER TABS READ ALIKE, USE THE TAB'S id (build 232). Every AREA above is now listed as
+id=… and so is every LIST. Until this build the tab's id was not shown to you at all and this
+prompt told you not to use one, so when two of her tabs read alike there was no wording left that
+reached either — and her tabs are named similarly, her words, 20 August. A name is what she reads
+and is the friendlier thing to use; where it fits two, the id reaches exactly one. Put it in
+"target", "area" or "to". Always say the NAME in your "why", because the id means nothing to her.
 
 TIDYING HER TABS IS A REAL JOB AND YOU CAN NOW DO IT. She has ended up with tabs she did not
 choose, because until this build every list you wrote founded a new one. If she asks you to
@@ -29192,7 +29226,11 @@ const bodyInventory = (data) => (data.bodywork || [])
   .filter((pg) => pg && pg.status !== "removed")
   .map((pg) => {
     const all = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
-    return `AREA "${pg.area}"\n` + all.map((li) =>
+    /* AN ID FOR THE TAB ITSELF (build 232). Lists have carried one here since
+       the beginning; areas carried only a name, so two tabs that read alike
+       could not be told apart by any form of words — and her tabs read alike.
+       Her report, 20 August: "the tabs are named similarly." */
+    return `AREA id=${pg.id} "${pg.area}"\n` + all.map((li) =>
       `  LIST id=${li.id} n=${li.n} "${li.title}"\n` + (li.exercises || [])
         .filter((x) => x.status !== "removed")
         .map((x) => `    id=${x.id} "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"`)
@@ -29218,10 +29256,34 @@ const applyShapeEdits = (data, changes, today) => {
     .filter((p) => p && (off ? p.status === "removed" : p.status !== "removed"));
   const findArea = (want, off) => {
     const pool = areas(off);
+    /* AN ID IS UNAMBIGUOUS AND A NAME MAY NOT BE. findByName has always
+       offered the id alongside the name (see rowNames), so this needs no code
+       here — what was missing is that the id was never SHOWN to the coach, and
+       the prompt told it not to use one. Both fixed at build 232. */
     /* build 225b: and "shoulders hips and back" is the tab she calls
        "Shoulders, hips, back" */
     const i = findAreaLike(pool.map((p) => ({ ...p, name: p.area, status: undefined })), want);
     return i >= 0 ? pool[i] : null;
+  };
+  /* WHY IT COULD NOT, IN HER WORDS, NAMING THE ONES THAT CLASHED (build 232).
+     This is the whole of the fix to "a whole day editing nothing": every
+     abandoned operation now leaves a line behind saying it was abandoned and
+     what would settle it. It changes nothing about WHAT is applied. */
+  const areaCandidates = (want) => {
+    const w = String(want || "");
+    return areas().filter((p) => areaLike(p.area, w)
+      || (nameKey(p.area) && nameKey(w) && (nameKey(p.area).includes(nameKey(w)) || nameKey(w).includes(nameKey(p.area)))));
+  };
+  const missArea = (verb, want) => {
+    const near = areaCandidates(want);
+    done.push({ missed: true, why: "", what: near.length > 1
+      ? `could not ${verb}: "${want}" fits ${near.length} of your tabs — ${near.map((p) => `"${p.area}"`).join(", ")}. I changed neither rather than guess. Tell me which, exactly as it reads on your Body page, and it is done.`
+      : `could not ${verb}: no tab of yours is called "${want}". Nothing was changed.` });
+  };
+  const missList = (verb, want, hits) => {
+    done.push({ missed: true, why: "", what: (hits && hits.length > 1)
+      ? `could not ${verb}: you have ${hits.length} lists that answer to "${want}" — ${hits.map((h) => `"${h.l.title}" in "${h.pg.area}"`).join(", ")}. I changed none of them rather than the wrong one. Say which tab it is in and it is done.`
+      : `could not ${verb}: nothing on your Body page is called "${want}". Nothing was changed.` });
   };
   const findList = (pg, want, off) => {
     const pool = (pg.lists || [])
@@ -29236,7 +29298,7 @@ const applyShapeEdits = (data, changes, today) => {
     if (c.where === "area") {
       if (c.op === "add") {
         const name = String(c.name || "").trim();
-        if (!name) return;
+        if (!name) { done.push({ missed: true, why: "", what: "could not add a tab: no name came with it. Nothing was changed." }); return; }
         if (findArea(name)) { done.push({ what: `"${name}" is already one of your tabs — nothing added`, why: c.why || "" }); return; }
         out = bwOps.addArea(out, today);
         const made = (out.bodywork || [])[(out.bodywork || []).length - 1];
@@ -29249,7 +29311,7 @@ const applyShapeEdits = (data, changes, today) => {
         return;
       }
       const pg = findArea(c.target, c.op === "restore");
-      if (!pg) return;
+      if (!pg) { missArea(`${c.op} the tab "${c.target}"`, c.target); return; }
       if (c.op === "rename" && String(c.name || "").trim()) {
         const to = String(c.name).trim();
         out = bwOps.renameArea(out, pg.id, to);
@@ -29271,16 +29333,20 @@ const applyShapeEdits = (data, changes, today) => {
        taking the first that answers is not a search, it is a race — she has
        four tabs with one mobility list in each, and "the mobility list" was
        unambiguous in all four. Two hits change nothing (rules 20, 23). */
+    let lastHits = [];
     const hunt = (want, off) => {
       const pool = inArea ? [inArea] : areas();
       const hits = [];
       pool.forEach((pg) => { const l = findList(pg, want, off); if (l) hits.push({ pg, l }); });
+      /* kept so the report can NAME the two it would not choose between,
+         rather than her being told only that something did not happen */
+      lastHits = hits;
       return hits.length === 1 ? hits[0] : null;
     };
 
     if (c.op === "add") {
       const pg = inArea || findArea(c.target);
-      if (!pg) return;
+      if (!pg) { missArea(`add the list "${c.name || ""}"`, c.area || c.target); return; }
       out = bwOps.addList(out, pg.id, today);
       const fresh = (out.bodywork || []).find((p) => p.id === pg.id);
       const made = (fresh.lists || [])[(fresh.lists || []).length - 1];
@@ -29307,14 +29373,18 @@ const applyShapeEdits = (data, changes, today) => {
     }
 
     const hit = hunt(c.target, c.op === "restore");
-    if (!hit) return;
+    if (!hit) { missList(`${c.op} the list "${c.target}"`, c.target, lastHits); return; }
     if (c.op === "rename" && String(c.name || "").trim()) {
       const to = String(c.name).trim();
       out = bwOps.renameList(out, hit.pg.id, hit.l.id, to);
       done.push({ what: `renamed the list "${hit.l.title}" to "${to}"`, why: c.why || "" });
     } else if (c.op === "move") {
       const to = findArea(c.to);
-      if (!to || to.id === hit.pg.id) return;
+      if (!to) { missArea(`move "${hit.l.title}" into "${c.to}"`, c.to); return; }
+      if (to.id === hit.pg.id) {
+        done.push({ missed: true, why: "", what: `did not move "${hit.l.title}" — it is already in "${to.area}".` });
+        return;
+      }
       out = bwOps.moveListToArea(out, hit.pg.id, hit.l.id, to.id, today);
       done.push({ what: `moved "${hit.l.title}" from "${hit.pg.area}" to "${to.area}" — with everything logged against it`, why: c.why || "" });
     } else if (c.op === "remove") {
