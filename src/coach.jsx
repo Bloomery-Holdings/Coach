@@ -397,6 +397,7 @@ const FORMULA_DEFAULTS = {
   photoKeepDays: 30,       /* days a photo in a talk is kept before she may clear it  */
   photoTurns: 4,           /* messages back a photo is still SENT as a picture         */
   talkMax: 30,             /* messages before a talk is folded away and a new one starts */
+  talkKeep: 5,             /* messages kept on screen when it folds, so the thread survives */
 
   /* How she rates her own confidence, and what that permits */
   confidenceHigh: 8,       /* at or above: a good week to move a variable             */
@@ -4454,7 +4455,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "20 August 2026 · 234";
+const BUILD = "20 August 2026 · 235";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -19726,7 +19727,8 @@ function Formulas({ data, setData, close }) {
              ["storeWarnAt", "Bytes stored before the app warns you"],
              ["photoKeepDays", "Days a photo stays in a talk before you may clear it"],
              ["photoTurns", "Messages back a photo is still sent to your coach as a picture"],
-             ["talkMax", "Messages before a talk is folded into your history and a fresh one starts"]] },
+             ["talkMax", "Messages before a talk is folded into your history and a fresh one starts"],
+             ["talkKeep", "Messages kept in front of you when it folds, so you are not left mid-sentence"]] },
 
     { title: "Body composition", note: "What a realistic year of muscle gain looks like at your training age. Used only to say whether a change is plausible, never as a target.",
       rows: [["muscleGainRate", "Muscle gain, share of lean mass a year"]] },
@@ -25183,18 +25185,57 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
   const finishing = useRef(null);
   const finishIfLong = (all) => {
     const list = (all || []).filter((m) => m && (m.role === "user" || m.role === "assistant"));
-    const talkMax = Math.max(6, Number(formulas(data.settings).talkMax) || 30);
+    const F235 = formulas(data.settings);
+    const talkMax = Math.max(6, Number(F235.talkMax) || 30);
     if (list.length < talkMax) return false;
     const closing = sessionId.current;
     if (finishing.current === closing) return false;   /* already handled this one */
+    /* HOW MUCH STAYS IN FRONT OF HER (build 235, her instruction of 20 August).
+       At least one, and always less than the whole talk — a keep as big as the
+       max would fold nothing and loop. */
+    const keepN = Math.max(1, Math.min(talkMax - 1, Number(F235.talkKeep) || 5));
+    const cut = Math.max(0, list.length - keepN);
+    const head = list.slice(0, cut);        /* folded into what the coach remembers */
+    const tail = list.slice(cut);           /* stays on screen and carries forward */
     finishing.current = closing;
     sessionId.current = newId();
-    setMsgs([]);
-    setRolled({ n: list.length });
+    /* the thread she is in the middle of is still here, in the new talk */
+    setMsgs(tail);
+    setRolled({ n: head.length, kept: tail.length });
+    const freshId = sessionId.current;
     setData((d) => ({ ...d,
-      chats: (d.chats || []).map((c) => (c && c.id === closing ? { ...c, closed: true } : c)),
+      chats: [...(d.chats || []).map((c) => {
+        if (!c || c.id !== closing) return c;
+        const stored = Array.isArray(c.messages) ? c.messages : [];
+        /* RULE 20 AT THE JOIN. The tail is about to live in the new talk, so
+           it comes out of this one — but ONLY when the stored copy and what is
+           on screen agree about how many messages there are. If they do not,
+           something was written that the screen has not caught up with, and
+           trimming by count would drop it. An overlap she can see is
+           recoverable; a message lost between two talks is not. */
+        const same = stored.length === list.length;
+        return { ...c, closed: true,
+          ...(same && cut > 0 ? { messages: stored.slice(0, cut) } : {}) };
+      }),
+      /* AND THE NEW TALK IS WRITTEN NOW, WITH THE TAIL ALREADY IN IT (235b).
+         Until this line the kept messages lived only in React state until the
+         next time she typed. If she stopped there — which is exactly when a
+         long talk ends — they were on screen and in no stored conversation at
+         all, and closing the app lost them. Rule 20, broken by the change that
+         was meant to save the thread, and caught by talkendcheck reading her
+         file rather than her screen. */
+      { id: freshId, date: coach.t, about: about || "open chat",
+        messages: tail.map((m) => ({ role: m.role, text: m.content,
+          ...(m.at ? { at: m.at } : {}),
+          ...(m.photoId ? { photoId: m.photoId } : {}),
+          ...(m.photoWas ? { photoWas: m.photoWas } : {}),
+          ...(m.cutOff ? { cutOff: true } : {}) })) }],
+      /* AND WHAT GOES INTO HIS MEMORY IS THE PART THAT LEFT THE SCREEN —
+         her words: "make sure that in his memory, he has the twenty five."
+         The tail is not folded here; it is still live, and folds with the
+         talk it is now part of. */
       unfolded: { at: Date.now(), date: coach.t, id: closing,
-        messages: list.map((m) => ({ role: m.role, text: m.content })) } }));
+        messages: head.map((m) => ({ role: m.role, text: m.content })) } }));
     return true;
   };
   /* THIS ONE WAS ALREADY RIGHT, and it is worth saying why (build 218).
@@ -26809,9 +26850,16 @@ Two or three sentences unless she asks for more.`;
       {rolled && (
         <div style={{ background: C.mint, borderRadius: 12, padding: "10px 13px", marginBottom: 12,
           fontSize: 12, lineHeight: 1.5, color: C.ink }}>
-          That talk reached {rolled.n} messages, so I have folded it into what I remember about you
-          and started a fresh one. Nothing is lost — it is under "earlier conversations" below, and
-          everything in it is still mine to draw on. This keeps what you pay for down.
+          {rolled.kept
+            ? <>That talk got long, so I have folded the first {rolled.n} into what I remember about
+                you — <strong>and kept the last {rolled.kept} right here</strong>, so we are still in
+                the middle of the same thing and you do not have to explain it again. Nothing is
+                lost: the folded part is under "earlier conversations" below and all of it is still
+                mine to draw on. This keeps what you pay for down.</>
+            : <>That talk reached {rolled.n} messages, so I have folded it into what I remember about
+                you and started a fresh one. Nothing is lost — it is under "earlier conversations"
+                below, and everything in it is still mine to draw on. This keeps what you pay for
+                down.</>}
         </div>
       )}
       {msgs.length === 0 && (
