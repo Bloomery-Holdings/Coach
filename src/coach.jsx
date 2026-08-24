@@ -1621,6 +1621,9 @@ const hasEntry = (e, k) => String((e && e[k]) ?? "").trim() !== "";
    without anyone remembering (rule 33). Everything that reads her HISTORY
    keeps reading the whole list, because a session she did keeps its name. */
 const libLive = (data) => ((data && data.library) || []).filter(isLive);
+/* the classes she attends in person — the OTHER kind of class (build 240);
+   see the note on `attended` in BLANK */
+const attendedLive = (data) => ((data && data.attended) || []).filter(isLive);
 const liveFields = (data) => ({
   weekly: (((data || {}).fields || {}).weekly || []).filter(isLive),
   monthly: (((data || {}).fields || {}).monthly || []).filter(isLive),
@@ -2358,12 +2361,13 @@ const reviewPayload = (data, coach, cut) => {
     if (!pgs.length) out.push("no programmes built yet");
     pgs.forEach((pg) => {
       out.push(`Programme: ${pg.area || "area"}${pg.mins ? ` — about ${pg.mins} min a list` : ""}${pg.line ? ` — ${pg.line}` : ""}`);
-      const doneIds = tickedListIds(pg, pg.lists || []);
+      if (pg.charter) out.push(`  THE TAB'S CHARTER — what it is about and the flow every list in it follows: ${pg.charter}`);
+      const tickDays = tickDatesByList(pg, pg.lists || []);
       [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))].forEach((li, li2) => {
         /* HER REPORT, 13 August: the coach could see list names and not what
            was inside them. Everything it wrote when it designed them now
            travels into the read that designs her month too. */
-        out.push(`  LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}${doneIds.has(li.id) ? " [ticked done]" : ""}`);
+        out.push(`  LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}${(tickDays[li.id] || []).length ? ` [done this round on ${tickDays[li.id].join(", ")}]` : ""}`);
         (li.exercises || []).forEach((x) => out.push(`    - ${[
           x.name || "exercise",
           x.dose ? `dose: ${x.dose}` : null,
@@ -4456,7 +4460,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "22 August 2026 · 238";
+const BUILD = "24 August 2026 · 240";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -4857,6 +4861,23 @@ const BLANK = {
   /* a conversation she left without navigating out — folded on the next open
      (build 213). Null when there is nothing waiting. */
   unfolded: null,
+  /* HER INSTRUCTION, 24 August: "Don't discard anything midchat. Sometimes I
+     have to exit for any reason, and when I come back, it gets very
+     frustrating to do the work all over again." The change-my-lists checklist
+     she has not yet applied or cancelled — { i, rows, talkId, savedOn }. It
+     lives in her file from the moment it exists, so leaving the chat, the
+     sheet or the whole app costs her nothing and the translation she paid
+     for is never paid for twice. Null when nothing is waiting. */
+  pendingEdits: null,
+  /* CLASSES SHE ATTENDS IN PERSON (build 240). Her words, 23 August: "A class
+     that I attend at a gym... cannot be prescribed by the coach, and I log it
+     in as a class. And a class that can be picked out from my workout list...
+     can be prescribed more than once by the coach." These are the first kind:
+     remembered so the second time is a tap, logged as the day's real session,
+     and NEVER in the library — the coach's closed world cannot reach them, so
+     nothing that prescribes can ever name one. Rows: { id, name, addedOn,
+     lastOn, status?, removedOn? } — removal is a set-aside (rule 20). */
+  attended: [],
   /* HER INSTRUCTION, 13 August: "Don't remove it. Keep it for the following
      day... Don't change it unless it's already done." The challenge she is
      currently carrying, offered once and kept until she does it. It lives
@@ -6504,6 +6525,14 @@ anything lands in. Through "change my lists" you can:
   · RENAME a tab, or a list
   · MOVE A WHOLE LIST FROM ONE TAB INTO ANOTHER, with its exercises, everything she logged
     against them, and the days she ticked it off
+  · MOVE A LIST EARLIER OR LATER IN ITS OWN TAB — "first", "last", "before X", "after X" —
+    and REORDER THE TABS themselves the same way
+  · MOVE A SINGLE EXERCISE from one list into another, with its history
+  · WRITE OR CHANGE A TAB'S CHARTER — the agreed statement of what the tab is about and the
+    flow its lists follow. When she agrees a flow with you, write it there so it is never
+    forgotten, whatever happens to this conversation
+  · write an exercise COMPLETE: sets, reps, hold, left-and-right sides with their own boxes,
+    band or weight or bodyweight, the machine it needs, and its timer counting up or down
   · ADD a list to a named tab — and put the exercises straight into it, so "make a tab called
     Mobility and put these eight in it" is ONE thing you do, not two you half-do
   · take a tab or a list off — set aside, dated, one tap back
@@ -15694,6 +15723,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
   };
   const [open, setOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  const [addingAttended, setAddingAttended] = useState(false); /* build 240 */
+  const [attendedName, setAttendedName] = useState("");
   const [clearing, setClearing] = useState(false);
   /* HER INSTRUCTION, 13 August: "Don't remove it. Keep it for the following
      day." A challenge picked from the date alone could not survive the
@@ -15759,6 +15790,55 @@ function Today({ data, setData, coach, setSheet, goTab }) {
     setChoosing(false);
   };
 
+  /* A CLASS SHE ATTENDED IS HISTORY, NOT INTENTION (build 240). She was in a
+     room and the class happened; logging it is telling us what she DID, so
+     the day counts the moment she says it — the past-day reasoning above,
+     which is the only reasoning an attended class can have. It counts
+     everywhere a session counts; the one place it never appears is the
+     prescribable pool, because it is not in the library and the coach's
+     closed world (rule: never invent a class) cannot reach past the library.
+     Minutes prefill from the last time she logged this class — her own
+     record, never a guess presented as one. */
+  const lastMinutesOf = (name) => {
+    const days = Object.keys(data.logs || {}).sort().reverse();
+    for (const d0 of days) {
+      const l = (data.logs || {})[d0];
+      if (l && l.type === name && String(l.minutes || "").trim()) return String(l.minutes);
+    }
+    return "";
+  };
+  /* ONE functional setData, not write() plus a second call: `write` spreads
+     the `data` snapshot captured at render, so anything else written in the
+     same tap is clobbered by it (found by attendedcheck, red before this).
+     write's two duties — stamping the coach's pick on the first write of the
+     day, and settling rest against a completed session — are carried here. */
+  const writeAttendedDay = (d, patch) => {
+    const existing = (d.logs || {})[t] || {};
+    const stamp = (t === coach.t && existing.prescribed === undefined && coach.prescribed?.name)
+      ? { prescribed: coach.prescribed.name } : {};
+    const settle = existing.rest ? { rest: false } : {};
+    return { ...(d.logs || {}), [t]: { ...existing, ...stamp, ...patch, ...settle } };
+  };
+  const chooseAttended = (a) => {
+    const mins = lastMinutesOf(a.name);
+    setData((d) => ({ ...d,
+      attended: (d.attended || []).map((x) => (x.id === a.id ? { ...x, lastOn: coach.t } : x)),
+      logs: writeAttendedDay(d, { type: a.name, minutes: mins, completed: true, attended: true }) }));
+    setChoosing(false); setAddingAttended(false); setAttendedName("");
+  };
+  const logAttendedNew = () => {
+    const name = attendedName.trim();
+    if (!name) return;
+    /* the same class said slightly differently joins its own record rather
+       than founding a twin — the lesson of the eleven tabs (build 222) */
+    const known = attendedLive(data).find((x) => nameKey(x.name) === nameKey(name));
+    if (known) { chooseAttended(known); return; }
+    setData((d) => ({ ...d,
+      attended: [...(d.attended || []), { id: newId(), name, addedOn: coach.t, lastOn: coach.t }],
+      logs: writeAttendedDay(d, { type: name, minutes: "", completed: true, attended: true }) }));
+    setChoosing(false); setAddingAttended(false); setAttendedName("");
+  };
+
   /* a Pilates class followed by stretching is two sessions, not one compromise */
   const extraSessions = log?.extraSessions || [];
   const addSession = (w) => {
@@ -15807,11 +15887,12 @@ function Today({ data, setData, coach, setSheet, goTab }) {
       type: undefined, minutes: undefined, completed: false,
       rpe: undefined, sets: undefined, during: undefined,
       energyAfter: undefined, sessionNote: undefined, did: undefined, when: undefined,
+      attended: undefined,   /* build 240: the flag goes aside with its session */
       voidedSession: {
         type: cur.type, minutes: cur.minutes, completed: cur.completed,
         rpe: cur.rpe, sets: cur.sets, during: cur.during,
         energyAfter: cur.energyAfter, sessionNote: cur.sessionNote,
-        did: cur.did, when: cur.when,
+        did: cur.did, when: cur.when, attended: cur.attended,
         voidedOn: coach.t, why: "she removed it from the day itself",
       },
     });
@@ -15825,7 +15906,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
       type: v.type, minutes: v.minutes, completed: v.completed,
       rpe: v.rpe, sets: v.sets, during: v.during,
       energyAfter: v.energyAfter, sessionNote: v.sessionNote,
-      did: v.did, when: v.when, voidedSession: undefined,
+      did: v.did, when: v.when, attended: v.attended, voidedSession: undefined,
     });
   };
   const totalMinutes = [Number(log?.minutes) || 0, ...extraSessions.map((x) => Number(x.minutes) || 0)]
@@ -16788,6 +16869,83 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     <span style={{ color: C.signal, fontSize: 15, flexShrink: 0 }}>→</span>
                   </button>
                 ))}
+
+                {/* ---- CLASSES SHE ATTENDS (build 240) ---------------------
+                     The other kind of class: taught to her in a room, on the
+                     gym's clock, not on demand — so the coach may never
+                     prescribe one, and it is not in the library. Logged here
+                     it IS the day's session, and it is remembered so the
+                     second time is a tap (the ownwork pattern she chose on
+                     16 August). */}
+                <div style={{ margin: "16px 0 2px" }}>
+                  <Eyebrow color={C.moss}>Classes you attend</Eyebrow>
+                </div>
+                <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 4 }}>
+                  Taught to you in a room — Pilates at the gym, a functional training class. It counts
+                  like any session; your coach sees it, and can never prescribe it.
+                </div>
+                {attendedLive(data).map((a) => (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                    borderBottom: `1px solid ${C.line}` }}>
+                    <button onClick={() => chooseAttended(a)} className="tap" style={{
+                      flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center",
+                      gap: 10, padding: "12px 2px", border: "none", background: "transparent",
+                      cursor: "pointer", textAlign: "left" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
+                        <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                          attended{a.lastOn ? ` · last ${dayAndMonth(a.lastOn)}` : ""}
+                        </div>
+                      </div>
+                      <span style={{ color: C.moss, fontSize: 15, flexShrink: 0 }}>→</span>
+                    </button>
+                    <button onClick={() => setData((d) => ({ ...d, attended: (d.attended || []).map((x) =>
+                        (x.id === a.id ? { ...x, status: "removed", removedOn: coach.t } : x)) }))}
+                      className="tap" style={{ border: "none", background: "transparent", cursor: "pointer",
+                        fontSize: 11, color: C.muted, padding: "4px 2px", flexShrink: 0 }}>remove</button>
+                  </div>
+                ))}
+                {/* SET ASIDE, AND ONE TAP BACK (rule 20) — the therapies
+                    pattern of build 199, on the same screen it came off */}
+                {(data.attended || []).filter((x) => x && x.status === "removed").map((a) => (
+                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8,
+                    padding: "7px 0", borderBottom: `1px solid ${C.line}` }}>
+                    <span style={{ flex: 1, fontSize: 11.5, color: C.muted }}>
+                      {a.name} was set aside{a.removedOn ? " on " + a.removedOn : ""}. Kept, not
+                      deleted — every session you logged against it still counts.
+                    </span>
+                    <button onClick={() => setData((d) => ({ ...d, attended: (d.attended || []).map((x) =>
+                        (x.id === a.id ? { ...x, status: undefined, removedOn: undefined } : x)) }))}
+                      className="tap" style={{ border: "1.5px solid " + C.moss, background: "transparent",
+                        color: C.moss, borderRadius: 9, padding: "5px 10px", cursor: "pointer",
+                        fontSize: 11, fontWeight: 600, fontFamily: "inherit", flexShrink: 0 }}>put it back</button>
+                  </div>
+                ))}
+                {addingAttended ? (
+                  <div style={{ marginTop: 10, padding: "12px 13px", background: C.chalk, borderRadius: 11 }}>
+                    <Field label="What is the class called?" unit="" type="text"
+                      value={attendedName} onChange={setAttendedName} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <Btn kind={attendedName.trim() ? "signal" : "quiet"} onClick={logAttendedNew}>
+                          {attendedName.trim() ? `Log ${attendedName.trim()}` : "Name it first"}
+                        </Btn>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <Btn kind="quiet" onClick={() => { setAddingAttended(false); setAttendedName(""); }}>Never mind</Btn>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setAddingAttended(true)} className="tap" style={{
+                    display: "block", width: "100%", textAlign: "left", padding: "12px 2px",
+                    border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: C.moss }}>+ a class you attended</div>
+                    <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
+                      not in your library — remembered, so next time it is one tap
+                    </div>
+                  </button>
+                )}
               </div>
             )}
           </Card>
@@ -25405,10 +25563,33 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
   /* HER INSTRUCTION, 13 August: "I need him to edit them too." */
   const [editingLists, setEditingLists] = useState(null);
   const [editsMade, setEditsMade] = useState(null);
+  /* THE CHECKPOINT (build 239): the translated operations, on screen, each one
+     tickable, BEFORE anything is applied. { i, rows: [{ c, say, on }] }
+
+     AND IT SURVIVES HER LEAVING (same build, her instruction: "Don't discard
+     anything midchat... when I come back, it gets very frustrating to do the
+     work all over again."). It is read from her file when the chat opens and
+     written to her file on every change — created, ticked, unticked, applied
+     or cancelled — so closing anything costs her nothing. */
+  const [pendingEdits, setPendingEditsState] = useState(() => {
+    const p = data && data.pendingEdits;
+    return p && Array.isArray(p.rows) && p.rows.length ? p : null;
+  });
+  const pendingRef = useRef(data && data.pendingEdits && Array.isArray(data.pendingEdits.rows)
+    && data.pendingEdits.rows.length ? data.pendingEdits : null);
+  const setPendingEdits = (v) => {
+    const next = typeof v === "function" ? v(pendingRef.current) : v;
+    const stamped = next
+      ? { ...next, talkId: next.talkId || sessionId.current, savedOn: next.savedOn || coach.t }
+      : null;
+    pendingRef.current = stamped;
+    setPendingEditsState(stamped);
+    setData((d) => ({ ...d, pendingEdits: stamped }));
+  };
   /* which branches the undo left alone because she had changed them herself */
   const [undoKept, setUndoKept] = useState(null);  /* { done[] , before } | { error } */
   const applyEdits = async (i) => {
-    if (editingLists !== null) return;
+    if (editingLists !== null || pendingEdits) return;
     setEditingLists(i); setEditsMade(null); setListMade(null);
     const editSpend = {};
     try {
@@ -25416,8 +25597,17 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         apiKey: data.settings?.apiKey,
         system: EDIT_LISTS_SYSTEM,
         usage: editSpend,
+        /* THE WHOLE CONVERSATION RIDES WITH IT (build 239). This call used to
+           receive ONE message — so "restructure it as we discussed" reached a
+           translator that had never seen the discussion, and the flow agreed
+           over ten messages was invisible to the step doing the work. Her
+           report: "sometimes done, sometimes done wrong, sometimes not done." */
         messages: [{ role: "user", content:
-          `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\nWHAT YOU JUST TOLD HER YOU WOULD CHANGE:\n${String(msgs[i]?.content || "")}` }],
+          `HER LISTS AS THEY STAND:\n${listInventory(data)}\n\n`
+          + `THE CONVERSATION THE CHANGE WAS AGREED IN — context only, see your instructions:\n`
+          + msgs.slice(0, i + 1).filter((m) => m && (m.role === "user" || m.role === "assistant"))
+              .map((m) => `${m.role === "user" ? "SHE SAID" : "YOU SAID"}: ${String(m.content || "")}`).join("\n\n")
+          + `\n\nTHE MESSAGE SHE TAPPED — turn THESE changes into operations:\n${String(msgs[i]?.content || "")}` }],
         maxTokens: Math.max(1000, Number(formulas(data.settings).editTokens) || 3000),
         secs: formulas(data.settings).callSecs,
       });
@@ -25426,6 +25616,47 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
         return;
       }
+/* THE CHECKPOINT MOVED (build 239, her words: "sometimes done, sometimes
+         done wrong, sometimes not done"). What she approved used to be the
+         coach's PROSE, while what executed was this call's unchecked reading
+         of it — the gap between the two is where every wrong application
+         lived. The operations now come back on screen first, in plain words,
+         each one tickable, and what she approves is LITERALLY what executes.
+         Nothing is touched until she applies; commitEdits below is the old
+         apply, unchanged, run on the rows she leaves ticked. */
+      setPendingEdits({ i, rows: out.changes.map((c) => ({ c, say: sayChange(c, dataRef.current || data), on: true })) });
+    } catch (e) {
+      const why = String((e && e.message) || e || "unknown");
+      setEditsMade({ error: why === "no-key"
+        ? "This one needs your Anthropic key, which lives in Settings."
+        : why === "timed-out"
+        ? "That took too long and I stopped waiting, so nothing has changed. It is usually the connection or a very large set of lists. Tap it again — and you can give it longer under the formulas in Settings if this keeps happening."
+        : why === "no-connection"
+        ? "I couldn't reach your coach at all — that is the connection, not your lists. Nothing has changed. Tap it again when you have signal."
+        : `I could not apply that. Nothing has changed. What came back: "${why}"` });
+    } finally {
+      /* HER REPORT, 16 August: it said "changing your lists…" and stopped.
+         This used to sit outside the try, so a promise that never settled —
+         and there was no timeout anywhere in the app — left the button in a
+         state it could not leave. Rule 11: a control must be able to come
+         back. */
+      /* recorded whether it worked or not — a failed call still cost her */
+      noteSpend(setData, "edit", editSpend, coach.t);
+      setEditingLists(null);
+    }
+  };
+  /* THE APPLY, AFTER HER TICK (build 239). Everything in here ran inside
+     applyEdits until this build; it is the same pipeline, run on the rows she
+     left ticked. Snapshots are taken HERE, at commit time, so Undo restores
+     the file as it was the moment she applied (build 218's fix, carried). */
+  const commitEdits = () => {
+    const rows0 = (pendingEdits && pendingEdits.rows) || [];
+    const changes = rows0.filter((r) => r.on).map((r) => r.c);
+    setPendingEdits(null);
+    if (!changes.length) {
+      setEditsMade({ error: "Nothing was applied — every change was unticked. Your lists are exactly as they were." });
+      return;
+    }
       /* WHAT IT LOOKED LIKE BEFORE — and, from build 199, what the edit
          PRODUCED as well, because undoing needs both.
 
@@ -25462,10 +25693,10 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       const before = JSON.parse(JSON.stringify({ bodywork: now218.bodywork || [],
         drills: now218.drills || [], goals: now218.goals || [], mobTests: now218.mobTests || [],
         fields: now218.fields || {}, library: now218.library || [], issues: now218.issues || [] }));
-      const legacy = (out.changes || []).filter((c) => !c.where);
+      const legacy = (changes || []).filter((c) => !c.where);
       /* build 222: areas and lists are their own shape, applied by bwOps */
-      const shape = (out.changes || []).filter((c) => c && (c.where === "area" || c.where === "list"));
-      const registry = (out.changes || []).filter((c) => c.where && c.where !== "area" && c.where !== "list");
+      const shape = (changes || []).filter((c) => c && (c.where === "area" || c.where === "list" || c.where === "exercise"));
+      const registry = (changes || []).filter((c) => c.where && c.where !== "area" && c.where !== "list" && c.where !== "exercise");
       const { bodywork, drills, goals, mobTests, done } = applyListEdits(now218, legacy, coach.t);
       /* HER INSTRUCTION, 13 August: everything, not just the lists. */
       /* the shape changes go first, so a list the coach adds is there for an
@@ -25503,25 +25734,6 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         goals: after.data.goals || [], mobTests: after.data.mobTests || [],
         fields: after.data.fields || {}, library: after.data.library || [],
         issues: after.data.issues || [] })) });
-    } catch (e) {
-      const why = String((e && e.message) || e || "unknown");
-      setEditsMade({ error: why === "no-key"
-        ? "This one needs your Anthropic key, which lives in Settings."
-        : why === "timed-out"
-        ? "That took too long and I stopped waiting, so nothing has changed. It is usually the connection or a very large set of lists. Tap it again — and you can give it longer under the formulas in Settings if this keeps happening."
-        : why === "no-connection"
-        ? "I couldn't reach your coach at all — that is the connection, not your lists. Nothing has changed. Tap it again when you have signal."
-        : `I could not apply that. Nothing has changed. What came back: "${why}"` });
-    } finally {
-      /* HER REPORT, 16 August: it said "changing your lists…" and stopped.
-         This used to sit outside the try, so a promise that never settled —
-         and there was no timeout anywhere in the app — left the button in a
-         state it could not leave. Rule 11: a control must be able to come
-         back. */
-      /* recorded whether it worked or not — a failed call still cost her */
-      noteSpend(setData, "edit", editSpend, coach.t);
-      setEditingLists(null);
-    }
   };
   const [listing, setListing] = useState(null);   /* index being turned into a list */
   const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
@@ -25614,8 +25826,7 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         messages: [{ role: "user", content:
           'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
           + 'exactly, unless none of them could honestly hold this list:\n'
-          + (((data.bodywork || []).filter((pg) => pg && pg.status !== "removed")
-              .map((pg) => '  "' + (pg.area || "") + '"').join('\n')) || '  (she has none yet)')
+          + tabsWithCharters(data)
           + '\n\nWHAT I WROTE FOR HER:\n' + String(msgs[i]?.content || "") }],
         maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
         usage: listSpend,
@@ -26113,10 +26324,10 @@ ${(() => {
        against a knee rule — so everything the coach wrote when it designed
        them travels now: dose, tool, targets and the how. No caps (rule 15). */
     const allLists = [...(pg.lists || []), ...((pg.rounds || []).flatMap((r) => r.lists || []))];
-    const doneIds = tickedListIds(pg, pg.lists || []);
+    const tickDays = tickDatesByList(pg, pg.lists || []);
     const lists = allLists.map((li, li2) => {
       const head = `      LIST ${li.n || li2 + 1}: "${li.title || "untitled"}"${li.focus ? ` — ${li.focus}` : ""}`
-        + `${doneIds.has(li.id) ? " [she has ticked this one done]" : ""}`;
+        + `${(tickDays[li.id] || []).length ? ` [she ticked this done on ${tickDays[li.id].join(", ")}]` : ""}`;
       /* HER INSTRUCTION, 16 August, looking at a payload where this section
          was 27,485 words — 66% of everything sent on every message: "I don't
          need the how it is done paragraph on any exercise."
@@ -26140,6 +26351,7 @@ ${(() => {
     const exCount = allLists.reduce((a, l) => a + (l.exercises || []).length, 0);
     return `  * AREA: ${pg.area || "area"}${pg.mins ? ` — about ${pg.mins} min a list` : ""} — `
       + `${allLists.length} lists, ${exCount} exercises in total, logged on ${days} day${days === 1 ? "" : "s"}`
+      + `${pg.charter ? `\n      THE TAB'S CHARTER — what it is about and the flow every list in it follows. FOLLOW IT: ${pg.charter}` : ""}`
       + `${pg.line ? `\n      what you said it was for: ${pg.line}` : ""}\n${lists}`;
   }).join("\n");
 })()}
@@ -26524,11 +26736,22 @@ Two or three sentences unless she asks for more.`;
   const dataRef = useRef(data);
   useEffect(() => { dataRef.current = data; }, [data]);
 
+  /* the fold that arrives while one is in flight waits here for its turn */
+  const foldQueue = useRef(null);
+  /* RETURNS true ONLY WHEN THE FOLD LANDED (build 239) — or when there was
+     truly nothing to fold. false means "not folded": the caller must keep its
+     mark so the fold is retried, because a mark cleared on a fold that never
+     landed is a conversation gone from the memory for ever, in silence. That
+     is her "I figured that I'm talking with a new coach after one hundred and
+     eighty seven messages". */
   const foldMemory = async (allMsgs) => {
-    if (folding.current) return;
+    /* QUEUED, NEVER DROPPED (build 239). A fold requested while one was in
+       flight used to vanish — and a busy talk is exactly when one is in
+       flight. */
+    if (folding.current) { foldQueue.current = allMsgs; return false; }
     const live = dataRef.current || data;
     const key = live.settings?.apiKey;
-    if (!key && !insideClaude()) return;
+    if (!key && !insideClaude()) return false;
 
     /* NOTHING NEW COSTS NOTHING (audit finding 4). When the delta was empty
        this still called the model — handing it "(nothing has happened since
@@ -26542,9 +26765,10 @@ Two or three sentences unless she asks for more.`;
     const mem = live.memory || {};
     if (String(mem.text || "").trim()
       && !String(memoryDelta(live, mem.upto, coach.t) || "").replace(/\(nothing has happened since then\.\)/, "").trim()
-      && !(allMsgs || []).some((m) => m && m.role === "user")) return;
+      && !(allMsgs || []).some((m) => m && m.role === "user")) return true;
 
     folding.current = true;
+    let okFold = false;
     /* OUTSIDE the try, because `finally` records what it spent and a binding
        declared inside the try is not in scope there. */
     const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
@@ -26567,7 +26791,7 @@ Two or three sentences unless she asks for more.`;
         system: MEMORY_SYSTEM + memorySpanRule(live.settings?.memoryScope),
         messages: [{ role: "user", content: memoryInput(withChat, coach) }],
       });
-      if (!text || !String(text).trim()) return;      /* rule 23: no fold is not an empty fold */
+      if (!text || !String(text).trim()) return false;  /* rule 23: no fold is not an empty fold */
       /* THE ONE-CHARACTER FAULT THAT COST HER EVERY EVENING (build 202;
          audit finding 3).
 
@@ -26593,6 +26817,7 @@ Two or three sentences unless she asks for more.`;
          addDays(m.upto, 1) and then passes m.upto. Someone reasoned about
          this boundary and the reasoning did not reach the filter. */
       setData((d) => ({ ...d, memory: foldedMemory(d.memory, text, foldUpto(coach.t), coach.t, spent, formulas(live.settings)) }));
+      okFold = true;
     } catch (e) {
       /* silent to her, deliberately: she asked a training question and got an
          answer. The memory simply stays where it was and catches up next time. */
@@ -26603,7 +26828,10 @@ Two or three sentences unless she asks for more.`;
          landing only in `data.memory.cost`, which the total never read. */
       noteSpend(setData, "memory", spent, coach.t);
       folding.current = false;
+      /* the fold that queued while this one ran gets its turn now */
+      if (foldQueue.current) { const q = foldQueue.current; foldQueue.current = null; foldMemory(q); }
     }
+    return okFold;
   };
   /* HER REPORT, 17 August. Stamped on every send so the mic knows what she has
      already said is spoken for. */
@@ -26839,14 +27067,23 @@ Two or three sentences unless she asks for more.`;
   useEffect(() => () => {
     if ((data.settings?.memoryFold || "conversation") !== "message"
       && (msgsRef.current || []).some((m) => m.role === "user")) {
+      /* THE MARK GOES DOWN FIRST (build 239). A tidy exit used to clear the
+         mark whether or not the fold it fired ever landed — so a fold that
+         failed took the whole conversation out of the coach's memory, for
+         ever, in silence. The mark is written before the fold and cleared
+         only by its success; a failed fold leaves it, and the next open
+         retries it. */
+      markUnfolded();
       foldedRef.current = true;
-      foldMemory(msgsRef.current);
-      /* A TIDY EXIT SUPERSEDES ITS OWN MARK. She may have backgrounded the app
-         mid-conversation — which wrote a mark — and then navigated out
-         properly, which folds. Leaving the mark would fold the same
-         conversation again on the next open, at her cost and for nothing. */
-      setData((d) => (d && d.unfolded && d.unfolded.id === sessionId.current
-        ? { ...d, unfolded: null } : d));
+      foldMemory(msgsRef.current).then((ok) => {
+        if (!ok) return;   /* not folded — the mark stays for the next open */
+        /* A TIDY EXIT SUPERSEDES ITS OWN MARK. She may have backgrounded the app
+           mid-conversation — which wrote a mark — and then navigated out
+           properly, which folds. Leaving the mark would fold the same
+           conversation again on the next open, at her cost and for nothing. */
+        setData((d) => (d && d.unfolded && d.unfolded.id === sessionId.current
+          ? { ...d, unfolded: null } : d));
+      });
     }
   }, []);
 
@@ -26865,8 +27102,16 @@ Two or three sentences unless she asks for more.`;
     if (un.id && un.id === sessionId.current) return;   /* this very conversation, still open */
     if (caughtUp.current === (un.id || un.at)) return;  /* already handled; the clear is in flight */
     caughtUp.current = un.id || un.at;
-    foldMemory((un.messages || []).map((m) => ({ role: m.role, content: m.text })));
-    setData((d) => ({ ...d, unfolded: null }));
+    /* CLEARED ONLY BY SUCCESS (build 239). The mark used to be cleared the
+       moment the fold was FIRED — so a fold that failed, or was skipped
+       because another was in flight, lost those messages from the memory
+       with nothing left to retry from. A fold that did not land now leaves
+       the mark and releases the guard, so it is tried again — at the latest
+       on the next open. */
+    foldMemory((un.messages || []).map((m) => ({ role: m.role, content: m.text }))).then((ok) => {
+      if (ok) { setData((d) => ({ ...d, unfolded: null })); }
+      else { caughtUp.current = null; }
+    });
   }, [data.unfolded]);
 
   const openers = [
@@ -27346,6 +27591,49 @@ Two or three sentences unless she asks for more.`;
             )}
           </div>
         ))}
+        {pendingEdits && (
+          <div style={{ background: C.card, border: `1.5px solid ${C.signal}`, borderRadius: 12,
+            padding: "12px 14px", marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              What I am about to change — nothing is done yet:
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 8, lineHeight: 1.5 }}>
+              Untick anything that is wrong, then apply. What you approve here is exactly what
+              happens — nothing more, nothing else.
+            </div>
+            {pendingEdits.talkId && pendingEdits.talkId !== sessionId.current && (
+              <div style={{ fontSize: 11, color: C.moss, marginBottom: 8 }}>
+                Kept from an earlier visit{pendingEdits.savedOn ? ` (${pendingEdits.savedOn})` : ""} — nothing was lost while you were away.
+              </div>
+            )}
+            {pendingEdits.rows.map((r, k) => (
+              <button key={k} className="tap" onClick={() => setPendingEdits((p) => (p ? { ...p,
+                  rows: p.rows.map((x, k2) => (k2 === k ? { ...x, on: !x.on } : x)) } : p))}
+                style={{ display: "flex", alignItems: "flex-start", gap: 8, width: "100%",
+                  textAlign: "left", border: "none", background: "transparent", cursor: "pointer",
+                  padding: "6px 0", fontFamily: "inherit" }}>
+                <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 5, marginTop: 1,
+                  border: `1.5px solid ${r.on ? C.moss : C.line}`,
+                  background: r.on ? C.moss : "transparent", color: C.chalk,
+                  fontSize: 12, lineHeight: "16px", textAlign: "center" }}>{r.on ? "✓" : ""}</span>
+                <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.5,
+                  color: r.on ? C.ink : C.muted,
+                  textDecoration: r.on ? "none" : "line-through" }}>{r.say}</span>
+              </button>
+            ))}
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <div style={{ flex: 1 }}>
+                <Btn kind="signal" onClick={commitEdits}>
+                  {(() => { const k = pendingEdits.rows.filter((r) => r.on).length;
+                    return k === 0 ? "Apply nothing" : k === 1 ? "Apply this change" : `Apply these ${k} changes`; })()}
+                </Btn>
+              </div>
+              <div style={{ flex: 1 }}>
+                <Btn kind="quiet" onClick={() => setPendingEdits(null)}>Cancel — change nothing</Btn>
+              </div>
+            </div>
+          </div>
+        )}
         {editsMade && (
           <div style={{ background: editsMade.error ? C.pist : C.mint, borderRadius: 12,
             padding: "12px 14px", marginTop: 8, fontSize: 12.5, lineHeight: 1.55, color: C.ink }}>
@@ -29282,6 +29570,14 @@ WHAT GOES IN
 5. WHAT YOU HAVE CONCLUDED AND WHAT IS STILL OPEN. What you decided and why, what you are watching,
    what you got wrong and corrected.
 
+6. WHERE YOU LEFT OFF — MANDATORY, AND THE FIRST THING TO UPDATE. The working state of whatever
+   you and she are in the middle of: what was being designed or edited (a list, a tab, a battery,
+   a programme), what was AGREED — a tab's flow, an ordering, a naming, a plan — what is half
+   done, and what the next step was. A conversation that is cut mid-way MUST be resumable from
+   this section alone: she has paid for those messages once and must never have to say them
+   again. Keep it current — replace it each time, drop what is finished — and keep it concrete:
+   name the tab, name the lists, state the flow.
+
 WHAT STAYS OUT
 - Anything that has not changed and was already in the memory.
 - Any number you were not given. Never estimate, never round something into existence.
@@ -29317,6 +29613,11 @@ RULES.
   at all — an existing tab is almost always right. Invent a new name ONLY when none of
   hers could honestly hold it, because a new name makes a new tab, and she has ended up
   with tabs she never chose that way.
+- WHERE A TAB CARRIES A CHARTER (shown beside its name), any list you place in it MUST
+  follow that charter — its flow, its order, its tools. The charter is the agreement;
+  a list that ignores it is wrong even if the exercises are good.
+- A list's TITLE says what the list IS, in four or five plain words she would use herself
+  — never a name that reads like one she already has.
 
 YOU DECIDE WHICH TAB EACH LIST GOES IN, AND YOU MAY MAKE MORE THAN ONE LIST (build 225).
 Until this build one message could only ever become ONE list in ONE tab, so shoulder work,
@@ -29362,10 +29663,71 @@ bodyweight is "none".`;
    no dose the app could read. bodyInventory then showed the model its own
    blanks on the next turn, so it never had a reason to think anything was
    wrong. They are in the schema now, and shapeLists already reads them. */
+/* WHAT AN OPERATION WILL DO, IN HER WORDS, BEFORE IT IS DONE (build 239).
+   Rendered from the operation alone — nothing in here applies anything. Ids
+   resolve to names where they can, because an id means nothing to her. */
+const sayChange = (c, d) => {
+  if (!c) return "an empty change (it will do nothing)";
+  const why = c.why ? ` — ${c.why}` : "";
+  const listName = (want) => {
+    for (const pg of ((d && d.bodywork) || [])) {
+      for (const l of ((pg && pg.lists) || [])) {
+        if (l && (String(l.id) === String(want) || String(l.n) === String(want))) return `"${l.title}" in "${pg.area}"`;
+      }
+    }
+    return `"${want}"`;
+  };
+  const exName = (want) => {
+    for (const pg of ((d && d.bodywork) || [])) {
+      for (const l of ((pg && pg.lists) || [])) {
+        for (const x of ((l && l.exercises) || [])) {
+          if (x && String(x.id) === String(want)) return `${x.name} (in "${l.title}")`;
+        }
+      }
+    }
+    const dr = ((d && d.drills) || []).find((x) => x && String(x.id) === String(want));
+    return dr ? dr.label : String(want || "");
+  };
+  if (!c.where) {
+    if (c.op === "remove") return `take ${exName(c.exercise)} off its list — set aside, reversible${why}`;
+    if (c.op === "dose") return `change the dose of ${exName(c.exercise)} to "${c.dose}"${why}`;
+    if (c.op === "how") return `rewrite how you do ${exName(c.exercise)}${why}`;
+    if (c.op === "replace") return `replace ${exName(c.exercise)} with ${(c.with && c.with.name) || "a new exercise"}${c.with && c.with.sides === "lr" ? " (left and right, own boxes)" : ""}${why}`;
+    if (c.op === "add") return `add ${(c.with && c.with.name) || "an exercise"}${c.with && c.with.sides === "lr" ? " (left and right, own boxes)" : ""} to the list ${listName(c.list)}${why}`;
+    return `${c.op || "change"} ${exName(c.exercise || "")}${why}`;
+  }
+  if (c.where === "area") {
+    if (c.op === "add") return `make a new tab, "${c.name}"${why}`;
+    if (c.op === "rename") return `rename the tab "${c.target}" to "${c.name}"${why}`;
+    if (c.op === "charter") return `write the charter of the tab "${c.target}": "${c.charter}"${why}`;
+    if (c.op === "reorder") return `move the tab "${c.target}" ${c.to}${why}`;
+    if (c.op === "remove") return `take the whole tab "${c.target}" off — set aside, reversible${why}`;
+    if (c.op === "restore") return `put the tab "${c.target}" back${why}`;
+  }
+  if (c.where === "list") {
+    if (c.op === "add") return `add a list "${c.name || "untitled"}" to the tab "${c.area || c.target}"${Array.isArray(c.exercises) && c.exercises.length ? ` with ${c.exercises.length} exercise${c.exercises.length === 1 ? "" : "s"} in it` : ""}${why}`;
+    if (c.op === "rename") return `rename the list "${c.target}" to "${c.name}"${why}`;
+    if (c.op === "move") return `move the list "${c.target}" into the tab "${c.to}"${why}`;
+    if (c.op === "reorder") return `move the list "${c.target}" ${c.to}${why}`;
+    if (c.op === "remove") return `take the list "${c.target}" off — set aside, reversible${why}`;
+    if (c.op === "restore") return `put the list "${c.target}" back${why}`;
+  }
+  if (c.where === "exercise") return `move the exercise "${c.target}" into the list "${c.to}"${why}`;
+  if (c.op === "set") return `change the ${c.where} "${c.target}": ${Object.keys(c.fields || {}).map((k) => `${k} becomes ${String((c.fields || {})[k])}`).join(", ") || "nothing named"}${why}`;
+  if (c.op === "add") return `add a new ${c.where}${c.fields && (c.fields.label || c.fields.name) ? ` "${c.fields.label || c.fields.name}"` : ""}${why}`;
+  if (c.op === "remove") return `take the ${c.where} "${c.target}" off — set aside, reversible${why}`;
+  if (c.op === "restore") return `put the ${c.where} "${c.target}" back${why}`;
+  return `${c.op || "change"} the ${c.where} "${c.target || ""}"${why}`;
+};
+
 const EDIT_LISTS_SYSTEM = `You are turning a change you have ALREADY described to her, in
 conversation, into exact operations on her Body-page lists.
 
 You will be given every programme, every list and every exercise, each with its id.
+You are also given THE CONVERSATION the change was agreed in. It is CONTEXT — it tells you what
+the tapped message means: the flow she asked for, the ordering, the corrections she made (her
+LAST word stands where they differ). It is never a source of extra changes: operations come ONLY
+from the message she tapped.
 
 RULES.
 - Use ONLY ids that appear in what you are given. Never invent one.
@@ -29395,17 +29757,22 @@ Return ONLY a JSON object, no prose, no code fence:
     { "op": "how", "exercise": "<exercise id>", "how": "...", "why": "..." },
     { "op": "replace", "exercise": "<exercise id>", "why": "...",
       "with": { "name": "...", "tool": "...", "dose": "...", "sets": "3", "reps": "10",
-                "hold": "", "sides": "each|one", "loadKind": "weight|band|none",
+                "hold": "", "sides": "empty for straight through, 'each' for both sides one number, 'lr' when left and right need their OWN numbers — use 'lr' whenever her weaker side matters. NEVER two separate exercises for the two sides of one movement",
+                "loadKind": "weight|band|none", "machine": "the machine it needs, or empty",
+                "timer": "down for a hold, up for a rep test, empty for neither",
                 "mins": 2, "search": "...",
                 "video": "", "how": "...", "targets": "..." } },
     { "op": "add", "list": "<list id>", "why": "...",
       "with": { "name": "...", "tool": "...", "dose": "...", "sets": "3", "reps": "10",
-                "hold": "", "sides": "each|one", "loadKind": "weight|band|none",
+                "hold": "", "sides": "empty for straight through, 'each' for both sides one number, 'lr' when left and right need their OWN numbers — use 'lr' whenever her weaker side matters. NEVER two separate exercises for the two sides of one movement",
+                "loadKind": "weight|band|none", "machine": "the machine it needs, or empty",
+                "timer": "down for a hold, up for a rep test, empty for neither",
                 "mins": 2, "search": "...",
                 "video": "", "how": "...", "targets": "..." } },
 
     { "where": "area", "op": "add", "name": "Mobility and flexibility", "why": "..." },
     { "where": "area", "op": "rename", "target": "<the tab's name now>", "name": "<the new name>", "why": "..." },
+    { "where": "area", "op": "charter", "target": "<the tab's name>", "charter": "<what the tab is about and the flow its lists follow>", "why": "..." },
     { "where": "area", "op": "remove|restore", "target": "<the tab's name>", "why": "..." },
 
     { "where": "list", "op": "add", "area": "<the tab it goes in>", "name": "<what the list is called>",
@@ -29413,6 +29780,9 @@ Return ONLY a JSON object, no prose, no code fence:
       "why": "..." },
     { "where": "list", "op": "rename", "target": "<the list's name now>", "name": "<the new name>", "why": "..." },
     { "where": "list", "op": "move", "target": "<the list's name>", "to": "<the tab to move it into>", "why": "..." },
+    { "where": "list", "op": "reorder", "target": "<the list's name>", "to": "first|last|before <another list in the same tab>|after <another list>", "why": "..." },
+    { "where": "area", "op": "reorder", "target": "<the tab's name>", "to": "first|last|before <another tab>|after <another tab>", "why": "..." },
+    { "where": "exercise", "op": "move", "target": "<the exercise's id or exact name>", "to": "<the list it moves into>", "why": "..." },
     { "where": "list", "op": "remove|restore", "target": "<the list's name>", "why": "..." },
 
     { "where": "drill|weekly|monthly|mobility|class|goal", "op": "remove",
@@ -29429,6 +29799,10 @@ which applied nothing at all, twice, while she waited and paid. You can do all o
 
   where="area"  op="add"      makes a NEW TAB on her Body page, empty. Give it a name.
   where="area"  op="rename"   renames a tab. Everything in it is untouched.
+  where="area"  op="charter"  writes or replaces the tab's CHARTER — what the tab is about and
+                              the flow its lists follow. When she agrees a flow with you in
+                              conversation, WRITE IT HERE, in the same set of changes — a charter
+                              in her data is never forgotten; a conversation is.
   where="area"  op="remove"   sets a whole tab aside — kept, dated, she can put it back.
   where="list"  op="add"      makes a new list inside a tab you name in "area" — and you may put
                               the exercises straight into it, so "make a tab called Mobility and
@@ -29437,6 +29811,13 @@ which applied nothing at all, twice, while she waited and paid. You can do all o
   where="list"  op="move"     MOVES A LIST INTO ANOTHER TAB, with its exercises, everything she
                               logged against them, and the days she ticked it off.
   where="list"  op="remove"   sets a list aside — kept whole, one tap back.
+  where="list"  op="reorder"  MOVES A LIST EARLIER OR LATER IN ITS OWN TAB. "to" is "first",
+                              "last", "before <list>" or "after <list>". This is how "put the
+                              standing list before the kneeling one" is done — until this build
+                              there was NO operation for it, and her asking ended in nothing.
+  where="area"  op="reorder"  reorders the TABS themselves, the same way.
+  where="exercise" op="move"  moves ONE EXERCISE into another list, whole — it keeps its id, so
+                              everything she ever logged against it follows it.
 
 Name a tab or a list by the words she sees. If a name fits two of them, NOTHING happens rather
 than the wrong one being changed — and she is now TOLD which two, so say the name exactly.
@@ -29447,6 +29828,16 @@ prompt told you not to use one, so when two of her tabs read alike there was no 
 reached either — and her tabs are named similarly, her words, 20 August. A name is what she reads
 and is the friendlier thing to use; where it fits two, the id reaches exactly one. Put it in
 "target", "area" or "to". Always say the NAME in your "why", because the id means nothing to her.
+
+A TAB MAY CARRY A CHARTER, shown beside it in what you are given: the agreed statement of what
+the tab is about and the flow its lists follow (for example: whole body — standing, then
+kneeling, then sitting, then lying, then the tools). EVERYTHING you add, reorder or rebuild in a
+chartered tab MUST follow its charter. Where a change she asks for contradicts the charter, say
+so and ask which gives way — never silently ignore either.
+
+NAME THINGS SO SHE CAN TELL THEM APART. Never give a tab a name similar to one she already has
+— her tabs have ended up nearly identical, her words, 20 August. A list's name says what the
+list IS, in four or five plain words she would use herself.
 
 TIDYING HER TABS IS A REAL JOB AND YOU CAN NOW DO IT. She has ended up with tabs she did not
 choose, because until this build every list you wrote founded a new one. If she asks you to
@@ -29483,6 +29874,12 @@ test is set aside, dated, keeps every reading under it, and she can put it back.
 Removing is never deleting: it is set aside, dated, and she can put it back.`;
 
 /* Every list and exercise with its id, so the change can be aimed exactly. */
+/* the tabs, each with its charter, for the message "put these on my Body
+   page" sends (build 239) — hoisted out of makeList so the wiring check that
+   scans makeList's head keeps seeing its updater (suite 51). */
+const tabsWithCharters = (data) => (((data.bodywork || []).filter((pg) => pg && pg.status !== "removed")
+  .map((pg) => '  "' + (pg.area || "") + '"' + (pg.charter ? ' — charter: ' + pg.charter : "")).join("\n")) || '  (she has none yet)');
+
 const listInventory = (data) => [bodyInventory(data), registryInventory(data)]
   .filter(Boolean).join("\n\n") || "she has no lists yet";
 
@@ -29775,7 +30172,9 @@ const bodyInventory = (data) => (data.bodywork || [])
        the beginning; areas carried only a name, so two tabs that read alike
        could not be told apart by any form of words — and her tabs read alike.
        Her report, 20 August: "the tabs are named similarly." */
-    return `AREA id=${pg.id} "${pg.area}"\n` + all.map((li) =>
+    return `AREA id=${pg.id} "${pg.area}"\n`
+      + (pg.charter ? `  CHARTER — the agreed intent and flow of this tab; anything you add, reorder or rebuild in it must follow this: "${pg.charter}"\n` : "")
+      + all.map((li) =>
       `  LIST id=${li.id} n=${li.n} "${li.title}"\n` + (li.exercises || [])
         .filter((x) => x.status !== "removed")
         .map((x) => `    id=${x.id} "${x.name}" dose="${x.dose || ""}" targets="${x.targets || ""}"`)
@@ -29830,6 +30229,31 @@ const applyShapeEdits = (data, changes, today) => {
       ? `could not ${verb}: you have ${hits.length} lists that answer to "${want}" — ${hits.map((h) => `"${h.l.title}" in "${h.pg.area}"`).join(", ")}. I changed none of them rather than the wrong one. Say which tab it is in and it is done.`
       : `could not ${verb}: nothing on your Body page is called "${want}". Nothing was changed.` });
   };
+  /* "first", "last", "before <name>" or "after <name>" — the only orders the
+     schema offers, so anything else is reported rather than guessed at. */
+  const parseTo = (to) => {
+    const t = String(to || "").trim().toLowerCase();
+    if (t === "first" || t === "top") return { kind: "first" };
+    if (t === "last" || t === "bottom" || t === "end") return { kind: "last" };
+    const m = t.match(/^(before|after)\s+(.+)$/);
+    if (m) return { kind: m[1], name: m[2] };
+    return null;
+  };
+  /* live rows reordered; set-aside rows keep their slots in the file exactly
+     the way bwOps.moveList keeps them (rule 20) */
+  const reorderLive = (all, liveMatch, movedId, at) => {
+    const liveIdx = all.map((x, i2) => (x && liveMatch(x) ? i2 : -1)).filter((i2) => i2 >= 0);
+    const liveRows = liveIdx.map((i2) => all[i2]);
+    const from = liveRows.findIndex((x) => x.id === movedId);
+    if (from < 0 || at < 0) return null;
+    const moved = liveRows[from];
+    const order = liveRows.filter((x) => x.id !== movedId);
+    const insertAt = Math.max(0, Math.min(order.length, at > from ? at - 1 : at));
+    order.splice(insertAt, 0, moved);
+    const next = all.slice();
+    liveIdx.forEach((slot, k2) => { next[slot] = order[k2]; });
+    return next;
+  };
   const findList = (pg, want, off) => {
     const pool = (pg.lists || [])
       .filter((l) => l && (off ? l.status === "removed" : l.status !== "removed"));
@@ -29838,7 +30262,7 @@ const applyShapeEdits = (data, changes, today) => {
   };
 
   (changes || []).forEach((c) => {
-    if (!c || c.where !== "area" && c.where !== "list") return;
+    if (!c || (c.where !== "area" && c.where !== "list" && c.where !== "exercise")) return;
 
     if (c.where === "area") {
       if (c.op === "add") {
@@ -29861,6 +30285,9 @@ const applyShapeEdits = (data, changes, today) => {
         const to = String(c.name).trim();
         out = bwOps.renameArea(out, pg.id, to);
         done.push({ what: `renamed the tab "${pg.area}" to "${to}"`, why: c.why || "" });
+      } else if (c.op === "charter" && String(c.charter || "").trim()) {
+        out = bwOps.setCharter(out, pg.id, String(c.charter).trim());
+        done.push({ what: `wrote the charter of "${pg.area}" — every list added, reordered or redesigned there follows it from now on`, why: c.why || "" });
       } else if (c.op === "remove") {
         out = { ...out, bodywork: (out.bodywork || []).map((p) =>
           (p.id === pg.id ? { ...p, status: "removed", removedOn: today } : p)) };
@@ -29868,7 +30295,62 @@ const applyShapeEdits = (data, changes, today) => {
       } else if (c.op === "restore") {
         out = bwOps.putAreaBack(out, pg.id);
         done.push({ what: `put the tab "${pg.area}" back`, why: c.why || "" });
+      } else if (c.op === "reorder") {
+        const to = parseTo(c.to);
+        if (!to) { done.push({ missed: true, why: "", what: `could not reorder the tab "${pg.area}": "${String(c.to || "")}" is not an order I can read — say "first", "last", "before <tab>" or "after <tab>".` }); return; }
+        const live = areas();
+        const at = to.kind === "first" ? 0 : to.kind === "last" ? live.length - 1 : (() => {
+          const j = findAreaLike(live, to.name);
+          return j < 0 ? -1 : (to.kind === "before" ? j : j + 1);
+        })();
+        if (at < 0) { missArea(`move the tab "${pg.area}" ${String(c.to)}`, to.name || String(c.to)); return; }
+        const next = reorderLive(out.bodywork || [], (p) => p.status !== "removed", pg.id, at);
+        if (!next) { done.push({ missed: true, why: "", what: `could not move the tab "${pg.area}" — nothing was changed.` }); return; }
+        out = { ...out, bodywork: next };
+        done.push({ what: `moved the tab "${pg.area}" ${String(c.to)}`, why: c.why || "" });
       }
+      return;
+    }
+
+    /* ---- one exercise, moved whole (build 239) --------------------------- */
+    if (c.where === "exercise") {
+      if (c.op !== "move") {
+        done.push({ missed: true, why: "", what: `could not ${c.op || "change"} the exercise "${c.target || ""}" — only op "move" reaches an exercise in this shape; dose, how, replace and remove use the first shape.` });
+        return;
+      }
+      const hits2 = [];
+      areas().forEach((pg) => (pg.lists || []).forEach((l) => {
+        if (!l || l.status === "removed") return;
+        (l.exercises || []).forEach((x) => {
+          if (!x || x.status === "removed") return;
+          if (String(x.id) === String(c.target) || findByName([x], c.target, null) === 0) hits2.push({ pg, l, x });
+        });
+      }));
+      if (hits2.length !== 1) {
+        done.push({ missed: true, why: "", what: hits2.length
+          ? `could not move "${c.target}": ${hits2.length} exercises answer to that name — ${hits2.map((h) => `"${h.x.name}" in "${h.l.title}"`).join(", ")}. Use its id, which reaches exactly one.`
+          : `could not move "${c.target}": no exercise of yours answers to it. Nothing was changed.` });
+        return;
+      }
+      const fromHit = hits2[0];
+      const destHits = [];
+      areas().forEach((pg) => { const l = findList(pg, c.to, false); if (l) destHits.push({ pg, l }); });
+      if (destHits.length !== 1) { missList(`move "${fromHit.x.name}" into "${c.to}"`, c.to, destHits); return; }
+      const dest = destHits[0];
+      if (dest.l.id === fromHit.l.id) {
+        done.push({ missed: true, why: "", what: `did not move "${fromHit.x.name}" — it is already in "${dest.l.title}".` });
+        return;
+      }
+      out = { ...out, bodywork: (out.bodywork || []).map((p) => {
+        if (p.id !== fromHit.pg.id && p.id !== dest.pg.id) return p;
+        let lists2 = p.lists || [];
+        if (p.id === fromHit.pg.id) lists2 = lists2.map((l) => (l.id !== fromHit.l.id ? l
+          : { ...l, exercises: (l.exercises || []).filter((x) => x.id !== fromHit.x.id) }));
+        if (p.id === dest.pg.id) lists2 = lists2.map((l) => (l.id !== dest.l.id ? l
+          : { ...l, exercises: [...(l.exercises || []), { ...fromHit.x, movedOn: today }] }));
+        return { ...p, lists: lists2 };
+      }) };
+      done.push({ what: `moved "${fromHit.x.name}" from "${fromHit.l.title}" into "${dest.l.title}" — its id goes with it, so everything she logged against it follows`, why: c.why || "" });
       return;
     }
 
@@ -29938,6 +30420,23 @@ const applyShapeEdits = (data, changes, today) => {
     } else if (c.op === "restore") {
       out = bwOps.putListBack(out, hit.pg.id, hit.l.id);
       done.push({ what: `put the list "${hit.l.title}" back`, why: c.why || "" });
+    } else if (c.op === "reorder") {
+      const to = parseTo(c.to);
+      if (!to) { done.push({ missed: true, why: "", what: `could not reorder the list "${hit.l.title}": "${String(c.to || "")}" is not an order I can read — say "first", "last", "before <list>" or "after <list>".` }); return; }
+      const pgNow = (out.bodywork || []).find((p) => p && p.id === hit.pg.id);
+      if (!pgNow) { missList(`reorder the list "${hit.l.title}"`, c.target, []); return; }
+      const frozen = freezeTicks(pgNow);
+      const liveLists = (frozen.lists || []).filter((l) => l && l.status !== "removed");
+      const at = to.kind === "first" ? 0 : to.kind === "last" ? liveLists.length - 1 : (() => {
+        const j = findByName(liveLists.map((l) => ({ ...l, name: l.title, status: undefined })), to.name, (x) => x.title);
+        return j < 0 ? -1 : (to.kind === "before" ? j : j + 1);
+      })();
+      if (at < 0) { missList(`move the list "${hit.l.title}" ${String(c.to)}`, to.name || String(c.to), []); return; }
+      const next = reorderLive(frozen.lists || [], (l) => l.status !== "removed", hit.l.id, at);
+      if (!next) { done.push({ missed: true, why: "", what: `could not move the list "${hit.l.title}" — nothing was changed.` }); return; }
+      out = { ...out, bodywork: (out.bodywork || []).map((p) => (p.id !== frozen.id ? p
+        : { ...frozen, lists: bwOps.renumber(next) })) };
+      done.push({ what: `moved the list "${hit.l.title}" ${String(c.to)} in "${hit.pg.area}"`, why: c.why || "" });
     }
   });
 
@@ -30216,9 +30715,30 @@ const designBodyWork = async ({ area, mins, apiKey, context, onProgress, usage }
   return { area: String(first.area || area), line: String(first.line || ""), lists, partial };
 };
 
+/* THE DAYS EACH LIST WAS TICKED THIS ROUND (build 239). One place, because the
+   row, both coach payloads and the untick must give the same answer (rule 33).
+   Keys are read the way tickedListIds reads them: a string names its list, a
+   number is a legacy position. */
+const tickDatesByList = (prog, lists) => {
+  const all = lists || (prog && prog.lists) || [];
+  const out = {};
+  Object.keys((prog && prog.log) || {}).forEach((k) => {
+    const v = (prog.log || {})[k];
+    const l = typeof v === "string"
+      ? all.find((x) => x && x.id === v)
+      : (isFinite(Number(v)) && Number(v) >= 0 ? all[Number(v)] : null);
+    if (!l) return;
+    const day = String(k).split("#")[0];
+    if (!out[l.id]) out[l.id] = [];
+    if (!out[l.id].includes(day)) out[l.id].push(day);
+  });
+  Object.keys(out).forEach((id) => out[id].sort());
+  return out;
+};
+
 /* Which list comes next, and how far round she is. Kept as plain arithmetic so
    it survives without the model and reads the same every time. */
-const bodyworkState = (prog) => {
+const bodyworkState = (prog, today) => {
   /* HER INSTRUCTION, 11 August: "Maybe I decide today to do list number
      three and tomorrow list number five and the day after list number one.
      Don't impose on me a single sequence." So a round is no longer a
@@ -30233,9 +30753,16 @@ const bodyworkState = (prog) => {
   const doneIds = tickedListIds(prog, lists);
   const doneSet = new Set(lists.map((l, i) => (l && doneIds.has(l.id) ? i : -1)).filter((i) => i >= 0));
   const doneCount = doneIds.size;
+  /* DONE MEANS DONE TODAY (build 239, her report of 23 August). Yesterday's
+     tick never shows as today's green, and a repeat on a later day is a new
+     dated tick. The ROUND still completes from doneIds — every list ticked at
+     least once this round — exactly as before. */
+  const byList = tickDatesByList(prog, lists);
+  const doneTodaySet = new Set(lists.map((l, i) =>
+    (l && today && (byList[l.id] || []).includes(today) ? i : -1)).filter((i) => i >= 0));
   const dates = Object.keys(log).map((k) => String(k).split("#")[0]).sort();
   const round = (prog.rounds || []).length;
-  return { doneCount, doneSet, doneIds, round, inRound: doneCount, total: lists.length, dates,
+  return { doneCount, doneSet, doneIds, byList, doneTodaySet, round, inRound: doneCount, total: lists.length, dates,
            roundComplete: lists.length > 0 && doneCount >= lists.length };
 };
 
@@ -30716,6 +31243,14 @@ const bwOps = {
     (pg.id !== pgId ? pg : { ...pg, lists: (pg.lists || []).map((l) =>
       (l.id !== listId ? l : { ...l, title })) })) }),
 
+  /* THE TAB'S CHARTER (build 239, her instruction of 24 August): what the tab
+     is about and the flow its lists follow — "standing, then kneeling, then
+     sitting, then lying, then the tools". Stored on the tab, shown to her,
+     and fed to every coach call that touches the tab, so the agreed intent
+     lives in her data rather than in a conversation that folds away. */
+  setCharter: (d, pgId, charter) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== pgId ? pg : { ...pg, charter: String(charter || "") })) }),
+
   /* renumber so the numbers she reads follow the order she put them in. The
      id never changes, which is what keeps her history attached. */
   renumber: (lists) => (lists || []).map((l, i) => ({ ...l, n: i + 1 })),
@@ -31181,7 +31716,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
   useEffect(() => { if (sentHere) setData((d) => ({ ...d, bodyFocus: null })); }, [sentHere]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const st = bodyworkState(prog);
+  const st = bodyworkState(prog, coach.t);
   /* LIVE LISTS, EACH CARRYING ITS TRUE POSITION (build 219). toggleDone takes a
      position into prog.lists, so a filtered list must never renumber what it
      hands back or every tick lands on the wrong row. */
@@ -31191,6 +31726,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
   const [naming, setNaming] = useState(null);       /* list id being renamed   */
   const [namingText, setNamingText] = useState("");  /* and what she is typing  */
   const [areaName, setAreaName] = useState(null);   /* area name being edited  */
+  const [charterEdit, setCharterEdit] = useState(null); /* charter being edited  */
   const [movingList, setMovingList] = useState(null);
   const otherAreas = (data.bodywork || []).filter((p) => p && p.id !== prog.id && p.status !== "removed");
 
@@ -31210,13 +31746,20 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
     const target = lists0[i];
     if (!target) return d;
     const log = { ...(pg0.log || {}) };
-    const isDone = tickedListIds(pg0, lists0).has(target.id);
+    /* UN-TICKING TOUCHES ONLY TODAY (build 239). It used to delete every tick
+       the list had — including past days — so untick-and-tick-again silently
+       moved her record from yesterday to today (verified live, 24 August). A
+       tick made on an earlier day is her record; nothing done today reaches
+       it. */
+    const hitsToday = (k) => {
+      if (String(k).split("#")[0] !== coach.t) return false;
+      const v = log[k];
+      return typeof v === "string" ? v === target.id
+        : (isFinite(Number(v)) && lists0[Number(v)] && lists0[Number(v)].id === target.id);
+    };
+    const isDone = Object.keys(log).some(hitsToday);
     if (isDone) {
-      Object.keys(log).forEach((k) => {
-        const v = log[k];
-        if (typeof v === "string" ? v === target.id
-          : (isFinite(Number(v)) && lists0[Number(v)] && lists0[Number(v)].id === target.id)) delete log[k];
-      });
+      Object.keys(log).forEach((k) => { if (hitsToday(k)) delete log[k]; });
       return { ...d, bodywork: (d.bodywork || []).map((pg) =>
         pg.id !== prog.id ? pg : { ...pg, log }) };
     }
@@ -31257,6 +31800,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
         area: prog.area, mins: prog.mins, apiKey: data.settings?.apiKey,
         context: [
           `SHE HAS JUST FINISHED A FULL ROUND OF TEN. Design the next ten — harder or deeper where she coped, changed where she did not.`,
+          ...(prog.charter ? [`THE TAB'S CHARTER — the agreed intent and flow of this tab. Every list you design must follow it: ${prog.charter}`] : []),
           `THE TEN SHE JUST DID:\n${(prog.lists || []).map((l) => `${l.n}. ${l.title} — ${(l.exercises || []).map((x) => x.name).join(", ")}`).join("\n")}`,
           said.length ? `WHAT SHE WROTE AGAINST THEM:\n${said.join("\n")}`
             : `She wrote nothing against any of them.`,
@@ -31297,6 +31841,53 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
       </button>
       {unfolded && prog.line && (
         <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.muted, margin: "8px 0 12px" }}>{prog.line}</div>
+      )}
+      {/* THE TAB'S CHARTER (build 239). Her report: the flow she agrees with
+          the coach — standing, kneeling, sitting, lying, then the tools — was
+          forgotten the moment the conversation folded. It is data now: written
+          here once, shown here, and carried into every coach call that touches
+          this tab. */}
+      {unfolded && (
+        charterEdit === null ? (
+          prog.charter ? (
+            <div style={{ padding: "10px 12px", background: C.chalk, borderRadius: 10, marginBottom: 12 }}>
+              <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.12em",
+                textTransform: "uppercase", color: C.muted, marginBottom: 4 }}>
+                what this tab is about — its charter
+              </div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.55, color: C.ink, whiteSpace: "pre-wrap" }}>{prog.charter}</div>
+              <button onClick={() => setCharterEdit(prog.charter || "")} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer", padding: "6px 0 0",
+                fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>change it</button>
+            </div>
+          ) : (
+            <button onClick={() => setCharterEdit("")} className="tap" style={{
+              border: "none", background: "transparent", cursor: "pointer", padding: "2px 0",
+              fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit",
+              display: "block", marginBottom: 10, textAlign: "left" }}>
+              + what is this tab about? Write its flow once and your coach follows it in every list it adds here
+            </button>
+          )
+        ) : (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 }}>
+              <AutoText rows={3} value={charterEdit} onChange={setCharterEdit}
+                placeholder="What is this tab about, and what flow do its lists follow? e.g. whole body — standing, then kneeling, then sitting, then lying, then the tools: yoga wheel, foam roller"
+                style={{ ...inputStyle, marginBottom: 0, lineHeight: 1.45 }} />
+              <MicButton onText={setCharterEdit} current={charterEdit} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => { const v = String(charterEdit || "").trim();
+                  setData((d) => bwOps.setCharter(d, prog.id, v)); setCharterEdit(null); }}
+                className="tap" style={{ padding: "9px 14px", borderRadius: 9, border: "none",
+                  background: C.signal, color: C.chalk, cursor: "pointer",
+                  fontSize: 12.5, fontWeight: 600, fontFamily: "inherit" }}>Save</button>
+              <button onClick={() => setCharterEdit(null)} className="tap" style={{
+                border: "none", background: "transparent", cursor: "pointer",
+                fontSize: 11.5, color: C.muted, fontFamily: "inherit" }}>cancel</button>
+            </div>
+          </div>
+        )
       )}
       {unfolded && (
         <div>
@@ -31352,7 +31943,7 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
       )}
 
       {lists.map(({ l, i }) => {
-        const isDone = st.doneSet.has(i);
+        const isDone = st.doneTodaySet.has(i);
         const isOpen = openIds.includes(l.id);
         return (
           <div key={l.id} style={{ marginBottom: 6 }}>
@@ -31369,6 +31960,11 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
                 </span>
                 <span style={{ flex: 1, fontSize: 13, fontWeight: 600,
                   color: isOpen ? C.signal : C.ink }}>{l.title}</span>
+                {!isDone && ((st.byList || {})[l.id] || []).length > 0 && (
+                  <span className="mono" style={{ fontSize: 9.5, color: C.muted, flexShrink: 0 }}>
+                    done {dayAndMonth((st.byList[l.id] || []).slice(-1)[0])}
+                  </span>
+                )}
                 <span style={{ fontSize: 11, color: C.muted }}>{isOpen ? "▾" : "▸"}</span>
               </button>
               <button onClick={() => toggleDone(i)} className="tap" style={{
@@ -31427,8 +32023,8 @@ function BodyWorkProgramme({ prog, data, setData, coach, setSheet, alone }) {
                   + add an exercise to this list
                 </button>
                 <div style={{ marginTop: 10 }}>
-                  <Btn kind={st.doneSet.has(i) ? "quiet" : "signal"} onClick={() => toggleDone(i)}>
-                    {st.doneSet.has(i) ? "Not done after all — untick it" : "Done — tick this list off"}
+                  <Btn kind={st.doneTodaySet.has(i) ? "quiet" : "signal"} onClick={() => toggleDone(i)}>
+                    {st.doneTodaySet.has(i) ? "Not done after all — untick it" : "Done — tick this list off"}
                   </Btn>
                 </div>
 
