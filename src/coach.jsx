@@ -2151,7 +2151,7 @@ const reviewPayload = (data, coach, cut) => {
       const e = wk[k] || {};
       const vals = (d.fields?.weekly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
         .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
-      return `Week of ${k} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
+      return `Week of ${k}${e.on ? `, measured ${e.on}` : ""} — ${vals || "empty"}${e.fromMonthly ? " (taken as part of that month's benchmark, not a second sitting)" : ""}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
 
@@ -2217,7 +2217,7 @@ const reviewPayload = (data, coach, cut) => {
       const e = mo[k] || {};
       const vals = (d.fields?.monthly || []).filter((f) => e[f.id] !== undefined && e[f.id] !== "")
         .map((f) => `${f.label}: ${e[f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(e, f)}`).join(", ");
-      return `${k} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
+      return `${k}${e.on ? ` (measured ${e.on})` : ""} — ${vals || "empty"}${e.note ? `\n  she wrote: "${e.note}"` : ""}`;
     }).join("\n");
   }));
 
@@ -2244,7 +2244,7 @@ const reviewPayload = (data, coach, cut) => {
         const v = say(o.v);
         return v ? `${tst.label}: ${v}` : null;
       }).filter(Boolean).join(", ");
-      return `Week of ${k} — ${vals || "empty"}`;
+      return `Week of ${k}${e.on ? `, measured ${e.on}` : ""} — ${vals || "empty"}`;
     }).join("\n");
   }));
 
@@ -4460,7 +4460,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "24 August 2026 · 240";
+const BUILD = "25 August 2026 · 241";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5768,7 +5768,7 @@ const briefTable = (fields, store, label, F) => {
      said there had been more, so a coach asked about her first month was
      reading an absence as though it were the whole record. */
   const dropped = keys.length - use.length;
-  return `${label} — ${use.length} sitting(s), oldest to newest. Dates: ${use.map((k) => k.slice(5)).join(" ")}\n`
+  return `${label} — ${use.length} sitting(s), oldest to newest. Each is FILED under the day its week or\nmonth starts; "measured" beside a date is the day she actually did it — the date she means when she\ntalks about a sitting. Dates: ${use.map((k) => { const on = String((store[k] || {}).on || ""); return k.slice(5) + (on && on !== k ? `(measured ${on.slice(5)})` : ""); }).join(" ")}\n`
     + (dropped ? `${dropped} EARLIER sitting(s) exist on her device and are not shown here — this row starts at\n`
       + `${use[0]}, not at the beginning. Do not read the first figure as where she started, and say so if\n`
       + `she asks about further back. She can widen it: "Columns of history" in the formulas sheet.\n` : "")
@@ -6778,7 +6778,8 @@ const briefText = (data, coach, opts) => {
       return vals.every((x) => x === "·") ? null : `  ${m.label} ${vals.join(" ")}`;
     }).filter(Boolean);
     lines.push(`MOBILITY — ${mk.length} sitting(s). Where a test is measured both sides it reads left/right,`);
-    lines.push(`and the GAP between sides matters more than either number. Dates: ${mk.map((k) => k.slice(5)).join(" ")}`);
+    lines.push(`and the GAP between sides matters more than either number. Each sitting is FILED under the`);
+    lines.push(`day its week starts; "measured" is the day she actually did it. Dates: ${mk.map((k) => { const on = String((data.mobility[k] || {}).on || ""); return k.slice(5) + (on && on !== k ? `(measured ${on.slice(5)})` : ""); }).join(" ")}`);
     if (mkAll.length > mk.length) lines.push(`${mkAll.length - mk.length} EARLIER sitting(s) exist and are not shown — this starts at ${mk[0]}.`);
     lines.push(rows.join("\n") || "  nothing entered");
   } else {
@@ -26089,15 +26090,20 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
       return `${d}: ${head}${detail ? " — " + detail : ""}${am ? ` [morning: ${am}]` : ""}${sn}${did}`;
     }).filter(Boolean).join("\n  ") || "nothing logged yet";
 
-    const lastBattery = data.weekly[Object.keys(data.weekly).sort().pop()] || null;
+    /* HER REPORT, 25 August: a sitting is FILED under the week's start day,
+       and printing that key as though it were the test day made her and the
+       coach each call the record wrong. Filed week and measured day now
+       travel together everywhere a sitting is named. */
+    const lastBatteryKey = Object.keys(data.weekly || {}).sort().pop() || null;
+    const lastBattery = lastBatteryKey ? data.weekly[lastBatteryKey] : null;
     const battery = lastBattery
-      ? data.fields.weekly.filter((f) => lastBattery[f.id]).map((f) => `${f.label} ${lastBattery[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ")
+      ? `(week of ${lastBatteryKey}${lastBattery.on ? `, measured ${lastBattery.on}` : ""}) ` + data.fields.weekly.filter((f) => lastBattery[f.id]).map((f) => `${f.label} ${lastBattery[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ")
       : "no battery logged yet";
 
     const mKeys = Object.keys(data.monthly || {}).sort();
     const lastMonthly = mKeys.length ? data.monthly[mKeys[mKeys.length - 1]] : null;
     const monthlyLine = lastMonthly
-      ? (data.fields.monthly || []).filter((f) => lastMonthly[f.id])
+      ? `(month ${mKeys[mKeys.length - 1]}${lastMonthly.on ? `, measured ${lastMonthly.on}` : ""}) ` + (data.fields.monthly || []).filter((f) => lastMonthly[f.id])
           .map((f) => `${f.label} ${lastMonthly[f.id]}${f.unit ? " " + f.unit : ""}`).join(", ")
       : "no monthly benchmark logged yet";
 
@@ -26231,7 +26237,7 @@ ${(() => {
       }
       return `${m.label} ${v}`;
     }).filter(Boolean);
-    return `  * ${k}: ${rows.join("; ") || "nothing entered"}`;
+    return `  * week of ${k}${e.on ? `, measured ${e.on}` : ""}: ${rows.join("; ") || "nothing entered"}`;
   }).join("\n");
 })()}
 - MOBILITY OVERALL: ${coach.mobScore === null ? "not taken yet" : `${coach.mobScore}%`}
@@ -26456,18 +26462,21 @@ ${recentDays.map((d) => { const w = data.logs[d]?.why; return w ? `  * ${d}: ${w
     });
     return out.join(" | ") || "nothing yet";
   })()}
-- EVERY WEEKLY BATTERY INSIDE HER WINDOW, oldest first, measurement by measurement:
+- EVERY WEEKLY BATTERY INSIDE HER WINDOW, oldest first, measurement by measurement. A sitting is FILED
+  under the day her week STARTS; "measured" is the day she actually did the tests — THAT is the date she
+  means by "yesterday's tests" or "last week's". Never call a sitting missing before checking the
+  measured dates:
 ${(() => {
   const ks = Object.keys(data.weekly || {}).filter(inWin).sort();
   if (!ks.length) return chatCut === "all" ? "  none yet" : "  none inside the window she set";
-  return ks.map((k) => `  * ${k}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
+  return ks.map((k) => `  * week of ${k}${data.weekly[k].on ? `, measured ${data.weekly[k].on}` : ""}: ${(data.fields.weekly || []).filter((f) => data.weekly[k][f.id] !== undefined && data.weekly[k][f.id] !== "")
     .map((f) => `${f.label} ${data.weekly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.weekly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - EVERY MONTHLY BENCHMARK INSIDE HER WINDOW, oldest first, measurement by measurement:
 ${(() => {
   const ks = Object.keys(data.monthly || {}).filter(inWin).sort();
   if (!ks.length) return chatCut === "all" ? "  none yet" : "  none inside the window she set";
-  return ks.map((k) => `  * ${k}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
+  return ks.map((k) => `  * month ${k}${data.monthly[k].on ? `, measured ${data.monthly[k].on}` : ""}: ${(data.fields.monthly || []).filter((f) => data.monthly[k][f.id] !== undefined && data.monthly[k][f.id] !== "")
     .map((f) => `${f.label} ${data.monthly[k][f.id]}${f.unit ? " " + f.unit : ""}${qualifiers(data.monthly[k], f)}`).join(", ") || "nothing entered"}`).join("\n");
 })()}
 - Her latest battery, whenever she did it (this one line ignores the window, because it is where she stands now rather than a memory of a past day): ${battery}
