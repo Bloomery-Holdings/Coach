@@ -4585,6 +4585,42 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
         return text;
     return text + "\n\nWhere I looked:\n" + cites.map((c) => `· ${c.title} — ${c.url}`).join("\n");
 };
+/* ONE MORE ASK, WITH THE ROOM DOUBLED (build 242).
+   HER REPORT, 1 September: "it stopped creating exercises tabs and lists on
+   the body page" — she tapped "put these on my Body page" several times,
+   under the message with the exercise list in it, and was told every time
+   that no exercises could be found. They were found, written out, and CUT at
+   the call's token ceiling: one exercise is a name, twelve variables and two
+   or three sentences of "how", so a long answer does not fit the default
+   room, the cut JSON parses to nothing, and the cut was reported as her
+   message's fault (rule 23 broken) — the whole answer paid for, thrown away,
+   and identical on every tap.
+   An answer stopped at the ceiling is now asked for ONCE more, with double
+   the room, because paying a little more for the thing she asked for costs
+   less than paying full price for nothing on every tap (her rule: cost
+   governs). Both attempts land in the same spend record (rule 36). A second
+   cut is returned to the caller, which says so plainly and names the
+   Settings control — never the untrue "could not find" line. */
+const askWithRoom = async (args) => {
+    const spend = args.usage || {};
+    let raw = await askModel({ ...args, usage: spend });
+    if (spend.stopReason !== "max_tokens")
+        return { raw, cut: false };
+    const again = {};
+    raw = await askModel({ ...args, usage: again,
+        maxTokens: 2 * Math.max(500, Number(args.maxTokens) || 1000) });
+    ["in", "out", "cacheWrite", "cacheRead"].forEach((k) => {
+        spend[k] = (Number(spend[k]) || 0) + (Number(again[k]) || 0);
+    });
+    spend.stopReason = again.stopReason;
+    return { raw, cut: again.stopReason === "max_tokens" };
+};
+/* what the buttons say when even the doubled room was not enough — each
+   quotes the formula's own name in Settings, so the route it offers exists
+   (rule 32) */
+const ROOM_LIST_MSG = "Your coach wrote the lists but ran out of room — twice, even after I doubled it. Nothing has changed and nothing half-made was kept. You can give it more room under the formulas in Settings — the one called “Room it has to build a new list from a message” — then tap this again.";
+const ROOM_EDIT_MSG = "Your coach wrote the changes but ran out of room — twice, even after I doubled it. Nothing has changed. You can give it more room under the formulas in Settings — the one called “Room your coach has to answer ‘change my lists’” — then tap this again.";
+const ROOM_BATTERY_MSG = "Your coach read the list but ran out of room writing the tests — twice, even after I doubled it. Nothing has changed. You can give it more room under the formulas in Settings — the one called “Room your coach has to answer ‘change my lists’”, which this button borrows — then tap this again.";
 /* ============================================================================
    THE SCREEN DOES NOT GO TO SLEEP WHILE SHE IS IN HERE
    ---------------------------------------------------------------------------
@@ -4642,7 +4678,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "25 August 2026 · 241";
+const BUILD = "1 September 2026 · 242";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -22484,14 +22520,23 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     const [undoKept, setUndoKept] = useState(null); /* { done[] , before } | { error } */
     const applyEdits = async (i) => {
         var _a, _b;
-        if (editingLists !== null || pendingEdits)
+        if (editingLists !== null)
             return;
+        /* A KEPT CHECKLIST USED TO SILENCE THIS BUTTON (build 242). The guard is
+           right — one translation at a time, and the one she paid for must be
+           finished or cancelled, never overwritten — but it said nothing, so
+           the button was simply dead (rules 11, 23; reproduced on 241). It says
+           why now, and points at the card. */
+        if (pendingEdits) {
+            setEditsMade({ error: "Your earlier checklist is still waiting — the card that says “What I am about to change — nothing is done yet”. Apply it or cancel it there first: I translate nothing new while it waits, so the translation you already paid for is never lost." });
+            return;
+        }
         setEditingLists(i);
         setEditsMade(null);
         setListMade(null);
         const editSpend = {};
         try {
-            const raw = await askModel({
+            const { raw, cut } = await askWithRoom({
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
                 system: EDIT_LISTS_SYSTEM,
                 usage: editSpend,
@@ -22509,6 +22554,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
                 secs: formulas(data.settings).callSecs,
             });
             const out = parseReview(raw);
+            /* a cut answer is a cut answer — never "no change found" (rule 23),
+               and never applied in half (rule 20) (build 242) */
+            if (cut) {
+                setEditsMade({ error: ROOM_EDIT_MSG });
+                return;
+            }
             if (!out || !Array.isArray(out.changes) || !out.changes.length) {
                 setEditsMade({ error: "I could not find a change to your lists in that message. Tell me what you want changed and I will say it plainly, then tap this again." });
                 return;
@@ -22725,20 +22776,22 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         setListMade(null);
         const listSpend = {};
         try {
-            const raw = await askModel({
+            const { raw, cut } = await askWithRoom({
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
                 system: LIST_FROM_CHAT_SYSTEM,
                 /* build 222: it could not pick one of her tabs without being shown them */
-                messages: [{ role: "user", content: 'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
-                            + 'exactly, unless none of them could honestly hold this list:\n'
-                            + tabsWithCharters(data)
-                            + '\n\nWHAT I WROTE FOR HER:\n' + String(((_b = msgs[i]) === null || _b === void 0 ? void 0 : _b.content) || "") }],
+                messages: listFromChatMessage(data, (_b = msgs[i]) === null || _b === void 0 ? void 0 : _b.content),
                 maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
                 usage: listSpend,
                 search: ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.webSearch) === true,
                 secs: formulas(data.settings).callSecs,
             });
             const out = parseReview(raw);
+            /* a cut answer is a cut answer, said so and never half-built (242) */
+            if (cut) {
+                setListMade({ error: ROOM_LIST_MSG });
+                return;
+            }
             /* BUILD 225: it may answer with several lists, each naming its own tab.
                The old single-list shape is still read, so nothing that worked
                before stops working. */
@@ -26360,6 +26413,12 @@ Removing is never deleting: it is set aside, dated, and she can put it back.`;
    scans makeList's head keeps seeing its updater (suite 51). */
 const tabsWithCharters = (data) => (((data.bodywork || []).filter((pg) => pg && pg.status !== "removed")
     .map((pg) => '  "' + (pg.area || "") + '"' + (pg.charter ? ' — charter: ' + pg.charter : "")).join("\n")) || '  (she has none yet)');
+/* the message "put these on my Body page" sends — hoisted, like the tabs
+   above, so suite 51's window keeps seeing makeList's updater (build 242) */
+const listFromChatMessage = (data, text) => [{ role: "user", content: 'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
+            + 'exactly, unless none of them could honestly hold this list:\n'
+            + tabsWithCharters(data)
+            + '\n\nWHAT I WROTE FOR HER:\n' + String(text || "") }];
 const listInventory = (data) => [bodyInventory(data), registryInventory(data)]
     .filter(Boolean).join("\n\n") || "she has no lists yet";
 /* Everything on COACH_EDITS, with its ids, so a change can be aimed at any
@@ -27849,7 +27908,7 @@ function TidySheet({ data, setData, coach, close }) {
         setConv({ ...head, busy: true });
         const bSpend = {};
         try {
-            const raw = await askModel({
+            const { raw, cut } = await askWithRoom({
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
                 system: TO_BATTERY_SYSTEM,
                 usage: bSpend,
@@ -27873,7 +27932,12 @@ function TidySheet({ data, setData, coach, close }) {
                     why: "it came back with no way to score it — no unit and no steps"
                 })),
             ];
-            if (!tests.length) {
+            if (cut) {
+                /* a cut answer is a cut answer — never the list's fault (rule 23,
+                   build 242); no early return, the spend note below must run */
+                setConv({ ...head, err: ROOM_BATTERY_MSG });
+            }
+            else if (!tests.length) {
                 setConv({ ...head, left,
                     err: "Nothing in that list came back as something you could score on your own. Nothing has changed." });
             }
