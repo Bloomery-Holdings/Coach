@@ -4495,7 +4495,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 246";
+const BUILD = "2 September 2026 · 247";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -18931,8 +18931,8 @@ function Settings({ data, setData, coach, setSheet }) {
         {sched.mode === "cycle" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <Field label="Train" unit="days" value={sched.on ?? 2} onChange={(v) => setSchedule({ on: Number(v) || 1 })} />
-              <Field label="Then rest" unit="days" value={sched.off ?? 1} onChange={(v) => setSchedule({ off: Number(v) || 1 })} />
+              <Field label="Train" unit="days" value={sched.on ?? 2} onChange={(v) => setSchedule({ on: v })} />
+              <Field label="Then rest" unit="days" value={sched.off ?? 1} onChange={(v) => setSchedule({ off: v })} />
             </div>
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>
               The rhythm turns with you rather than with the calendar — train a day late and it simply
@@ -18966,7 +18966,11 @@ function Settings({ data, setData, coach, setSheet }) {
         {sched.mode === "count" && (
           <>
             <Field label="Times a week" unit="sessions" value={sched.perWeek ?? 4}
-              onChange={(v) => setSchedule({ perWeek: Number(v) || 1 })} />
+              /* HER REPORT, 2 September: "I cannot change it from 1. It is
+                 fixed at 1 session per week." `Number(v) || 1` ran on every
+                 keystroke, so clearing the box wrote 1 and she could never
+                 type anything else. Kept as typed; weeklyTargetOf settles it. */
+              onChange={(v) => setSchedule({ perWeek: v })} />
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>
               You choose the days as you go. Nothing counts as missed until the week is over — and if the
               week comes up short, that is all it is.
@@ -22485,8 +22489,8 @@ function RhythmSheet({ data, setData, close }) {
       </div>
       {sched.mode === "cycle" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Field label="Train" unit="days" value={sched.on ?? 2} onChange={(v) => setSchedule({ on: Number(v) || 1 })} />
-          <Field label="Then rest" unit="days" value={sched.off ?? 1} onChange={(v) => setSchedule({ off: Number(v) || 1 })} />
+          <Field label="Train" unit="days" value={sched.on ?? 2} onChange={(v) => setSchedule({ on: v })} />
+          <Field label="Then rest" unit="days" value={sched.off ?? 1} onChange={(v) => setSchedule({ off: v })} />
         </div>
       )}
       {sched.mode === "days" && (
@@ -22507,7 +22511,8 @@ function RhythmSheet({ data, setData, close }) {
       )}
       {sched.mode === "count" && (
         <Field label="Times a week" unit="you choose which days" value={sched.perWeek ?? 4}
-          onChange={(v) => setSchedule({ perWeek: Number(v) || 1 })} />
+          /* same fault, same fix — see the note in Settings (2 September) */
+          onChange={(v) => setSchedule({ perWeek: v })} />
       )}
       <Btn kind="signal" onClick={close}>Done</Btn>
     </div>
