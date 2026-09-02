@@ -4495,7 +4495,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "1 September 2026 · 242";
+const BUILD = "1 September 2026 · 243";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -14902,6 +14902,9 @@ function DrillsCard({ coach, setSheet, data, setData }) {
 function SessionClock({ log, write, coach }) {
   const clock = log?.sessionClock;
   const running = clock && clock.startedAt && !clock.stoppedAt;
+  /* THE START SHE TELLS (build 243): the little picker, open or shut.
+     null | { hhmm, err } */
+  const [telling, setTelling] = useState(null);
   /* repaint every second while it runs — display only, the truth is the
      wall clock in the stored start time */
   const [, force] = useState(0);
@@ -14924,6 +14927,30 @@ function SessionClock({ log, write, coach }) {
 
   const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
   const nevermind = () => write({ sessionClock: undefined });
+  /* THE START SHE TELLS (build 243). Her instruction, 1 September: "sometimes
+     I forget to click... I can input that I started at eleven o'clock." The
+     time she gives means TODAY, on this phone's clock — the same clock the
+     running face reads, so a told start and a pressed one live on one rail
+     and everything downstream (the minutes, the slot, the too-short floor) is
+     already computed from startedAt. A told start is marked so in the record
+     (rule 23). A time still ahead of now writes NOTHING and says so in words
+     (rules 20, 23). On a running clock the record is kept and only the start
+     moves — that is her correction, not a new session. */
+  const tell = () => {
+    const m243 = String((telling && telling.hhmm) || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!m243) { setTelling({ ...telling, err: "Pick the time first — nothing is written until you do." }); return; }
+    const at = new Date();
+    at.setHours(Number(m243[1]), Number(m243[2]), 0, 0);
+    if (at.getTime() > Date.now()) {
+      setTelling({ ...telling, err: "That is later than now, so I have not written anything. The time you give means today, on this phone's clock." });
+      return;
+    }
+    buzz(20);
+    write({ sessionClock: running
+      ? { ...clock, startedAt: at.getTime(), toldStart: true }
+      : { startedAt: at.getTime(), toldStart: true } });
+    setTelling(null);
+  };
   /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
      'Session 1 min.'" and called it a logging artefact. It was.
 
@@ -15013,6 +15040,36 @@ function SessionClock({ log, write, coach }) {
           </>
         )}
       </div>
+      {/* build 243: the start she tells — offered on both faces, quiet,
+          because the one screen she opens every day stays uncluttered */}
+      {!telling && (
+        <button className="tap" onClick={() => setTelling({ hhmm: "" })} style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
+          fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+          {running ? "started earlier than this?" : "I already started — set the time"}
+        </button>
+      )}
+      {telling && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input type="time" aria-label="When you started" value={telling.hhmm}
+              onChange={(e) => setTelling({ hhmm: e.target.value })}
+              style={{ border: `1.5px solid ${C.line}`, borderRadius: 9, padding: "8px 10px",
+                fontSize: 13.5, fontFamily: "inherit", background: "transparent", color: C.ink }} />
+            <Btn kind="signal" onClick={tell}>{running ? "Correct the start" : "Start from then"}</Btn>
+            <button className="tap" onClick={() => setTelling(null)} style={{
+              border: "none", background: "transparent", cursor: "pointer",
+              fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px" }}>
+              cancel
+            </button>
+          </div>
+          {telling.err && (
+            <div style={{ fontSize: 11.5, lineHeight: 1.5, color: C.muted, marginTop: 5 }}>
+              {telling.err}
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
