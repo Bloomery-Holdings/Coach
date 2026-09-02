@@ -4495,7 +4495,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 245";
+const BUILD = "2 September 2026 · 246";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -16161,7 +16161,17 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           boxShadow: "0 1px 2px rgba(43,27,46,0.05)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
             <span className="disp" style={{ fontSize: 30, fontWeight: 400, lineHeight: 1, color: C.ink }}>{coach.weekDone}</span>
-            <span className="disp" style={{ fontSize: 15, fontWeight: 300, color: C.muted }}>/{scheduleSet(data.settings) ? coach.seasonTarget : "–"}</span>
+            {/* HER REPORT, 2 September: "I need to be able to change the target
+                number of sessions per week and it reflects in the today page. I
+                tried changing them and it did not reflect."
+
+                It printed a DASH until she had set a rhythm — while the engine
+                was already counting her against the number, the tooltip two
+                lines below was already naming it, and every calculation that
+                reads a week was using it. So she changed the weekly target,
+                the app went on judging her by it, and showed her nothing.
+                A number the app is using is a number she gets to see (rule 23). */}
+            <span className="disp" style={{ fontSize: 15, fontWeight: 300, color: C.muted }}>/{coach.seasonTarget}</span>
           </div>
           <div className="mono" style={{ fontSize: 9.5, letterSpacing: "0.11em", textTransform: "uppercase", color: C.muted, marginTop: 7 }}>
             <InfoNote inherit why={`How many sessions you have completed since Monday, against the number you told the app you want each week (currently ${coach.seasonTarget}). Only a session marked done counts. Anything logged on an earlier day counts on that day, not today. Change the number itself in Settings, under your rhythm.`}>
@@ -18636,7 +18646,10 @@ function Settings({ data, setData, coach, setSheet }) {
   const [askClear, setAskClear] = useState(false);
   const [cleared, setCleared] = useState(null);
   const s = data.settings;
-  const set = (k, v) => setData({ ...data, settings: { ...s, [k]: v } });
+  /* FUNCTIONAL, not a spread of the `data` captured at render — the same
+     lesson `writeAttendedDay` carries. A non-functional write here clobbers
+     anything else saved in the same tap, and this screen writes a lot. */
+  const set = (k, v) => setData((d) => ({ ...d, settings: { ...(d.settings || {}), [k]: v } }));
 
   /* A file download navigates this frame away and lands on a blank page, so
      the export is shown on screen instead — copy it and paste it anywhere. */
@@ -18961,18 +18974,22 @@ function Settings({ data, setData, coach, setSheet }) {
           </>
         )}
 
-        {scheduleSet(s) && (
-          <div style={{ marginBottom: 16, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>Sessions a week</span>
-              <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{weeklyTargetOf(s)}</span>
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
-              Read straight off the rhythm above &mdash; {scheduleSummary(sched)}. There is only ever one
-              number, so change the rhythm and everything that counts weeks follows it.
-            </div>
+        {/* Shown either way now. It is the number Today counts against and the
+            number every weekly calculation reads, so hiding it until she had
+            set a rhythm hid the one figure she was trying to change. */}
+        <div style={{ marginBottom: 16, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Sessions a week</span>
+            <span className="mono" style={{ fontSize: 16, fontWeight: 600, color: C.ink }}>{weeklyTargetOf(s)}</span>
           </div>
-        )}
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+            {scheduleSet(s)
+              ? <>Read straight off the rhythm above &mdash; {scheduleSummary(sched)}. There is only ever one
+                number, so change the rhythm and everything that counts weeks follows it.</>
+              : <>This is what Today counts against and what every weekly number reads. Change it in
+                Weekly target above, or set a rhythm and the rhythm becomes the number.</>}
+          </div>
+        </div>
 
         <Field label="This month's theme" unit="" type="text" value={s.monthTheme} onChange={(v) => set("monthTheme", v)} />
             </Fold>
