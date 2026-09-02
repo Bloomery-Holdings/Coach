@@ -4574,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 249";
+const BUILD = "2 September 2026 · 250";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5527,6 +5527,86 @@ const bwHomeOf = (data, exId) => {
   }
   return null;
 };
+
+/* ---------------------------------------------------------------------------
+   WHAT HER BODY-PAGE WORK COSTS HER.
+   HER REPORT, 2 September: "why there are no effort calculation for the lists
+   I do from body page. it messes up the calculations."
+
+   She was right, and it was worse than no effort score. A day of body-page
+   work marked the day trained — it has since build 98 — but the log it wrote
+   carried a type and nothing else: no minutes, no effort, no body map. So the
+   day counted in Consistency, contributed nought to Effort and to Balance, and
+   the regions she had actually worked took no share of the week at all. Since
+   build 249 it at least stops printing a zero, but it parked Effort for the
+   whole week and there was no way on earth to unpark it, because the app was
+   asking for a score on a session that had no length either.
+
+   Minutes are not invented here. They are the minutes her own lists declare —
+   the list's, or the sum of its exercises', or the programme's — and where
+   nothing declares any, the app says so and asks rather than guessing (rule 23).
+   The effort score is the day's, tapped on the session where it sits.
+--------------------------------------------------------------------------- */
+const bwHasNumbers = (e) => !!e && ["w", "reps", "secs"]
+  .some((f) => String(e[f] ?? "").trim() !== "");
+const bodyWorkOn = (data, date) => {
+  if (!data || !date) return null;
+  const areas = [], counted = new Set();
+  let mins = 0, lists = 0;
+  const addList = (pg, l) => {
+    if (!l) return;
+    lists++;
+    if (pg && pg.area) areas.push(pg.area);
+    const own = (l.exercises || []).filter((e) => e && e.status !== "removed");
+    own.forEach((e) => counted.add(e.id));
+    const declared = Number(l.mins) > 0 ? Number(l.mins)
+      : own.reduce((a, e) => a + (Number(e.mins) || 0), 0)
+      || (Number(pg && pg.mins) > 0 ? Number(pg.mins) : 0);
+    mins += declared;
+  };
+  const scan = (pg, list, log) => Object.keys(log || {}).forEach((k) => {
+    if (String(k).split("#")[0] !== date) return;
+    const v = log[k];
+    const l = typeof v === "string" ? (list || []).find((x) => x && x.id === v)
+      : (isFinite(Number(v)) && Number(v) >= 0 ? (list || [])[Number(v)] : null);
+    addList(pg, l);
+  });
+  (data.bodywork || []).forEach((pg) => {
+    if (!pg) return;
+    scan(pg, pg.lists, pg.log);
+    (pg.rounds || []).forEach((r) => scan(pg, r && r.lists, r && r.log));
+  });
+  /* and the exercises she typed numbers against, wherever they live — a list
+     she worked through without ticking it off is still work she did */
+  let typed = 0;
+  const day = (data.bwlog || {})[date] || {};
+  Object.keys(day).forEach((id) => {
+    if (!bwHasNumbers(day[id]) || counted.has(id)) return;
+    typed++;
+    const home = bwHomeOf(data, id);
+    if (!home) return;
+    if (home.area) areas.push(home.area);
+    mins += Number(home.ex && home.ex.mins) || 0;
+  });
+  if (!lists && !typed) return null;
+  return { mins: Math.round(mins), areas: Array.from(new Set(areas)), lists, exercises: typed };
+};
+/* The regions a piece of body work touches, read off the AREA she filed it
+   under — the same reading the sets-per-region count has used since audit item
+   19, so the two cannot disagree. An area that names nothing the app knows
+   maps to nothing, and says so rather than inventing a spread. */
+const bodyWorkMap = (areas) => {
+  const out = {};
+  REGIONS.forEach((r) => { out[r.id] = 0; });
+  let any = false;
+  (areas || []).forEach((a) => (tagIssue(a).regions || []).forEach((rid) => {
+    if (out[rid] === undefined) return;
+    out[rid] = Math.min(3, out[rid] + 2);
+    any = true;
+  }));
+  return any ? out : null;
+};
+const BODY_WORK = "Body work";
 
 /* A mobility test is done when either side, or the single score, is entered. */
 const mobFilled = (e) => {
@@ -10019,13 +10099,28 @@ function useCoach(data, day, clock) {
     const rpeOf = (l) => Number(l?.rpe) || 0;
 
     /* Session load = minutes x effort. The standard internal-load measure. */
+    /* Build 250: her body-page lists are training and now cost what they
+       declare. Where the day's only session IS the body work — the log the
+       repair writes carries a type and no length — the day's minutes come from
+       the lists rather than from a field nobody filled, so it is counted once
+       and never twice. */
+    const bodyMinsOn = (d) => {
+      const bw = bodyWorkOn(data, d);
+      return bw && bw.mins > 0 ? bw.mins : 0;
+    };
+    /* Where the day IS the body work and she has typed a length herself, that
+       length is the body work's length — hers replaces what the lists declare
+       rather than being added to it (rule 20). */
+    const bodyIsTheSession = (l) => String(l?.type || "").trim() === BODY_WORK;
+    const bodyTyped = (l) => bodyIsTheSession(l) && Number(l?.minutes) > 0;
     const loadOfDay = (d) => {
       const l = logs[d];
       if (!l?.completed) return 0;
-      let sum = Number(l.minutes || 0) * rpeOf(l);
+      let sum = bodyIsTheSession(l) && !bodyTyped(l) ? 0 : Number(l.minutes || 0) * rpeOf(l);
       (l.extraSessions || []).forEach((x) => {
         sum += Number(x.minutes || 0) * (Number(x.rpe) || rpeOf(l) || 0);
       });
+      if (!bodyTyped(l)) sum += bodyMinsOn(d) * rpeOf(l);
       return Math.round(sum);
     };
     const loadWindow = (days, offset = 0) => {
@@ -10063,7 +10158,11 @@ function useCoach(data, day, clock) {
       for (let i = 0; i < days; i++) {
         const l = logs[addDays(t, -i)];
         if (!l?.completed) continue;
-        if (String(l.type || "").trim()) out.push({ type: l.type, minutes: l.minutes, rpe: l.rpe });
+        if (String(l.type || "").trim()) out.push({ type: l.type, rpe: l.rpe,
+          /* a body-work day's length is what her lists declare */
+          minutes: Number(l.minutes) > 0 ? l.minutes
+            : String(l.type).trim() === BODY_WORK ? (bodyWorkOn(data, addDays(t, -i)) || {}).mins
+            : l.minutes });
         (l.extraSessions || []).forEach((x) => out.push({ type: x.type, minutes: x.minutes,
           /* an extra session with no score of its own inherits the day's, which
              is exactly what the load sum does — the two must agree */
@@ -10072,7 +10171,11 @@ function useCoach(data, day, clock) {
       return out;
     };
     const week7 = sessionsInDays(7);
-    const unscored7 = week7.filter((x) => !(Number(x.rpe) > 0)).length;
+    /* Two ways a session stays out of the total, and she is told which: no
+       effort score, or no length to multiply it by. */
+    const noScore7 = week7.filter((x) => !(Number(x.rpe) > 0)).length;
+    const noMins7 = week7.filter((x) => Number(x.rpe) > 0 && !(Number(x.minutes) > 0)).length;
+    const unscored7 = noScore7 + noMins7;
     const scored7 = week7.length - unscored7;
 
     /* Acute:chronic. 0.8-1.3 is the range the evidence supports.
@@ -10125,7 +10228,18 @@ function useCoach(data, day, clock) {
         const l = logs[d];
         if (!l?.completed) continue;
         const each = [{ type: l.type, minutes: l.minutes, rpe: l.rpe }, ...(l.extraSessions || [])];
+        /* Build 250: the areas her body-page lists are filed under, read the
+           same way the sets-per-region count reads them. */
+        const bw = bodyWorkOn(data, d);
+        const bwMap = bw && bw.mins > 0 ? bodyWorkMap(bw.areas) : null;
+        if (bwMap) {
+          const bld = (String(l.type || "").trim() === BODY_WORK && Number(l.minutes) > 0
+            ? Number(l.minutes) : bw.mins) * (rpeOf(l) || 1);
+          REGIONS.forEach((r) => { out[r.id] += (bld * (bwMap[r.id] || 0)) / 3; });
+        }
         each.forEach((sess) => {
+          if (bwMap && String(sess.type || "").trim() === BODY_WORK
+              && !(Number(sess.minutes) > 0)) return;   /* counted just above */
           const b = bodyOf(sess.type);
           if (!b) return;
           /* Coverage is a SHARE, so it stays meaningful on minutes alone when
@@ -10210,9 +10324,12 @@ function useCoach(data, day, clock) {
       for (let i = 0; i < 28; i++) {
         const l = logs[addDays(t, -i)];
         if (!l?.completed) continue;
+        const bwU = bodyWorkOn(data, addDays(t, -i));
+        const bwMapped = bwU && bwU.mins > 0 && !!bodyWorkMap(bwU.areas);
         [{ type: l.type }, ...(l.extraSessions || [])].forEach((sess) => {
           const n = String(sess.type || "").trim();
           if (!n || bodyOf(n)) return;
+          if (n === BODY_WORK && bwMapped) return;
           if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
         });
       }
@@ -10271,8 +10388,11 @@ function useCoach(data, day, clock) {
        one at a time, because no single one of them means much alone. */
     const readingOf = () => {
       const parts = [];
-      if (!hasLoad)
-        return "These five start working once your sessions carry an effort score — the tap is at the bottom of this card, right after you log. Until then the app is counting attendance, which is the least interesting thing about you.";
+      /* Build 250: the more specific answer wins. A week she HAS trained is
+         never told "start logging" — and the tap has not been at the bottom of
+         this card since build 249; it is on the session itself. */
+      if (!hasLoad && !week7.length)
+        return "These five start working once your sessions carry an effort score — the tap is on the session itself, at the top of Today. Until then the app is counting attendance, which is the least interesting thing about you.";
       /* Build 249: her whole week was unscored and this said she was doing
          less than her body was prepared for and missing sessions on top. */
       if (week7.length && !scored7)
@@ -11321,9 +11441,9 @@ function useCoach(data, day, clock) {
         value: hasLoad && scored7 ? acute : null,
         display: hasLoad && scored7 ? String(acute) : "—",
         sub: week7.length && !scored7
-            ? `${week7.length} session${week7.length > 1 ? "s" : ""} logged, no effort score yet`
+            ? `${week7.length} session${week7.length > 1 ? "s" : ""} logged, ${noMins7 && !noScore7 ? "no length yet" : "no effort score yet"}`
           : unscored7
-            ? `${unscored7} of this week's sessions not scored yet`
+            ? `${unscored7} of this week's sessions not counted yet`
           : loadTrend === null ? "no week to compare yet"
           : `${loadTrend >= 0 ? "+" : ""}${loadTrend}% on last week`,
         color: week7.length && !scored7 ? C.muted : C.ink,
@@ -11332,7 +11452,7 @@ function useCoach(data, day, clock) {
         need: week7.length && !scored7
           ? `You trained ${week7.length} time${week7.length > 1 ? "s" : ""} this week. Effort is minutes multiplied by how hard it felt, and none of them has been scored yet — so there is nothing to multiply by, and a zero here would be about the arithmetic rather than about you. The tap is on the session itself, at the top of Today.`
           : unscored7
-          ? `${unscored7} session${unscored7 > 1 ? "s" : ""} this week ${unscored7 > 1 ? "have" : "has"} no effort score, so ${unscored7 > 1 ? "they are" : "it is"} not in this total. One tap on the session and ${unscored7 > 1 ? "they count" : "it counts"}.`
+          ? `${unscored7} session${unscored7 > 1 ? "s" : ""} this week ${unscored7 > 1 ? "are" : "is"} not in this total yet — ${noScore7 ? `${noScore7} with no effort score` : ""}${noScore7 && noMins7 ? " and " : ""}${noMins7 ? `${noMins7} with no length to multiply it by` : ""}. Both are on the session itself, at the top of Today.`
           : hasLoad ? null : "Tap an effort score after your sessions and this fills in within a week.",
       },
       {
@@ -12552,7 +12672,7 @@ function useCoach(data, day, clock) {
          Added at build 193 because SessionClock needs clockMinSession and takes
          no data prop. Every threshold in the app is hers (rule 12). */
       F: FX,
-      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, unmappedSessions, assumedSessions, week7, unscored7, scored7, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, unmappedSessions, assumedSessions, week7, unscored7, scored7, noScore7, noMins7, bodyMinsOn, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
@@ -16942,6 +17062,26 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                       as attendance rather than work.
                     </div>
                     <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
+                  </div>
+                )}
+                {/* HER REPORT, 2 September: "why there are no effort
+                    calculation for the lists I do from body page. it messes up
+                    the calculations." A body-work day was logged with a type
+                    and nothing else, so even once she scored it there was no
+                    length to multiply. Her lists declare their own minutes and
+                    those are used; where none of them declares any, the app
+                    asks rather than inventing a number (rule 23). */}
+                {Number(log.rpe) > 0 && !(Number(log.minutes) > 0)
+                  && !(bodyWorkOn(data, coach.t) || {}).mins && (
+                  <div style={{ marginTop: 10, padding: "12px 13px", background: C.chalk, borderRadius: 11 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>
+                      How long did that take?
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginBottom: 8 }}>
+                      Effort is minutes multiplied by how hard it felt, so this is the other half of it.
+                    </div>
+                    <Field label="Minutes" unit="min" value={log.minutes ?? ""}
+                      onChange={(v) => write({ minutes: v })} />
                   </div>
                 )}
                 {/* The line that used to sit here — "the tick is the session —
