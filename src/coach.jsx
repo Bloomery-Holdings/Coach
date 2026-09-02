@@ -4495,7 +4495,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "1 September 2026 · 243";
+const BUILD = "2 September 2026 · 244";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -16971,11 +16971,25 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                      second time is a tap (the ownwork pattern she chose on
                      16 August). */}
                 <div style={{ margin: "16px 0 2px" }}>
-                  <Eyebrow color={C.moss}>Classes you attend</Eyebrow>
+                  <Eyebrow color={C.moss}>Anything else you did</Eyebrow>
                 </div>
+                {/* HER REPORT, 2 September: "when it gives me the choice to log
+                    something, it doesn't give me the choice to log except moves.
+                    I want also to log other things like swim, something like
+                    that. It used to be there, but now it's invisible."
+
+                    It was here all along and it was mislabelled. This row takes
+                    any name and logs it as the day's real session — but it said
+                    "classes you attend, taught to you in a room", so a swim, a
+                    walk or a bike ride did not look like it belonged, and the
+                    only free-text box she could find was buried under "add
+                    another session". Nothing about how it works has changed;
+                    it now says what it has always done. */}
                 <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 4 }}>
-                  Taught to you in a room — Pilates at the gym, a functional training class. It counts
-                  like any session; your coach sees it, and can never prescribe it.
+                  Anything that is not in your library — a swim, a walk, a bike ride, Pilates at the
+                  gym, a class taught to you in a room. Type it once and it is remembered, so next
+                  time it is one tap. It counts like any session; your coach sees it, and can never
+                  prescribe it.
                 </div>
                 {attendedLive(data).map((a) => (
                   <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8,
@@ -16987,7 +17001,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
                         <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                          attended{a.lastOn ? ` · last ${dayAndMonth(a.lastOn)}` : ""}
+                          yours{a.lastOn ? ` · last ${dayAndMonth(a.lastOn)}` : ""}
                         </div>
                       </div>
                       <span style={{ color: C.moss, fontSize: 15, flexShrink: 0 }}>→</span>
@@ -17016,7 +17030,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 ))}
                 {addingAttended ? (
                   <div style={{ marginTop: 10, padding: "12px 13px", background: C.chalk, borderRadius: 11 }}>
-                    <Field label="What is the class called?" unit="" type="text"
+                    <Field label="What was it?" unit="e.g. swimming, Pilates at the gym, a long walk" type="text"
                       value={attendedName} onChange={setAttendedName} />
                     <div style={{ display: "flex", gap: 8 }}>
                       <div style={{ flex: 1 }}>
@@ -17033,9 +17047,9 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                   <button onClick={() => setAddingAttended(true)} className="tap" style={{
                     display: "block", width: "100%", textAlign: "left", padding: "12px 2px",
                     border: "none", background: "transparent", cursor: "pointer", fontFamily: "inherit" }}>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: C.moss }}>+ a class you attended</div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: C.moss }}>+ something else you did</div>
                     <div className="mono" style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-                      not in your library — remembered, so next time it is one tap
+                      a swim, a walk, a class — anything not in your library
                     </div>
                   </button>
                 )}
