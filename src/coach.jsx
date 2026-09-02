@@ -4495,7 +4495,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 244";
+const BUILD = "2 September 2026 · 245";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -24312,7 +24312,11 @@ function DayLogSheet({ data, coach, setSheet, close }) {
    she logs is REMEMBERED, so the second time is a tap.
    ==========================================================================*/
 function OwnWorkSheet({ data, setData, coach, close }) {
+  /* a session by default: it is the thing she came here for and could not do
+     (2 September), and a movement is one tap away */
+  const [kind, setKind] = useState("session");
   const [name, setName] = useState("");
+  const [mins, setMins] = useState("");
   const [w, setW] = useState("");
   const [reps, setReps] = useState("");
   const [secs, setSecs] = useState("");
@@ -24324,9 +24328,11 @@ function OwnWorkSheet({ data, setData, coach, close }) {
   const save = () => {
     const clean = name.trim();
     if (!clean) return;
-    setData((d) => logOwn(d, clean, { w, reps, secs }, today));
+    setData((d) => (kind === "session"
+      ? logOwnSession(d, clean, mins, today)
+      : logOwn(d, clean, { w, reps, secs }, today)));
     setSaved(clean);
-    setName(""); setW(""); setReps(""); setSecs("");
+    setName(""); setMins(""); setW(""); setReps(""); setSecs("");
   };
 
   return (
@@ -24336,36 +24342,98 @@ function OwnWorkSheet({ data, setData, coach, close }) {
         Log something you did
       </h1>
       <div style={{ fontSize: 13, lineHeight: 1.5, color: C.muted, marginBottom: 16 }}>
-        Anything that was not a class and was not on a list — press-ups in the kitchen, a set of
-        squats, a stretch you like. It goes on today with everything else, and the movement is kept
-        so next time it is one tap.
+        Anything that was not on your list — a swim, a walk, Pilates at the gym, press-ups in the
+        kitchen, a stretch you like. It goes on today with everything else, and the name is kept so
+        next time it is one tap.
       </div>
 
       {saved && (
         <Card style={{ marginBottom: 14, background: C.mint }}>
           <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>
-            <strong>{saved}</strong> is on today, and it is in your movements from now on.
+            <strong>{saved}</strong> is on today, and it is remembered from now on.
           </div>
         </Card>
       )}
 
+      {/* HER INSTRUCTION, 2 September: "I want it to be a move and, or a
+          session of something, swimming, Pilates, anything else." Two shapes,
+          because they are two different things: a movement is reps and a
+          weight, a session is minutes and it is the day. */}
       <Card style={{ marginBottom: 14 }}>
         <Eyebrow>What you did</Eyebrow>
-        <Field label="Movement" unit="" type="text" value={name} onChange={setName} />
-        <div style={{ display: "flex", gap: 8 }}>
-          <span style={{ flex: 1 }}><Field label="Weight or band" unit="" type="text" value={w} onChange={setW} /></span>
-          <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={reps} onChange={setReps} /></span>
-          <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={secs} onChange={setSecs} /></span>
+        <div style={{ display: "flex", gap: 8, margin: "6px 0 14px" }}>
+          {[["session", "A session", "swimming, Pilates, a walk"],
+            ["movement", "A movement", "press-ups, a stretch"]].map(([k, l, sub]) => (
+            <button key={k} onClick={() => setKind(k)} className="tap" style={{
+              flex: 1, padding: "10px 8px", borderRadius: 10, cursor: "pointer",
+              fontFamily: "inherit", textAlign: "left",
+              border: `1.5px solid ${kind === k ? C.signal : C.line}`,
+              background: kind === k ? C.signal : "transparent",
+              color: kind === k ? C.chalk : C.ink }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{l}</div>
+              <div style={{ fontSize: 10.5, marginTop: 2, opacity: 0.85 }}>{sub}</div>
+            </button>
+          ))}
         </div>
-        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "-4px 0 12px" }}>
-          Fill in whatever fits it. A movement with only a name still counts as done.
-        </div>
+        <Field label={kind === "session" ? "What was it?" : "Movement"}
+          unit={kind === "session" ? "swimming, Pilates at the gym, a long walk" : ""}
+          type="text" value={name} onChange={setName} />
+        {kind === "session" ? (
+          <>
+            <div style={{ display: "flex", gap: 8 }}>
+              <span style={{ flex: 1 }}>
+                <Field label="How long" unit="min" value={mins} onChange={setMins} />
+              </span>
+              <span style={{ flex: 1 }} />
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "-4px 0 12px" }}>
+              It goes on today as a session under its own name — a second one if you have already
+              logged something — and your coach sees it. It can never be prescribed to you, because
+              it is not in your library.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8 }}>
+              <span style={{ flex: 1 }}><Field label="Weight or band" unit="" type="text" value={w} onChange={setW} /></span>
+              <span style={{ flex: 1 }}><Field label="Reps" unit="each set" value={reps} onChange={setReps} /></span>
+              <span style={{ flex: 1 }}><Field label="Hold" unit="sec" value={secs} onChange={setSecs} /></span>
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "-4px 0 12px" }}>
+              Fill in whatever fits it. A movement with only a name still counts as done.
+            </div>
+          </>
+        )}
         <Btn kind={name.trim() ? "signal" : "quiet"} onClick={save}>
           {name.trim() ? `Log ${name.trim()}` : "Name it first"}
         </Btn>
       </Card>
 
-      {known.length > 0 && (
+      {/* WHAT SHE HAS LOGGED BEFORE, of whichever kind she is logging now.
+          Sessions live in the same remembered list the session picker reads,
+          so a swim named here is one tap on either screen. */}
+      {kind === "session" && attendedLive(data).length > 0 && (
+        <Card style={{ marginBottom: 14 }}>
+          <Eyebrow>Sessions you have logged before</Eyebrow>
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "2px 0 8px" }}>
+            Tap one to put its name in the box above. These are the same ones that show when you
+            pick today's session, so you only ever name a thing once.
+          </div>
+          {attendedLive(data).map((x) => (
+            <button key={x.id} onClick={() => setName(x.name)} className="tap" style={{
+              display: "flex", alignItems: "baseline", gap: 10, width: "100%", textAlign: "left",
+              border: "none", borderTop: `1px solid ${C.line}`, background: "transparent",
+              cursor: "pointer", padding: "9px 0", fontFamily: "inherit" }}>
+              <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>{x.name}</span>
+              <span className="mono" style={{ fontSize: 10, color: C.muted }}>
+                {x.lastOn ? dayAndMonth(x.lastOn) : "not yet"}
+              </span>
+            </button>
+          ))}
+        </Card>
+      )}
+
+      {kind === "movement" && known.length > 0 && (
         <Card style={{ marginBottom: 14 }}>
           <Eyebrow>Movements you have logged before</Eyebrow>
           <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: "2px 0 8px" }}>
@@ -31000,6 +31068,50 @@ const logOwn = (d, name, entry, date) => {
        already logged changes shape (rule 20). */
     bwlog: { ...(d.bwlog || {}), [date]: { ...day, [ex.id]: { ...(day[ex.id] || {}),
       ...(String(ex.name || "").trim() ? { nm: String(ex.name).trim() } : {}), ...keep } } } };
+};
+
+/* ---- A SESSION IS NOT A MOVEMENT ------------------------------------------
+   HER REPORT, 2 September: "when it gives me the choice to log something, it
+   doesn't give me the choice to log except moves. I want also to log other
+   things like swim, something like that... I want it to be a move and, or a
+   session of something, swimming, Pilates, anything else."
+
+   She was right, and the evidence was already in her own data: "Strength
+   pilates" and "Yoga wheel" were sitting in her MOVEMENTS list, because this
+   was the only screen that would take a name she typed. A movement is reps and
+   a weight; a session is minutes and it IS the day. Logged as a movement, a
+   swim carried no minutes, counted as "Body work", and never appeared as the
+   session it was.
+
+   Three things this gets right that logging it as a movement did not:
+   it takes MINUTES · it becomes the day's session under its own name, or a
+   second session if she already has one, rather than replacing what is there ·
+   and it is remembered in the SAME list the session picker reads, so a swim
+   logged here is one tap on either screen from now on.
+-------------------------------------------------------------------------- */
+const logOwnSession = (d, name, minutes, date) => {
+  const clean = String(name || "").trim();
+  if (!clean) return d;
+  const mins = String(minutes ?? "").trim();
+  /* the same name said slightly differently joins its own record rather than
+     founding a twin — the lesson of the eleven tabs (build 222) */
+  const known = (d.attended || []).find((x) => x && nameKey(x.name) === nameKey(clean));
+  const attended = known
+    ? (d.attended || []).map((x) => (x !== known ? x
+      : { ...x, lastOn: date, status: undefined, removedOn: undefined }))
+    : [...(d.attended || []), { id: newId(), name: clean, addedOn: date, lastOn: date }];
+  const l = (d.logs || {})[date] || {};
+  /* rest still wins until she overrides it herself, and it is settled here the
+     same way every other session write settles it (rule 33) */
+  const settle = l.rest ? { rest: false } : {};
+  const logs = String(l.type || "").trim()
+    /* she already has a session on this day, so this is a SECOND one — the
+       exact shape "add another session" writes, which eighteen readers count */
+    ? { ...(d.logs || {}), [date]: { ...l, ...settle,
+        extraSessions: [...(l.extraSessions || []), { id: newId(), type: clean, minutes: mins }] } }
+    : { ...(d.logs || {}), [date]: { ...l, ...settle,
+        type: clean, minutes: mins, completed: true, attended: true } };
+  return { ...d, attended, logs };
 };
 
 const bwHistory = (data, exId, skip) => {
