@@ -410,7 +410,21 @@ const FORMULA_DEFAULTS = {
   phaseBuildWeeks: 8,      /* weeks of real training, shoulder settled, before building */
   phaseFamiliariseWeeks: 4,/* ...and before familiarising                             */
 };
-const formulas = (settings) => ({ ...FORMULA_DEFAULTS, ...(settings?.formulas || {}) });
+/* Her overrides are kept EXACTLY as she typed them (rule 11: a number must
+   never be a save button) and coerced here, on the way out. A box she has
+   cleared is not a zero — it is a box with nothing in it, and the default
+   stands until she puts a number back. Before build 248 clearing one wrote 0,
+   which is a real threshold and a wrong one. */
+const formulas = (settings) => {
+  const out = { ...FORMULA_DEFAULTS };
+  const hers = (settings && settings.formulas) || {};
+  Object.keys(hers).forEach((k) => {
+    const raw = hers[k];
+    const n = Number(raw);
+    if (String(raw ?? "").trim() !== "" && Number.isFinite(n)) out[k] = n;
+  });
+  return out;
+};
 
 
 
@@ -1624,6 +1638,71 @@ const libLive = (data) => ((data && data.library) || []).filter(isLive);
 /* the classes she attends in person — the OTHER kind of class (build 240);
    see the note on `attended` in BLANK */
 const attendedLive = (data) => ((data && data.attended) || []).filter(isLive);
+
+/* ---------------------------------------------------------------------------
+   WHAT A SESSION SHE LOGGED HERSELF ACTUALLY WORKS.
+   HER REPORT, 2 September: "the body coverage calculates as zero."
+
+   Builds 244-245 gave her a way to log anything - a swim, Pilates at the gym,
+   a class taught to her in a room. Coverage, the region loads and the sets per
+   region only ever looked in her LIBRARY, so every session she logged herself
+   found no body map, contributed nothing to any region, and the headline read
+   0/7 in a week she had trained four times. Rule 23: it was asserting
+   something it had never computed.
+
+   A name now resolves in four steps, most specific first: her library, then
+   what SHE has said one of her own sessions works, then what the app assumed
+   from the name, and only then nothing. An assumption is always labelled as
+   one and is one tap from being corrected - rule 32: where it could decide or
+   ask, it decides, then shows its reasoning and lets her change it. Where it
+   can honestly do neither, the card dashes and says what it needs.
+
+   A set-aside session still maps, because the days she logged against it are
+   still her days (rule 20).
+--------------------------------------------------------------------------- */
+const SESSION_SHAPES = [
+  { goal: "cardio", words: ["swim", "swimming", "run", "running", "jog", "jogging", "walk", "walking",
+    "hike", "hiking", "cycle", "cycling", "bike", "biking", "spin", "spinning", "row", "rowing",
+    "cardio", "treadmill", "elliptical", "dance", "zumba", "aerobics", "tennis", "padel", "squash",
+    "badminton", "football", "climbing", "stairs", "skipping"] },
+  { goal: "mobility", words: ["yoga", "stretch", "stretching", "stretches", "mobility", "flexibility",
+    "physio", "rehab", "tai chi", "qigong", "foam rolling"] },
+  { goal: "core", words: ["pilates", "reformer", "core", "abs", "barre", "matwork"] },
+  { goal: "strength", words: ["strength", "weights", "weight training", "gym", "lifting", "lift",
+    "resistance", "bodypump", "pump", "kettlebell", "kettlebells", "crossfit", "circuit", "circuits",
+    "hiit", "tabata", "bootcamp", "calisthenics", "trx", "bands", "dumbbells"] },
+  { goal: "recovery", words: ["sauna", "massage", "recovery", "breathwork", "meditation", "restorative",
+    "sound bath"] },
+];
+/* Longest match wins, so "strength pilates" is strength rather than core. */
+const sessionShape = (name) => {
+  const s = " " + String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+  let best = null;
+  SESSION_SHAPES.forEach((sh) => sh.words.forEach((w) => {
+    if (s.indexOf(" " + w + " ") === -1) return;
+    if (!best || w.length > best.len) best = { goal: sh.goal, len: w.length };
+  }));
+  return best ? best.goal : null;
+};
+const bodyOfName = (data, name) => {
+  const k = String(name || "").trim().toLowerCase();
+  if (!k) return null;
+  const cls = libLive(data).find((x) => x && String(x.name || "").trim().toLowerCase() === k);
+  if (cls) {
+    const map = cls.body || BODY_BY_GOAL[cls.goal] || null;
+    return map ? { map, from: "class", goal: cls.goal || null } : null;
+  }
+  const own = ((data && data.attended) || []).find((x) => x && String(x.name || "").trim().toLowerCase() === k);
+  if (own && own.body) return { map: own.body, from: "yours", goal: own.goal || null };
+  if (own && own.goal && BODY_BY_GOAL[own.goal]) return { map: BODY_BY_GOAL[own.goal], from: "yours", goal: own.goal };
+  const shape = sessionShape(k);
+  if (shape) return { map: BODY_BY_GOAL[shape], from: "assumed", goal: shape };
+  return null;
+};
+const SESSION_GOALS = [
+  ["cardio", "Cardio"], ["strength", "Strength"], ["core", "Core"],
+  ["mobility", "Mobility"], ["recovery", "Recovery"],
+];
 const liveFields = (data) => ({
   weekly: (((data || {}).fields || {}).weekly || []).filter(isLive),
   monthly: (((data || {}).fields || {}).monthly || []).filter(isLive),
@@ -4495,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 247";
+const BUILD = "2 September 2026 · 249";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -9011,13 +9090,13 @@ function useCoach(data, day, clock) {
         const d = drillById(id, drills);
         if (!d || d.status === "removed") continue;
         out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [], suggested: !!suggestedFor[id] });
-        mins += d.mins || 0; goalMins += d.mins || 0;
+        mins += Number(d.mins) || 0; goalMins += Number(d.mins) || 0;
       }
       /* mobility fills what is left of the ten minutes, never displaces it */
       for (const id of mobIds) {
         const d = drillById(id, drills);
-        if (!d || d.status === "removed" || mins + (d.mins || 0) > DAILY_BUDGET) continue;
-        out.push(d); mins += d.mins || 0;
+        if (!d || d.status === "removed" || mins + (Number(d.mins) || 0) > DAILY_BUDGET) continue;
+        out.push(d); mins += Number(d.mins) || 0;
       }
       /* which goals have nothing to do today. Said out loud, never hidden. */
       const covered = new Set();
@@ -9933,11 +10012,10 @@ function useCoach(data, day, clock) {
        design rule — it would look like she trained nothing. So fall back to a
        sensible spread for the goal it carries. A rough map beats a blank one;
        she can tune it per class in Workouts. */
-    const bodyOf = (name) => {
-      const w = allClasses.find((x) => x.name === name);
-      if (!w) return null;
-      return w.body || BODY_BY_GOAL[w.goal] || null;
-    };
+    /* Build 248: this looked in her LIBRARY only, so everything she logged
+       herself counted towards no region at all. bodyOfName resolves her
+       library, then her own answer, then an assumption from the name. */
+    const bodyOf = (name) => (bodyOfName(data, name) || {}).map || null;
     const rpeOf = (l) => Number(l?.rpe) || 0;
 
     /* Session load = minutes x effort. The standard internal-load measure. */
@@ -9962,6 +10040,40 @@ function useCoach(data, day, clock) {
     const priorWeek = loadWindow(7, 7);
     const loadTrend = priorWeek ? Math.round(((acute - priorWeek) / priorWeek) * 100) : null;
     const hasLoad = chronic28 > 0;
+
+    /* A SESSION WITH NO EFFORT SCORE IS NOT A LIGHT SESSION.
+
+       HER REPORT, 2 September: "everything calculates as zero." She had swum
+       for forty minutes that morning and logged it. Load is minutes × effort;
+       the effort tap sat behind "change it" and she had never opened it. So
+       the week's load came to 40 × nothing = 0, Effort printed 0, Balance
+       printed 0.00, and the card underneath told her she was doing less than
+       her body was prepared for and missing sessions on top.
+
+       Every one of those was computed off a number the app had never asked her
+       for on that screen (rule 23), and the sentence was an accounting of a
+       week she had in fact trained (rule 24). The minutes are real. The load is
+       not — and a missing multiplier must never read as a small one.
+
+       So the app counts what has not been scored, says so, and refuses to
+       divide by it. The tap itself now sits on the logged session, where the
+       session is. */
+    const sessionsInDays = (days) => {
+      const out = [];
+      for (let i = 0; i < days; i++) {
+        const l = logs[addDays(t, -i)];
+        if (!l?.completed) continue;
+        if (String(l.type || "").trim()) out.push({ type: l.type, minutes: l.minutes, rpe: l.rpe });
+        (l.extraSessions || []).forEach((x) => out.push({ type: x.type, minutes: x.minutes,
+          /* an extra session with no score of its own inherits the day's, which
+             is exactly what the load sum does — the two must agree */
+          rpe: Number(x.rpe) > 0 ? x.rpe : l.rpe }));
+      }
+      return out;
+    };
+    const week7 = sessionsInDays(7);
+    const unscored7 = week7.filter((x) => !(Number(x.rpe) > 0)).length;
+    const scored7 = week7.length - unscored7;
 
     /* Acute:chronic. 0.8-1.3 is the range the evidence supports.
 
@@ -9993,7 +10105,11 @@ function useCoach(data, day, clock) {
        by a hard one still reads as the spike it is. */
     const baseLoad = loadWindow(21, 7);
     const hasChronicBase = baseDays >= 3 && baseLoad >= acute / 10;
-    const acwr = (chronic > 0 && hasChronicBase) ? Math.round((acute / chronic) * 100) / 100 : null;
+    /* Build 249: and every session this week must carry an effort score. A
+       week with three scored sessions and one unscored one divided by a month
+       of scored ones reads as a fall she did not have. */
+    const acwr = (chronic > 0 && hasChronicBase && unscored7 === 0)
+      ? Math.round((acute / chronic) * 100) / 100 : null;
     const acwrBand = acwr === null ? null
       : acwr < FX.acwrLow ? { key: "under", label: "Under", color: C.ochre }
       : acwr <= FX.acwrHigh ? { key: "good", label: "In range", color: C.moss }
@@ -10087,6 +10203,38 @@ function useCoach(data, day, clock) {
     });
     const covered = bodyRows.filter((r) => r.covered).length;
     const thinnest = bodyRows.filter((r) => !r.covered).sort((a, b) => a.load28 - b.load28);
+    /* Anything she logged in the last four weeks that nothing could map, named
+       so the app can ask instead of quietly counting it as zero. */
+    const unmappedSessions = (() => {
+      const seen = new Map();
+      for (let i = 0; i < 28; i++) {
+        const l = logs[addDays(t, -i)];
+        if (!l?.completed) continue;
+        [{ type: l.type }, ...(l.extraSessions || [])].forEach((sess) => {
+          const n = String(sess.type || "").trim();
+          if (!n || bodyOf(n)) return;
+          if (!seen.has(n.toLowerCase())) seen.set(n.toLowerCase(), n);
+        });
+      }
+      return Array.from(seen.values());
+    })();
+    /* Sessions counted on an assumption rather than on something she or her
+       library said. Shown as an assumption wherever it is used (rule 23). */
+    const assumedSessions = (() => {
+      const seen = new Map();
+      for (let i = 0; i < 7; i++) {
+        const l = logs[addDays(t, -i)];
+        if (!l?.completed) continue;
+        [{ type: l.type }, ...(l.extraSessions || [])].forEach((sess) => {
+          const n = String(sess.type || "").trim();
+          if (!n) return;
+          const hit = bodyOfName(data, n);
+          if (hit && hit.from === "assumed" && !seen.has(n.toLowerCase()))
+            seen.set(n.toLowerCase(), { name: n, goal: hit.goal });
+        });
+      }
+      return Array.from(seen.values());
+    })();
 
     /* Adaptation: is the same work costing less? Recovery response per unit strain. */
     const costSeries = (days, offset) => {
@@ -10125,6 +10273,10 @@ function useCoach(data, day, clock) {
       const parts = [];
       if (!hasLoad)
         return "These five start working once your sessions carry an effort score — the tap is at the bottom of this card, right after you log. Until then the app is counting attendance, which is the least interesting thing about you.";
+      /* Build 249: her whole week was unscored and this said she was doing
+         less than her body was prepared for and missing sessions on top. */
+      if (week7.length && !scored7)
+        return `You trained ${week7.length} time${week7.length > 1 ? "s" : ""} in the last seven days and none of it carries an effort score yet, so these have nothing to be a number of. One tap on the session — how hard did it feel — and they fill in. Nothing is missing from your training; only from the arithmetic.`;
       if (acwrBand?.key === "spike")
         parts.push("This week is a long way above your normal, and sudden jumps are where injuries come from — not hard training, sudden training. Take the next one easier.");
       else if (acwrBand?.key === "under" && consistency < FX.consistencyUnder)
@@ -10135,7 +10287,12 @@ function useCoach(data, day, clock) {
         parts.push("Consistent, and training at a level your body is ready for. This is exactly the boring middle where progress actually happens.");
       else if (acwrBand?.key === "high")
         parts.push("Heavier than your usual month. Fine for one week — not two in a row.");
-      else parts.push("The load is reasonable; the gaps between sessions are the thing to tighten.");
+      else if (unscored7)
+        parts.push(`${unscored7} of this week's sessions ${unscored7 > 1 ? "have" : "has"} no effort score, so the load numbers are holding rather than judging. One tap each and they fill in.`);
+      else if (acwrBand)
+        parts.push("The load is reasonable; the gaps between sessions are the thing to tighten.");
+      else
+        parts.push("There is not enough of an ordinary month behind you yet for this week to be measured against — which is a fact about the history, not about the week.");
       if (covered <= FX.coverNarrow && thinnest.length)
         parts.push(`${thinnest.slice(0, 2).map((r) => r.label.toLowerCase()).join(" and ")} barely got touched — that's where the next add-on should go.`);
       if (adaptation !== null && adaptation > FX.adaptStrong)
@@ -11161,22 +11318,36 @@ function useCoach(data, day, clock) {
     const vitalDefs = [
       {
         id: "effort", label: "Effort", scope: "last 7 days",
-        value: hasLoad ? acute : null, display: hasLoad ? String(acute) : "—",
-        sub: loadTrend === null ? "no week to compare yet"
+        value: hasLoad && scored7 ? acute : null,
+        display: hasLoad && scored7 ? String(acute) : "—",
+        sub: week7.length && !scored7
+            ? `${week7.length} session${week7.length > 1 ? "s" : ""} logged, no effort score yet`
+          : unscored7
+            ? `${unscored7} of this week's sessions not scored yet`
+          : loadTrend === null ? "no week to compare yet"
           : `${loadTrend >= 0 ? "+" : ""}${loadTrend}% on last week`,
-        color: C.ink,
+        color: week7.length && !scored7 ? C.muted : C.ink,
         plain: "Minutes multiplied by how hard each session felt, added up across the week.",
         meaning: `This is the only honest measure of what you actually did. Forty-five minutes of stretching and forty-five minutes of BODYPUMP both used to count as one session; now they don't. Your week came to ${hasLoad ? acute : "—"}, against a running average of ${hasLoad ? chronic : "—"}. The number itself is meaningless in isolation — what matters is that it is yours, and that it moves.`,
-        need: hasLoad ? null : "Tap an effort score after your sessions and this fills in within a week.",
+        need: week7.length && !scored7
+          ? `You trained ${week7.length} time${week7.length > 1 ? "s" : ""} this week. Effort is minutes multiplied by how hard it felt, and none of them has been scored yet — so there is nothing to multiply by, and a zero here would be about the arithmetic rather than about you. The tap is on the session itself, at the top of Today.`
+          : unscored7
+          ? `${unscored7} session${unscored7 > 1 ? "s" : ""} this week ${unscored7 > 1 ? "have" : "has"} no effort score, so ${unscored7 > 1 ? "they are" : "it is"} not in this total. One tap on the session and ${unscored7 > 1 ? "they count" : "it counts"}.`
+          : hasLoad ? null : "Tap an effort score after your sessions and this fills in within a week.",
       },
       {
         id: "balance", label: "Balance", scope: "this week vs your month",
         value: acwr, display: acwr === null ? "—" : acwr.toFixed(2),
-        sub: acwrBand ? acwrBand.label : "needs a month of effort scores",
+        sub: acwrBand ? acwrBand.label
+          : unscored7 ? `${unscored7} session${unscored7 > 1 ? "s" : ""} this week not scored yet`
+          : "needs a month of effort scores",
         color: acwrBand ? acwrBand.color : C.muted,
         plain: "This week's work divided by your typical week over the last month.",
         meaning: `The single most useful number here. Around 1.0 means this week looks like your normal — you are training at a level your body is already prepared for. Below ${FX.acwrLow} and you are doing less than you are built for, which is how fitness quietly leaks away. Above ${FX.acwrSpike} is a spike, and spikes are where injuries come from — not from hard training, but from sudden training. The corridor this app holds you to is ${FX.acwrLow} to ${FX.acwrHigh}, which is where the evidence puts it.`,
-        need: acwr === null ? "Needs about four weeks of effort scores before it means anything." : null,
+        need: acwr !== null ? null
+          : unscored7
+          ? `This divides your week by your usual month. ${unscored7 > 1 ? unscored7 + " of this week's sessions have" : "One of this week's sessions has"} no effort score, so the top of that sum is short and it would read as a collapse you did not have. Score ${unscored7 > 1 ? "them" : "it"} and this comes straight back.`
+          : "Needs about four weeks of effort scores before it means anything.",
       },
       {
         id: "consistency", label: "Consistency", scope: `last ${FX.consistencyWindow} days`,
@@ -11199,17 +11370,29 @@ function useCoach(data, day, clock) {
            nothing. This one printed "0/7" with the word "narrow" under it in
            the warning colour on day one — a computed-looking judgement about a
            week in which she had not trained at all. Rule 23: a calculation
-           without its input shows a dash and says what it needs. */
-        value: coverWeekTrained ? covered : null,
-        display: coverWeekTrained ? `${covered}/${REGIONS.length}` : "—",
+           without its input shows a dash and says what it needs.
+
+           HER REPORT, 2 September, build 248: it did it again, for the other
+           reason — she HAD trained, four times, all of them sessions she
+           logged herself, and none of them carried a body map. A week of real
+           work read 0/7. It dashes for that too now, and names what it needs
+           to know rather than scoring her on it. */
+        value: coverWeekTrained && bodyTotal7 > 0 ? covered : null,
+        display: coverWeekTrained && bodyTotal7 > 0 ? `${covered}/${REGIONS.length}` : "—",
         sub: !coverWeekTrained ? "no sessions logged in the last 7 days"
+          : !bodyTotal7 ? `nothing knows what ${unmappedSessions.length ? unmappedSessions.slice(0, 2).join(" or ") : "your sessions"} works yet`
           : covered >= FX.coverWhole ? "whole body" : covered >= FX.coverNarrow ? `${thinnest.length} thin` : "narrow",
-        color: !coverWeekTrained ? C.muted
+        color: !coverWeekTrained || !bodyTotal7 ? C.muted
           : covered >= FX.coverWhole ? C.moss : covered >= FX.coverNarrow ? C.ink : C.ochre,
         plain: "How many parts of your body took a real share of the week's work.",
-        meaning: `Until now this app watched one shoulder and nothing else. It now accounts for legs, back, chest, shoulders, arms, core and heart separately, because the regions that quietly disappear are the ones nobody is counting. ${thinnest.length ? `Thinnest right now: ${thinnest.slice(0, 3).map((r) => r.label.toLowerCase()).join(", ")}.` : "Everything is getting a share."}`,
-        need: hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
+        meaning: `Until now this app watched one shoulder and nothing else. It now accounts for legs, back, chest, shoulders, arms, core and heart separately, because the regions that quietly disappear are the ones nobody is counting. ${thinnest.length && bodyTotal7 ? `Thinnest right now: ${thinnest.slice(0, 3).map((r) => r.label.toLowerCase()).join(", ")}.` : bodyTotal7 ? "Everything is getting a share." : ""}`,
+        need: unmappedSessions.length
+          ? `${unmappedSessions.slice(0, 3).join(", ")} ${unmappedSessions.length === 1 ? "is a session" : "are sessions"} nothing here can place on your body yet, so ${unmappedSessions.length === 1 ? "it counts" : "they count"} towards no region at all. Workouts → the session list → tap what it works, and every day you have already logged against it counts from then on.`
+          : assumedSessions.length
+          ? `${assumedSessions.map((x) => `${x.name} is being counted as ${x.goal}`).join(", ")} — assumed from the name, not something you said. Change it in Workouts if that is wrong.`
+          : hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
       },
+
       {
         id: "adaptation", label: "Adaptation", scope: "this month vs last",
         value: adaptation, display: adaptation === null ? "—" : `${adaptation >= 0 ? "+" : ""}${adaptation}%`,
@@ -11228,7 +11411,7 @@ function useCoach(data, day, clock) {
         how: v.id === "effort" ? "Minutes multiplied by your effort score, for every session in the last seven days."
           : v.id === "balance" ? "Total load over 7 days, divided by the average week across 28 days."
           : v.id === "consistency" ? "Sessions completed divided by sessions scheduled, across 28 days."
-          : v.id === "coverage" ? `Each class carries a body map. Load is split across regions, and a region counts as covered once it takes at least ${Math.round(FX.coverMin * 100)}% of the week's work.`
+          : v.id === "coverage" ? `Every session carries a body map — from your library, from what you have said one of your own sessions works, or assumed from its name. Load is split across regions, and a region counts as covered once it takes at least ${Math.round(FX.coverMin * 100)}% of the week's work.`
           : "Recovery lost per unit of strain this month, against the same figure a month ago." })),
       ...more,
     ];
@@ -12369,7 +12552,7 @@ function useCoach(data, day, clock) {
          Added at build 193 because SessionClock needs clockMinSession and takes
          no data prop. Every threshold in the app is hers (rule 12). */
       F: FX,
-      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
+      batteryRead, capture, weeklyProgress, monthlyProgress, calibrating, weeksIntoBlock, blockWeeksLeft, reviewDue, blockReview, proposal, DESIGN_RULES, reviews, lastReview, deepMode, deepDue, deepReadToday, readableProposal, daysLogged, allClasses, programWeek, programPhase, programDays, blockCalendar, calendarFor, liveIndex, dayPlan, BLOCKS, vitals: vitalDefs, allMetrics, sets7, setsMet, setsShort, groupsOf, reading, bodyRows, unmappedSessions, assumedSessions, week7, unscored7, scored7, acute, chronic, acwr, acwrBand, covered, hasLoad, loadOfDay, adaptation, leading, ledToday, byScope, rhrDrift, hrvDrift, dormant, variety28, ctx, trendFor, shoulderFrozen, shoulderSore, shoulderTold, shoulderGuard, recValue, restDay, restBySchedule, loggedToday, recovery, sleptHours, sleepBase, sleepShort, message, mission, weeklyDue, monthlyDue, weeklyToday, monthlyToday, weeklyLate, monthlyLate, weeklyAssessDay, monthlyAssessDay, nextAssessDay,
       weeklyKey, monthlyKey, weeklyFrom, monthlyFrom, weeklySkips, monthlySkips, weeklyMoveTo, monthlyMoveTo,
       monthlyWeek, monthlyIsWeeklyToo, weeklyDone, monthlyDone, weeklyStarted, monthlyStarted,
       tracked, morningSeries,
@@ -13908,7 +14091,7 @@ const AssessInput = ({ f, form, set, pb, target, history, ask, seeAll }) => {
     <div><Note label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} /><HowTo f={f} /></div>
   );
   if (f.type === "scale") return (
-    <div><Scale label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} max={f.max || 5} pb={pb} /><HowTo f={f} /></div>
+    <div><Scale label={f.label} value={form[f.id]} onChange={(v) => set(f.id, v)} max={Number(f.max) || 5} pb={pb} /><HowTo f={f} /></div>
   );
 
   const rungKey = f.id + "__rung";
@@ -16490,7 +16673,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
           || (didToday[x.id] && ["w", "reps", "secs"].some((f) => String(didToday[x.id][f] || "").trim() !== ""));
         const left = (coach.dailyDrills.list || []).filter((x) => !done(x));
         if (!left.length) return null;
-        const mins = Math.round(left.reduce((a, x) => a + (x.mins || 0), 0) * 10) / 10;
+        const mins = Math.round(left.reduce((a, x) => a + (Number(x.mins) || 0), 0) * 10) / 10;
         const goalCount = left.filter((x) => x.forGoal).length;
         const started = left.length < (coach.dailyDrills.list || []).length;
         return (
@@ -16742,6 +16925,25 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
                     fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>change it</button>
                 </div>
+                {/* HER REPORT, 2 September: "everything calculates as zero."
+
+                    The effort tap was inside "change it", one fold away from a
+                    session she had already finished — so a logged swim carried
+                    no effort, its load was forty minutes times nothing, and
+                    four of the five numbers under it read zero. Rule 11: if the
+                    app needs something, it asks where the thing is. */}
+                {!(Number(log.rpe) > 0) && (
+                  <div style={{ marginTop: 10, padding: "12px 13px", background: C.chalk, borderRadius: 11 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>
+                      How hard did that feel?
+                    </div>
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginBottom: 4 }}>
+                      One tap, and it is what Effort and Balance are made of. Without it the week counts
+                      as attendance rather than work.
+                    </div>
+                    <RpeTap value={log?.rpe} onChange={(v) => write({ rpe: v })} />
+                  </div>
+                )}
                 {/* The line that used to sit here — "the tick is the session —
                     the weekly check numbers are X% in, N still to enter" — is
                     gone at her instruction, 16 August: "remove this. it is
@@ -17002,8 +17204,8 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                   prescribe it.
                 </div>
                 {attendedLive(data).map((a) => (
-                  <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8,
-                    borderBottom: `1px solid ${C.line}` }}>
+                  <div key={a.id} style={{ borderBottom: `1px solid ${C.line}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <button onClick={() => chooseAttended(a)} className="tap" style={{
                       flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center",
                       gap: 10, padding: "12px 2px", border: "none", background: "transparent",
@@ -17020,6 +17222,52 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                         (x.id === a.id ? { ...x, status: "removed", removedOn: coach.t } : x)) }))}
                       className="tap" style={{ border: "none", background: "transparent", cursor: "pointer",
                         fontSize: 11, color: C.muted, padding: "4px 2px", flexShrink: 0 }}>remove</button>
+                    </div>
+                    {/* WHAT IT WORKS. HER REPORT, 2 September: "the body
+                        coverage calculates as zero." Everything she logs
+                        herself lands here, and until build 248 none of it
+                        carried a body map — so a week of real training
+                        counted towards no region at all. The app makes the
+                        obvious call from the name and says so; this row is
+                        where she overrules it, and every day already logged
+                        against the session recounts from that moment. */}
+                    {(() => {
+                      const hit = bodyOfName(data, a.name);
+                      const goalLabel = (g) => (SESSION_GOALS.find((x) => x[0] === g) || [g, g])[1];
+                      const chosen = hit && hit.from === "yours" ? hit.goal : null;
+                      const assumed = hit && hit.from === "assumed" ? hit.goal : null;
+                      return (
+                        <div style={{ padding: "0 2px 12px" }}>
+                          <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginBottom: 6 }}>
+                            {hit && hit.from === "class"
+                              ? "Your library already says what this one works."
+                              : chosen ? `Counted as ${goalLabel(chosen).toLowerCase()} work — because you said so.`
+                              : assumed ? `Counted as ${goalLabel(assumed).toLowerCase()} work — assumed from the name, not something you said. Tap to change it.`
+                              : "Nothing here knows what this works, so it counts towards no part of your body. Tap what it is."}
+                          </div>
+                          {(!hit || hit.from !== "class") && (
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                              {SESSION_GOALS.map(([g, label]) => {
+                                const on = (chosen || assumed) === g;
+                                return (
+                                  <button key={g} onClick={() => setData((d) => ({ ...d,
+                                    attended: (d.attended || []).map((x) => (x.id === a.id
+                                      ? { ...x, goal: x.goal === g ? undefined : g, goalEdited: true } : x)) }))}
+                                    className="tap" style={{
+                                      padding: "6px 10px", borderRadius: 999, cursor: "pointer", fontSize: 11,
+                                      fontFamily: "inherit", fontWeight: 500,
+                                      border: `1.5px solid ${on ? C.signal : C.line}`,
+                                      background: on && chosen === g ? C.pist : "transparent",
+                                      color: on ? C.ink : C.muted }}>
+                                    {label}{chosen === g ? " ✓" : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
                 {/* SET ASIDE, AND ONE TAP BACK (rule 20) — the therapies
@@ -19862,7 +20110,7 @@ function FieldEditor({ which, data, setData, close, focus }) {
                     background: f.bilateral ? C.signal : "transparent", color: f.bilateral ? C.chalk : C.muted,
                   }}>Left / right separately{f.bilateral ? " ✓" : ""}</button>
                 </div>
-                {f.type === "scale" && <Field label="Highest value" unit="" value={f.max || 5} onChange={(v) => patch(f.id, { max: Number(v) || 5 })} />}
+                {f.type === "scale" && <Field label="Highest value" unit="" value={f.max ?? 5} onChange={(v) => patch(f.id, { max: v })} />}
                 <Field label="Minutes it takes" unit="min" value={f.mins ?? ""}
                   onChange={(v) => patch(f.id, { mins: v === "" ? undefined : Number(v) || 0, minsEdited: true })} />
                 {f.type !== "note" && (
@@ -20112,7 +20360,7 @@ function MemorySheet({ data, setData, close }) {
 function Formulas({ data, setData, close }) {
   const F = formulas(data.settings);
   const set = (k, v) => setData((d) => ({
-    ...d, settings: { ...d.settings, formulas: { ...(d.settings.formulas || {}), [k]: Number(v) || 0 } },
+    ...d, settings: { ...d.settings, formulas: { ...(d.settings.formulas || {}), [k]: v } },
   }));
   const reset = () => setData((d) => ({ ...d, settings: { ...d.settings, formulas: {} } }));
 
@@ -20348,7 +20596,7 @@ function Formulas({ data, setData, close }) {
           <Eyebrow>{g.title}</Eyebrow>
           <div style={{ fontSize: 12, lineHeight: 1.5, color: C.muted, marginBottom: 14 }}>{g.note}</div>
           {g.rows.map(([k, label]) => (
-            <Field key={k} label={label} unit="" value={F[k]} onChange={(v) => set(k, v)} />
+            <Field key={k} label={label} unit="" value={(data.settings?.formulas || {})[k] ?? F[k]} onChange={(v) => set(k, v)} />
           ))}
         </Card>
       ))}
@@ -23270,8 +23518,8 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             </>
           ) : (
             <>
-              <Field label="Minutes" unit="" value={item.mins}
-                onChange={(v) => patchDrill(item.id, { mins: Number(v) || 1 })} />
+              <Field label="Minutes" unit="" value={item.mins ?? ""}
+                onChange={(v) => patchDrill(item.id, { mins: v })} />
               {/* Rule 12: the same toggle the mobility tests have. sideEdited
                   marks it HERS, so the seed never overrules her again. */}
               <div style={{ display: "flex", gap: 8, margin: "2px 0 12px" }}>
