@@ -4574,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 250";
+const BUILD = "2 September 2026 · 251";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -31643,13 +31643,70 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
     pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) =>
       ls.id !== list.id ? ls : { ...ls, exercises: (ls.exercises || []).map((x) =>
         x.id === ex.id ? { ...x, status: "removed", removedOn: coach.t } : x) }) }) }));
+  /* HER REPORT, 2 September: "when I edit a list of exercises and I want to
+     make it go up the exercise itself. For example, I start by it. There's no
+     way to arrange the order of the exercises."
+
+     The order of a list is the order she does it in, so it has to be hers. It
+     was hers for the battery rows and for the lists themselves, and never for
+     the movements inside a list. Same control the battery has used since build
+     96, on the row itself (rule 11).
+
+     Ids never change, so everything she has logged against a movement follows
+     it (rule 20), and a set-aside row is stepped over rather than swapped with
+     — otherwise an invisible row would eat the tap. */
+  const liveEx = (list.exercises || []).filter((x) => x && x.status !== "removed");
+  const exAt = liveEx.findIndex((x) => x.id === ex.id);
+  const canUp = exAt > 0;
+  const canDown = exAt >= 0 && exAt < liveEx.length - 1;
+  const moveEx = (dir) => setData((d) => ({ ...d, bodywork: (d.bodywork || []).map((pg) =>
+    pg.id !== prog.id ? pg : { ...pg, lists: (pg.lists || []).map((ls) => {
+      if (ls.id !== list.id) return ls;
+      const all = ls.exercises || [];
+      const idxs = all.map((x, i) => [x, i]).filter(([x]) => x && x.status !== "removed").map(([, i]) => i);
+      const at = idxs.findIndex((i) => all[i] && all[i].id === ex.id);
+      if (at < 0) return ls;
+      const n = [...all];
+      if (dir === "first") {
+        if (at === 0) return ls;
+        const [row] = n.splice(idxs[at], 1);
+        n.splice(idxs[0], 0, row);
+        return { ...ls, exercises: n };
+      }
+      const to = at + dir;
+      if (to < 0 || to >= idxs.length) return ls;
+      const a = idxs[at], b = idxs[to];
+      [n[a], n[b]] = [n[b], n[a]];
+      return { ...ls, exercises: n };
+    }) }) }));
+
 
   return (
     <div style={{ padding: "12px 0", borderTop: `1px solid ${C.line}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-        <span style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{ex.name}</span>
+        {/* ARRANGE THEM. Her order, on the row, the same two arrows the
+            battery has had since build 96. */}
+        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, flex: 1 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
+            {[[-1, "▲", "move it up", canUp], [1, "▼", "move it down", canDown]].map(([dir, ch, label, on]) => (
+              <button key={String(dir)} aria-label={label} title={label}
+                onClick={() => on && moveEx(dir)} disabled={!on} className="tap" style={{
+                  border: "none", background: "transparent", cursor: on ? "pointer" : "default",
+                  color: on ? C.muted : C.line, fontSize: 8, lineHeight: 1, padding: "2px 3px",
+                  fontFamily: "inherit" }}>{ch}</button>
+            ))}
+          </div>
+          <span style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{ex.name}</span>
+        </div>
         <span className="mono" style={{ fontSize: 11, color: C.signal, flexShrink: 0 }}>{ex.dose}</span>
       </div>
+      {exAt > 1 && (
+        <button onClick={() => moveEx("first")} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer", padding: "3px 0 0 25px",
+          fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit" }}>
+          start the list with this one
+        </button>
+      )}
       {ex.tool && (
         <div className="mono" style={{ fontSize: 10.5, color: C.muted, marginTop: 3,
           letterSpacing: "0.06em", textTransform: "uppercase" }}>{ex.tool}</div>
