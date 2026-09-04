@@ -4763,7 +4763,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "2 September 2026 · 251";
+const BUILD = "4 September 2026 · 253";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -6380,11 +6380,15 @@ const briefAdherence = (coach) => {
    than showing a number that is not there (rule 23). */
 const briefNumbers = (coach, data) => {
     const shown = metricsForCoach(coach.allMetrics, data.settings);
+    /* A number may carry a second wording for when she has switched the
+       day-by-day record off — same fact, nothing named. Only this payload uses
+       it; her card and the everything-read are unchanged. */
+    const dayOff = !pageOn((data || {}).settings, "today");
     if (!shown.length)
         return "THE NUMBERS YOU CARRY: none switched on.";
     const all = (coach.allMetrics || []).length;
     return `THE NUMBERS YOU CARRY — ${shown.length} of ${all} she runs. (headline) marks the five on her landing page.\n`
-        + `  ${shown.map((v) => `${v.label} ${v.display}${v.key ? " (headline)" : ""}${v.need ? ` [${v.need}]` : ""}`).join(" · ")}`;
+        + `  ${shown.map((v) => `${v.label} ${v.display}${v.key ? " (headline)" : ""}${(dayOff && v.needOff) || v.need ? ` [${(dayOff && v.needOff) || v.need}]` : ""}`).join(" · ")}`;
 };
 /* WHAT IT CONCLUDED BEFORE (rule 8: one coach rather than twelve). Conclusions
    and rules only — the reasoning behind them was written for the read itself.
@@ -12111,6 +12115,20 @@ function useCoach(data, day, clock) {
                     ? `${unmappedSessions.slice(0, 3).join(", ")} ${unmappedSessions.length === 1 ? "is a session" : "are sessions"} nothing here can place on your body yet, so ${unmappedSessions.length === 1 ? "it counts" : "they count"} towards no region at all. Workouts → the session list → tap what it works, and every day you have already logged against it counts from then on.`
                     : assumedSessions.length
                         ? `${assumedSessions.map((x) => `${x.name} is being counted as ${x.goal}`).join(", ")} — assumed from the name, not something you said. Change it in Workouts if that is wrong.`
+                        : hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
+                /* WHAT TRAVELS WHEN SHE HAS SWITCHED TODAY OFF.
+                   Found by the desktop harness on 3 September (suite 49) and confirmed
+                   here before touching anything: with the day-by-day record switched
+                   off, this string was carrying her session NAMES into the summary
+                   payload through THE NUMBERS YOU CARRY, which has no page gate. A
+                   session name is day-by-day record; the switch is build 216's and it
+                   has to hold. Her screen is unchanged — the card names them, because
+                   naming them is the point of it. This is the same fact, counted
+                   rather than named, and only the payload ever sees it. */
+                needOff: unmappedSessions.length
+                    ? `${unmappedSessions.length} session${unmappedSessions.length === 1 ? "" : "s"} this week ${unmappedSessions.length === 1 ? "has" : "have"} no body map, so ${unmappedSessions.length === 1 ? "it counts" : "they count"} towards no region at all. She has switched the day-by-day record off, so ask her which ${unmappedSessions.length === 1 ? "it is" : "they are"} rather than guessing — she can set what each one works on the session itself.`
+                    : assumedSessions.length
+                        ? `${assumedSessions.length} of this week's sessions ${assumedSessions.length === 1 ? "is" : "are"} counted from what ${assumedSessions.length === 1 ? "its name suggests" : "their names suggest"} rather than from something she said. She has switched the day-by-day record off, so ask rather than naming them back to her.`
                         : hasLoad ? null : "Sharper once effort scores are in — until then it counts minutes only.",
             },
             {
@@ -28289,6 +28307,13 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
 
    Nothing is ever deleted. A list taken off is marked removed, dated,
    with its exercises and everything logged against them intact (rule 20). */
+/* THE SCREEN SAYS "up", THE OPERATION READ A NUMBER. moveList compared
+   `dir < 0` while every caller on the arrange screen passes "up" or "down",
+   so "up" moved a list DOWN — or, on the last list, did nothing at all.
+   moveArea was written the other way and was right. Both spellings work now.
+   Found 3 September while adding the exercises, on the screen she had just
+   said she was using. */
+const bwUp = (dir) => dir === "up" || Number(dir) < 0;
 const bwOps = {
     renameArea: (d, pgId, name) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => (pg.id !== pgId ? pg : { ...pg, area: name })) }),
     renameList: (d, pgId, listId, title) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => (pg.id !== pgId ? pg : { ...pg, lists: (pg.lists || []).map((l) => (l.id !== listId ? l : { ...l, title })) })) }),
@@ -28329,7 +28354,7 @@ const bwOps = {
             const all = frozen.lists || [];
             const liveIdx = all.map((l, i) => (l && l.status !== "removed" ? i : -1)).filter((i) => i >= 0);
             const at = liveIdx.findIndex((i) => all[i] && all[i].id === listId);
-            const to = at + (dir < 0 ? -1 : 1);
+            const to = at + (bwUp(dir) ? -1 : 1);
             if (at < 0 || to < 0 || to >= liveIdx.length)
                 return frozen;
             const a = liveIdx[at], b = liveIdx[to];
@@ -28343,6 +28368,43 @@ const bwOps = {
        against them — and its TICKS move with it, which is only possible because
        a tick names its list now. Ticks that belong to it are carried across and
        removed from the area it left, so no day is counted twice. */
+    /* HER REQUEST, 3 September: "I want to be able to also arrange the exercises
+       inside the list, so I will bring an exercise to top of the list, bring
+       another exercise a bit lower or down on the list."
+  
+       The same shape as moveList, one level down, plus "top" — because bringing
+       the eighth movement to the front should not be seven taps. A set-aside row
+       is stepped over rather than swapped with, so an invisible row can never eat
+       the tap, and ids never change, so every weight and rep she logged against a
+       movement follows it (rule 20). */
+    moveExercise: (d, pgId, listId, exId, dir) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
+            if (pg.id !== pgId)
+                return pg;
+            return { ...pg, lists: (pg.lists || []).map((l) => {
+                    if (l.id !== listId)
+                        return l;
+                    const all = l.exercises || [];
+                    const liveIdx = all.map((x, i) => (x && x.status !== "removed" ? i : -1)).filter((i) => i >= 0);
+                    const at = liveIdx.findIndex((i) => all[i] && all[i].id === exId);
+                    if (at < 0)
+                        return l;
+                    const next = [...all];
+                    if (dir === "top") {
+                        if (at === 0)
+                            return l;
+                        const [row] = next.splice(liveIdx[at], 1);
+                        next.splice(liveIdx[0], 0, row);
+                        return { ...l, exercises: next };
+                    }
+                    const to = at + (bwUp(dir) ? -1 : 1);
+                    if (to < 0 || to >= liveIdx.length)
+                        return l;
+                    const a = liveIdx[at], b = liveIdx[to];
+                    next[a] = all[b];
+                    next[b] = all[a];
+                    return { ...l, exercises: next };
+                }) };
+        }) }),
     moveListToArea: (d, fromId, listId, toId, today) => {
         if (!fromId || !toId || fromId === toId)
             return d;
@@ -28382,7 +28444,7 @@ const bwOps = {
         const all = d.bodywork || [];
         const live = all.map((p, i) => ({ p, i })).filter((x) => x.p && x.p.status !== "removed");
         const at = live.findIndex((x) => x.p.id === pgId);
-        const to = at + (dir === "up" ? -1 : 1);
+        const to = at + (bwUp(dir) ? -1 : 1);
         if (at < 0 || to < 0 || to >= live.length)
             return d;
         const out = all.slice();
@@ -28412,6 +28474,7 @@ function TidySheet({ data, setData, coach, close }) {
     const off = all.filter((p) => p && p.status === "removed");
     /* one editor at a time, so no hook is created inside a map */
     const [edit, setEdit] = useState(null); /* { kind, pgId, listId, text } */
+    const [openEx, setOpenEx] = useState(null); /* the list whose exercises are open */
     const start = (kind, pgId, listId, text) => setEdit({ kind, pgId, listId, text: text || "" });
     const save = () => {
         if (!edit)
@@ -28569,6 +28632,19 @@ function TidySheet({ data, setData, coach, close }) {
                                     borderRadius: 7, padding: "3px 6px", fontWeight: 600 } },
                                 React.createElement("option", { value: "" }, "move to another tab\u2026"),
                                 others.map((o) => React.createElement("option", { key: o.id, value: o.id }, o.area || "Untitled tab")))))),
+                        (l.exercises || []).filter((x) => x && x.status !== "removed").length > 1 && (React.createElement(Row, null,
+                            React.createElement(Tiny, { onClick: () => setOpenEx(openEx === l.id ? null : l.id) }, openEx === l.id ? "hide the exercises"
+                                : `arrange the ${((l.exercises || []).filter((x) => x && x.status !== "removed")).length} exercises`))),
+                        openEx === l.id && (React.createElement("div", { style: { marginTop: 6, paddingLeft: 10, borderLeft: `2px solid ${C.line}` } }, (l.exercises || []).filter((x) => x && x.status !== "removed").map((ex, xi, arr) => (React.createElement("div", { key: ex.id, style: { marginBottom: 7 } },
+                            React.createElement("div", { style: { fontSize: 12, color: C.ink } },
+                                React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } },
+                                    xi + 1,
+                                    ". "),
+                                ex.name || "Untitled exercise"),
+                            React.createElement(Row, null,
+                                React.createElement(Tiny, { dim: true, off: xi === 0, onClick: () => setData((d) => bwOps.moveExercise(d, pg.id, l.id, ex.id, "up")) }, "up"),
+                                React.createElement(Tiny, { dim: true, off: xi === arr.length - 1, onClick: () => setData((d) => bwOps.moveExercise(d, pg.id, l.id, ex.id, "down")) }, "down"),
+                                React.createElement(Tiny, { off: xi === 0, onClick: () => setData((d) => bwOps.moveExercise(d, pg.id, l.id, ex.id, "top")) }, "to the top"))))))),
                         conv && conv.listId === l.id && (React.createElement("div", { style: { marginTop: 8, padding: 10, borderRadius: 10, background: C.mint } }, conv.busy ? (React.createElement("div", { style: { fontSize: 12, color: C.moss } },
                             "Reading \"",
                             conv.title,
@@ -29004,6 +29080,39 @@ function FieldRepair({ data, setData }) {
        to fix nothing teaches her to ignore it. */
     if (!found.n && !before)
         return null;
+    /* HER REPORT, 4 September: "how do I remove this message if I don't want
+       them fixed. I need a cancel button."
+  
+       The card offered one answer and no way out of it, so a card she did not
+       want was permanent furniture. Saying no is now an answer the app accepts
+       (rule 12), and it is remembered — but never lost: the line below stays
+       where the card was, says how many are still flagged, and puts it back in
+       one tap (rules 11, 19). Nothing about her exercises is changed either way. */
+    const offOn = (data.settings || {}).fieldRepairOff;
+    const showAgain = () => setData((d) => ({ ...d,
+        settings: { ...(d.settings || {}), fieldRepairOff: undefined } }));
+    if (offOn && !before)
+        return (React.createElement("div", { style: { marginBottom: 14, padding: "10px 12px", borderRadius: 10,
+                border: `1px solid ${C.line}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+            React.createElement("span", { style: { flex: 1, minWidth: 160, fontSize: 11.5, color: C.muted, lineHeight: 1.5 } },
+                "The fields check is off",
+                typeof offOn === "string" && /^\d{4}-/.test(offOn) ? ` — you turned it off on ${dayAndMonth(offOn)}` : "",
+                ".",
+                " ",
+                found.n,
+                " exercise",
+                found.n === 1 ? "" : "s",
+                " ",
+                found.n === 1 ? "is" : "are",
+                " still asking for something",
+                " ",
+                found.n === 1 ? "it does" : "they do",
+                " not need. Nothing has been changed."),
+            React.createElement("button", { onClick: showAgain, className: "tap", style: {
+                    border: `1.5px solid ${C.signal}`, background: "transparent", color: C.signal,
+                    borderRadius: 9, padding: "6px 11px", cursor: "pointer", fontSize: 11.5,
+                    fontWeight: 600, fontFamily: "inherit", flexShrink: 0
+                } }, "show it again")));
     if (before)
         return (React.createElement(Card, { style: { background: C.mint, marginBottom: 14 } },
             React.createElement(Eyebrow, { color: C.moss }, "Fields fixed"),
@@ -29051,7 +29160,10 @@ function FieldRepair({ data, setData }) {
             "Fix all ",
             found.n,
             " of them"),
-        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 } }, "You can put it back straight afterwards, and every one of them is still yours to edit by hand from inside its own card.")));
+        React.createElement("div", { style: { marginTop: 9 } },
+            React.createElement(Btn, { kind: "quiet", onClick: () => setData((d) => ({ ...d,
+                    settings: { ...(d.settings || {}), fieldRepairOff: today() } })) }, "No thanks \u2014 leave them as they are")),
+        React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 9 } }, "You can put it back straight afterwards, and every one of them is still yours to edit by hand from inside its own card. Say no and it stays off until you ask for it \u2014 nothing about your exercises changes either way.")));
 }
 function BodyWork({ data, setData, coach, setSheet }) {
     var _a;
