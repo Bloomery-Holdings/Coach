@@ -4574,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "4 September 2026 · 253";
+const BUILD = "4 September 2026 · 254";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5350,6 +5350,36 @@ const fillFromSeed = (list, seed, keys) => {
    Everything in the app that asks "did she train on this day" asks this, and
    only this. Rest, when she has said it, outranks anything else on the day. */
 const trainedOn = (l) => !!l && !!l.completed && !l.rest;
+/* WHAT THE APP DECIDED, AND WHAT SHE DECIDED HERSELF.
+
+   HER REPORT, 4 September: "Why did you remove the button of lock this as a
+   rest day? It was under the start button on the today page. And today,
+   something was logged as a session. and retired four sessions out of three.
+   I don't know how this happened."
+
+   Nothing was removed — the button has been byte-identical since build 244 and
+   before. It is gated on `!log?.completed`, and the day HAD been completed: the
+   app writes `completed: true` by itself when it sees evidence of training, and
+   has since build 71. One number typed against a Body-page exercise, one list
+   ticked off, one battery sitting with a value in it, and the day silently
+   becomes a training day with a type she never chose.
+
+   Rule 33 says area lists and sittings ARE training, so counting them is right
+   and stays. Three things about it were not right:
+   - it took away her way of saying the day was rest, which rule 33 says is hers
+     to say and outranks everything;
+   - it said nothing, so a day appeared in the week's count with no explanation
+     (rule 11: a control must look like it did something — this was the reverse,
+     something happened with no control and no word);
+   - and that is where the fourth session in a week of three came from.
+
+   A day the APP completed from evidence is marked here so both can be fixed
+   without touching a session she logged herself. */
+const APP_LOGGED_TYPES = ["Body work", "Weekly measurements", "Monthly benchmark", "Mobility tests"];
+const appLoggedDay = (l) => !!l && !!l.completed && !l.rest
+  && APP_LOGGED_TYPES.includes(String(l.type || "").trim())
+  && !(Number(l.minutes) > 0);
+
 /* A day that says rest AND carries a completed session is a contradiction she
    has not resolved yet. The app must not choose for her — it asks — but until
    she answers, rest is what counts. */
@@ -16632,8 +16662,24 @@ function Today({ data, setData, coach, setSheet, goTab }) {
       {/* HER INSTRUCTION, 12 August: "Put it under the card of start session,
           the timer." It used to sit further down, just above the session card.
           Same button, same behaviour — it is only in a different place. */}
-      {!isFuture && !log?.completed && !log?.rest && (
-        <Btn kind="quiet" onClick={() => write({ rest: true })}>Log this as a rest day</Btn>
+      {/* HER REPORT, 4 September: this vanished the moment anything marked the
+          day trained — and the app marks the day trained by itself. Rest is
+          hers to declare (rule 33) and it may never be unreachable, so the
+          control stands whatever else is on the day. What changes is the
+          wording and what it settles:
+
+          · a day the APP completed from evidence — her explicit answer settles
+            it outright, and nothing of hers is touched: her weights, her reps
+            and her sitting all stay exactly where she typed them;
+          · a session SHE logged — rest is set beside it and the contradiction
+            card asks her which it was, which is her instruction of 12 August
+            and is left exactly as it was. */}
+      {!isFuture && !log?.rest && (
+        <Btn kind="quiet" onClick={() => write(appLoggedDay(log)
+          ? { rest: true, completed: false }
+          : { rest: true })}>
+          {log?.completed ? "Actually, this was a rest day" : "Log this as a rest day"}
+        </Btn>
       )}
 
       {/* ---- THE FINISHER, WHERE SHE WILL SEE IT ------------------------
@@ -17063,6 +17109,19 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
                     fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>change it</button>
                 </div>
+                {/* AND IT SAYS WHY IT COUNTS. A day that completed itself from
+                    a rep she typed or a list she ticked used to look identical
+                    to a session she started, which is how a week of three came
+                    to read four (rule 11, rule 23). */}
+                {appLoggedDay(log) && (
+                  <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 7 }}>
+                    This counts as today's session because you logged{" "}
+                    {String(log.type).toLowerCase() === "body work" ? "work on your Body page"
+                      : `your ${String(log.type).toLowerCase()}`} — not because you started a session.
+                    That is training and it counts, but if today was not a training day, the rest-day
+                    button below settles it and nothing you typed is lost.
+                  </div>
+                )}
                 {/* HER REPORT, 2 September: "everything calculates as zero."
 
                     The effort tap was inside "change it", one fold away from a
