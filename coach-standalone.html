@@ -4453,6 +4453,52 @@ const metricsForCoach = (all, settings) => {
 
    Until there is enough of her to measure, the answer is OFF — because off is
    never a penalty, and a wrong guess here costs her money. */
+/* ---- WHERE THE CACHE MARK ACTUALLY BELONGS (build 256) -----------------
+
+   MEASURED, 8 September, against build 255 with two hundred days in her file.
+   The system prompt is ~4,800 tokens and carried ONE cache mark, around the
+   whole of it. Anthropic's cache is a PREFIX cache: it matches from the first
+   byte until the first byte that differs. So the question is not "does this
+   block change" but "where does it first change" — and measured, that is
+   about 62% of the way in:
+
+     the memory fold after a conversation ... 62%
+     a session logged ....................... 63%
+     a mood tap ............................. 70%
+     a note in the record ................... 78%
+
+   Any of those invalidated all 4,800 tokens, and because the measured policy
+   picks the 1h cache a miss is WRITTEN at 2x. She was paying $0.029 a message
+   on a prompt that costs $0.014 uncached — the mark was not saving anything,
+   it was DOUBLING the input half of every message on which she had logged,
+   tapped or been folded. Rule 36's fault, one level down: the block is mostly
+   stable and the stable part is FIRST, so the answer is a breakpoint between
+   the halves rather than a mark around both.
+
+   In front of the break: her coach — its voice, what it may change, how to
+   speak to her on a flat morning, and the date. Behind it: her running memory
+   and everything computed from what she logged.
+
+   Nothing the coach is told changes. Only which half is marked cacheable, and
+   both halves still go, in the same order, every message (rules 15, 34). */
+const CACHE_BREAK = "<<<CACHE-BREAK>>>";
+/* fixed + rest is byte-for-byte the payload MINUS the marker line, which is
+   why the page she reads and the thing that is sent are built from this one
+   function and cannot drift (rule 36). No marker — an older payload, a
+   fallback string — means fixed is empty and NOTHING is marked cacheable,
+   which costs the uncached price and never sends the wrong text. */
+const splitPayload = (text) => {
+    const t = String(text || "");
+    const i = t.indexOf(CACHE_BREAK);
+    if (i === -1)
+        return { fixed: "", rest: t };
+    let rest = t.slice(i + CACHE_BREAK.length);
+    if (rest.charAt(0) === "\n")
+        rest = rest.slice(1);
+    return { fixed: t.slice(0, i), rest };
+};
+/* what she sees, and what she is charged for, are the same characters */
+const showPayload = (text) => { const p = splitPayload(text); return p.fixed + p.rest; };
 const msgTimes = (data) => {
     const out = [];
     ((data && data.chats) || []).forEach((c) => ((c && c.messages) || []).forEach((m) => {
@@ -4575,7 +4621,9 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
     const stable = String(halves.stable || "");
     const live = String(halves.live || "");
     const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
-        system: cache
+        /* `cache && stable`: a cached block with no text in it is not a cheaper
+           call, it is a rejected one (build 256). */
+        system: cache && stable
             ? [{ type: "text", text: stable,
                     cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } },
                 ...(live ? [{ type: "text", text: live }] : [])]
@@ -4763,7 +4811,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 September 2026 · 255";
+const BUILD = "8 September 2026 · 256";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7209,6 +7257,12 @@ const briefText = (data, coach, opts) => {
        into the memory, after every conversation, by itself. It just was not
        sent. It is sent now, in both modes, from one function so they cannot
        drift apart again. Never trimmed by her window: rule 15. */
+    /* EVERYTHING ABOVE IS HER COACH; EVERYTHING BELOW IS HER (build 256).
+       The running memory is the first thing here that moves between one message
+       and the next, so this is the measured boundary the cache mark belongs on.
+       It is a marker, not words: it is taken back out before anything is sent
+       or shown. */
+    lines.push(CACHE_BREAK);
     const mem = memoryBlock(data);
     if (mem) {
         lines.push(mem);
@@ -22307,7 +22361,7 @@ function SummarySheet({ data, setData, coach, setSheet, close }) {
     const winHere = ((_e = data.settings) === null || _e === void 0 ? void 0 : _e.chatScope) || CHAT_SCOPE_DEFAULT;
     const boundedHere = scopeReady(winHere) ? narrowTo(data, winHere, coach.t) : data;
     try {
-        text = briefText(boundedHere, coach, { wordsCut: cut, windowLabel: scopeLabel(winHere) });
+        text = showPayload(briefText(boundedHere, coach, { wordsCut: cut, windowLabel: scopeLabel(winHere) }));
     }
     catch (e) {
         failed = true;
@@ -23605,6 +23659,7 @@ and follows filmed classes plus a real Pilates instructor who pushes her hard.
 
 Do not quote baseline figures from memory — every number you have is in the list below, computed from
 her own data. If a number is not there, say you don't have it rather than estimating.
+${CACHE_BREAK}
 ${memoryBlock(data)}
 ${briefLadder(coach)}
 
@@ -24487,7 +24542,14 @@ Two or three sentences unless she asks for more.`;
                    payload. `context()` — every day, every entry, every conversation —
                    is still here in full and one tap away, because rule 34 did not stop
                    being true; it stopped being the default. */
-                system: { stable: payloadStable(), live: liveContext() },
+                /* BUILD 256. The cached half is her coach; her live state rides with
+                   the clock in the uncached half, where it was always going to change.
+                   Both go, in the same order, every message — this changes what is
+                   MARKED, not what is sent. */
+                system: (() => {
+                    const p = splitPayload(payloadStable());
+                    return { stable: p.fixed, live: p.rest + "\n" + liveContext() };
+                })(),
                 messages: next.map(blockify),
                 search: ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.webSearch) === true,
                 usage: spend,
@@ -24553,11 +24615,19 @@ Two or three sentences unless she asks for more.`;
         const spent = { in: 0, out: 0, cacheWrite: 0, cacheRead: 0 };
         try {
             const upto = msgs.slice(0, i + 1);
+            /* BUILD 256. This said `cache: false`, so finishing a cut-off reply
+               paid full price for the whole system prompt a second time — on the one
+               call GUARANTEED to be sending a prefix the message before it just
+               wrote. It is the same conversation and the same prompt; it is cached
+               on the same terms. */
+            const carryPlan = cachePolicy(data, formulas(data.settings));
+            const carryParts = splitPayload(payloadStable());
             const more = await askModel({
-                cache: false,
+                cache: carryPlan.mode !== "off",
+                cacheTtl: carryPlan.mode === "1h" ? "1h" : "5m",
                 maxTokens: Math.max(500, Number(formulas(data.settings).replyLong) || 1800),
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
-                system: { stable: payloadStable(), live: liveContext() },
+                system: { stable: carryParts.fixed, live: carryParts.rest + "\n" + liveContext() },
                 messages: [...upto.map((m) => ({ role: m.role, content: m.content })),
                     { role: "user", content: "You ran out of room and stopped mid-sentence. "
                             + "Carry straight on from where you stopped. Do not start again, do not "
@@ -24769,7 +24839,7 @@ Two or three sentences unless she asks for more.`;
                     showParts && (() => {
                         let built = "";
                         try {
-                            built = payloadStable() + "\n" + liveContext();
+                            built = showPayload(payloadStable()) + "\n" + liveContext();
                         }
                         catch (e) {
                             built = "";
