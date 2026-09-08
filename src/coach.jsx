@@ -4574,7 +4574,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "4 September 2026 · 254";
+const BUILD = "8 September 2026 · 255";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -5577,8 +5577,30 @@ const bwHomeOf = (data, exId) => {
    nothing declares any, the app says so and asks rather than guessing (rule 23).
    The effort score is the day's, tapped on the session where it sits.
 --------------------------------------------------------------------------- */
-const bwHasNumbers = (e) => !!e && ["w", "reps", "secs"]
-  .some((f) => String(e[f] ?? "").trim() !== "");
+/* WHAT COUNTS AS HAVING LOGGED A MOVEMENT — IN ONE PLACE, FOR ALL OF IT.
+
+   HER REPORT, 8 September: "the part on today's page that says what I've done
+   for the day does not count the right number of exercises that I've done from
+   the body page. Some lists are ticked and they are done, and it doesn't
+   include everything on the list that I have put inputs for."
+
+   The Body page writes SEVEN keys — w, reps, secs, and repsL/repsR/secsL/secsR
+   for every movement done left and right. Eleven different places asked "did
+   she log anything against this?" and every one of them listed only the first
+   three. So every bilateral movement she logged — the left/right ones, which
+   are most of her mobility work — was invisible to: what she did today, the
+   ten-minutes card, the day's trained state, sets per region, her own history
+   under each movement, the summary her coach reads, and the monthly read.
+
+   bwSay has always PRINTED both sides. Only the gate in front of it was blind,
+   so the numbers were in her file and rendered nowhere.
+
+   This is rule 33's lesson in another store: settle it once, at the definition.
+   Every one of those eleven now asks this function, and a new key added to the
+   Body page is added here and nowhere else. */
+const BW_VALUE_KEYS = ["w", "reps", "secs", "repsL", "repsR", "secsL", "secsR"];
+const bwHasNumbers = (e) => !!e
+  && BW_VALUE_KEYS.some((k) => String((e || {})[k] ?? "").trim() !== "");
 const bodyWorkOn = (data, date) => {
   if (!data || !date) return null;
   const areas = [], counted = new Set();
@@ -5783,7 +5805,7 @@ const doneOnDay = (data, date, onCard) => {
   const byList = {};
   Object.keys(bw).forEach((exId) => {
     const e = bw[exId] || {};
-    if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return;
+    if (!bwHasNumbers(e)) return;
     const home = bwHomeOf(data, exId);
     const name = home ? (home.list ? home.area + " · " + home.list : home.area) : "Body work";
     (byList[name] = byList[name] || []).push({ id: exId,
@@ -5805,7 +5827,7 @@ const doneOnDay = (data, date, onCard) => {
   listsTickedOn(data, date).forEach((t, ti) => {
     const lines = (t.exercises || []).map((e) => {
       const logged = bw[e.id] || null;
-      const has = logged && ["w", "reps", "secs"].some((k) => String(logged[k] ?? "").trim() !== "");
+      const has = bwHasNumbers(logged);
       if (has) tickedIds.add(e.id);
       const said = has ? bwSay(logged, e) : "";
       const dose = doseFrom(e);
@@ -6222,7 +6244,7 @@ const briefBody = (data, coach) => {
     const day = data.bwlog[d] || {};
     const bits = Object.keys(day).map((exId) => {
       const e = day[exId] || {};
-      if (!["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "")) return null;
+      if (!bwHasNumbers(e)) return null;
       const home = bwHomeOf(data, exId);
       const nm = bwNameOf(data, exId, e);
       const said = bwSay(e, home && home.ex);
@@ -7146,7 +7168,7 @@ const clearInventedSessions = (d, logs) => {
       || l.when !== undefined || l.energyAfter !== undefined) return;
     if ((l.extraSessions || []).some((x) => String((x && x.type) || "").trim() !== "")) return;
     const bw = ((d.bwlog || {})[day]) || {};
-    if (Object.values(bw).some((e) => e && ["w", "reps", "secs"].some((f) => String(e[f] || "").trim() !== ""))) return;
+    if (Object.values(bw).some(bwHasNumbers)) return;
 
     const sit = ((d.weekly || {})[weekStart(day, weekStartOn(d.settings))]) || null;
     if (!sit) return;
@@ -7201,8 +7223,7 @@ const repairLogs = (d) => {
   const bwDays = new Set();
   Object.keys(d.bwlog || {}).forEach((day) => {
     const ex = d.bwlog[day] || {};
-    const real = Object.values(ex).some((e) => e &&
-      (String(e.w || "").trim() || String(e.reps || "").trim() || String(e.secs || "").trim()));
+    const real = Object.values(ex).some(bwHasNumbers);
     if (real) bwDays.add(day);
   });
   /* BODY-WORK TICKS ARE KEYED `date#index` SINCE THE LISTS BECAME FREE ORDER
@@ -10315,7 +10336,7 @@ function useCoach(data, day, clock) {
         const bwDay = (data.bwlog || {})[day2] || {};
         Object.keys(bwDay).forEach((exId) => {
           const e = bwDay[exId] || {};
-          if (!(String(e.w ?? "").trim() || String(e.reps ?? "").trim() || String(e.secs ?? "").trim())) return;
+          if (!bwHasNumbers(e)) return;
           const pgHit = (data.bodywork || []).find((pgx) =>
             [...(pgx.lists || []), ...((pgx.rounds || []).flatMap((r) => r.lists || []))]
               .some((l) => (l.exercises || []).some((x) => x.id === exId)));
@@ -16854,7 +16875,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
         const didToday = (data.bwlog || {})[coach.t] || {};
         const done = (x) => String(dn[x.id] || "").trim() !== ""
           || Object.keys(dn).some((k) => k.endsWith(":" + x.id) && String(dn[k] || "").trim() !== "")
-          || (didToday[x.id] && ["w", "reps", "secs"].some((f) => String(didToday[x.id][f] || "").trim() !== ""));
+          || bwHasNumbers(didToday[x.id]);
         const left = (coach.dailyDrills.list || []).filter((x) => !done(x));
         if (!left.length) return null;
         const mins = Math.round(left.reduce((a, x) => a + (Number(x.mins) || 0), 0) * 10) / 10;
@@ -30154,7 +30175,7 @@ const memoryDelta = (data, from, t) => {
       const day = d.bwlog[k] || {};
       const bits = Object.keys(day).map((id) => {
         const e = day[id] || {};
-        if (!["w", "reps", "secs"].some((f) => String(e[f] ?? "").trim() !== "")) return null;
+        if (!bwHasNumbers(e)) return null;
         const said = bwSay(e, (bwHomeOf(d, id) || {}).ex);
         return `${bwNameOf(d, id, e)}${said ? ` (${said})` : ""}`;
       }).filter(Boolean);
@@ -31538,7 +31559,7 @@ const logOwn = (d, name, entry, date) => {
 
   const day = (d.bwlog || {})[date] || {};
   const keep = {};
-  ["w", "reps", "secs"].forEach((k) => {
+  BW_VALUE_KEYS.forEach((k) => {
     if (String((entry || {})[k] ?? "").trim() !== "") keep[k] = entry[k];
   });
   /* A day with real work on it counts, the same rule every other logged
@@ -31607,8 +31628,7 @@ const bwHistory = (data, exId, skip) => {
     if (date === skip) return;
     const e = (data.bwlog[date] || {})[exId];
     if (!e) return;
-    const has = ["w", "reps", "secs"].some((k) => String(e[k] ?? "").trim() !== "");
-    if (has) out.push({ date, ...e });
+    if (bwHasNumbers(e)) out.push({ date, ...e });
   });
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 };
