@@ -587,6 +587,19 @@ const sleepBaseline = (logs, t, settings) => {
    make a day harder, only to take the edge off one. */
 const BAND_DOWN = { green: "steady", steady: "easy", easy: "rest", rest: "rest" };
 const bandByKey = (k) => BAND_OFFSETS.find((b) => b.key === k) || null;
+/* HOW LONG A DRILL IS (build 257). HER REPORT: "when I try to change the
+   duration of an exercise that is already in the list, I only have the option
+   to set minutes, not seconds… I tried to change the timer to 40 seconds I was
+   only able to change it to 40 minutes."
+
+   She was right, and it was one missing box. A drill carried `mins` and
+   nothing else, so the editor could only offer minutes and the clock could
+   only count from them. `secs` sits beside it now and the two ADD, so 1 min
+   30 s is a minute and a half — not a choice between them.
+
+   Defined here rather than beside the clock because the ten-minute budget
+   reads it too, and a length that is worked out in two places drifts. */
+const drillMins = (d) => (Number(d && d.mins) || 0) + (Number(d && d.secs) || 0) / 60;
 const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
     if (v === null || v === "" || isNaN(Number(v)))
         return null;
@@ -4811,7 +4824,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 September 2026 · 256";
+const BUILD = "9 September 2026 · 258";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -7084,6 +7097,21 @@ exercises, WRITE THE EXERCISES — one per line, each with its dose — and tell
 button. Never tell her you cannot make her a list, and never tell her to type it in herself.
 The two buttons do different jobs: "change my lists" edits things that already exist, one at a
 time; "put these on my Body page" creates a new list out of what you just wrote.
+
+AND SINCE BUILD 258 THE SAME TWO BUTTONS SIT UNDER **HER OWN** MESSAGES. Her instruction:
+"I keep sending three, four messages until he gets what I want, and then he can create it, and
+sometimes he creates it in the wrong place, and this costs a lot of money just because of
+confusion." So when she already knows exactly what she wants on her Body page, she does not
+have to get you to write it back to her first: she types or dictates or pastes the exercises
+in ONE message and taps the button under her own words. Nothing is sent back and forth and
+nothing is re-worded.
+
+WHAT THAT MEANS FOR YOU. If she describes a list she has clearly already decided — she names
+the movements, or pastes them — do not rewrite it and do not ask her to confirm it back to
+you. Tell her, in one line, that the buttons are under her message too and she can tap them
+there. That is not passing her off: it is the shorter route, and it is HER words that land
+rather than your version of them. Where she is asking you to DESIGN something, design it and
+have her tap the button under your answer as before.
 
 WHOLE TABS AND WHOLE LISTS ARE YOURS TOO (builds 222–225). This is new, and you have been
 telling her otherwise. You are not limited to single exercises, and you CAN control which tab
@@ -9826,16 +9854,16 @@ function useCoach(data, day, clock) {
                 if (!d || d.status === "removed")
                     continue;
                 out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [], suggested: !!suggestedFor[id] });
-                mins += Number(d.mins) || 0;
-                goalMins += Number(d.mins) || 0;
+                mins += drillMins(d);
+                goalMins += drillMins(d);
             }
             /* mobility fills what is left of the ten minutes, never displaces it */
             for (const id of mobIds) {
                 const d = drillById(id, drills);
-                if (!d || d.status === "removed" || mins + (Number(d.mins) || 0) > DAILY_BUDGET)
+                if (!d || d.status === "removed" || mins + drillMins(d) > DAILY_BUDGET)
                     continue;
                 out.push(d);
-                mins += Number(d.mins) || 0;
+                mins += drillMins(d);
             }
             /* which goals have nothing to do today. Said out loud, never hidden. */
             const covered = new Set();
@@ -13848,11 +13876,25 @@ const secondsFor = (f) => {
    the WHOLE drill, so a three-minute stretch is a minute and a half a side, not
    three each: two sides at full length is double the work she was prescribed. */
 const drillIsTwoSided = (d) => !!d && (d.side === true || d.bilateral === true);
+/* the whole drill, in seconds, before the two-sided split — and only an
+   exercise that declares NEITHER falls back to reading its own how-to */
+const drillTotalSecs = (d) => {
+    if (!d)
+        return null;
+    const both = drillMins(d);
+    return both > 0 ? Math.round(both * 60) : secondsFor(d);
+};
+/* "2m", "40s", "1m 30s" — never "0m" for a drill that is forty seconds long
+   (rule 23: what the row says is what the clock will count) */
+const drillLength = (secs) => {
+    const t = Math.max(0, Math.round(Number(secs) || 0));
+    const m = Math.floor(t / 60), r = t % 60;
+    return m && r ? `${m}m ${r}s` : m ? `${m}m` : `${r}s`;
+};
 const drillSeconds = (d) => {
     if (!d)
         return null;
-    const m = Number(d.mins);
-    const whole = (Number.isFinite(m) && m > 0) ? Math.round(m * 60) : secondsFor(d);
+    const whole = drillTotalSecs(d);
     if (!whole)
         return whole;
     return drillIsTwoSided(d) ? Math.max(15, Math.round(whole / 2)) : whole;
@@ -13924,13 +13966,25 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "", sid
             tick.current = null;
         } };
     }, [running, seconds]);
+    /* HER REPORT, 9 September: "after it finishes counting it already changes
+       from 'start' to 'again', but 'again' doesn't work. I want to remove the
+       reset step of the timer."
+  
+       BUILD 257. A rung countdown has nought on the clock, and "Again" started
+       from whatever was on the clock — so it started from nought and rang again
+       instantly, which looks exactly like nothing happening. It reloads the
+       prescription itself now. The reset button stays as a way out of a clock
+       that is already running; it is no longer a STEP she has to take. */
     const start = () => {
         if (running)
             return;
         /* the first tap is the gesture that buys us sound later */
         buzz(20);
+        const from = seconds && (rang || ms <= 0) ? seconds * 1000 : ms;
+        if (from !== ms)
+            setMs(from);
         started.current = Date.now();
-        base.current = ms;
+        base.current = from;
         setRang(false);
         setRunning(true);
     };
@@ -15285,7 +15339,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                                 background: on ? C.signal : "transparent",
                                 color: on ? C.chalk : hinted ? C.ochre : C.muted } },
                             d.label,
-                            d.mins ? ` · ${d.mins}m` : ""));
+                            drillTotalSecs(d) ? ` · ${drillLength(drillTotalSecs(d))}` : ""));
                     }))))));
         }),
         adding ? (React.createElement("div", { style: { marginTop: 12 } },
@@ -15380,9 +15434,8 @@ function DrillsCard({ coach, setSheet, data, setData }) {
             React.createElement("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 } },
                 React.createElement("span", { style: { fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink } }, d.label),
                 React.createElement("span", { className: "mono", style: { fontSize: 11, color: C.muted, flexShrink: 0 } },
-                    d.mins,
-                    "m",
-                    drillIsTwoSided(d) ? ` · ${Math.round((Number(d.mins) || 0) * 30) / 60}m a side` : "")),
+                    drillLength(drillTotalSecs(d)),
+                    drillIsTwoSided(d) ? ` · ${drillLength(drillSeconds(d))} a side` : "")),
             (d.sets || d.reps || d.freq) && (React.createElement("div", { className: "mono", style: { fontSize: 11, color: C.moss, marginTop: 3 } }, [d.sets && d.reps ? `${d.sets} x ${d.reps}` : d.sets || d.reps, d.freq].filter(Boolean).join(" · "))),
             React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 4 } }, d.how),
             React.createElement("div", { style: { fontSize: 11, color: C.moss, marginTop: 4 } }, d.targets),
@@ -15438,55 +15491,26 @@ function SessionClock({ log, write, coach }) {
         : null;
     const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
     const nevermind = () => write({ sessionClock: undefined });
-    /* THE START SHE TELLS (build 243). Her instruction, 1 September: "sometimes
-       I forget to click... I can input that I started at eleven o'clock." The
-       time she gives means TODAY, on this phone's clock — the same clock the
-       running face reads, so a told start and a pressed one live on one rail
-       and everything downstream (the minutes, the slot, the too-short floor) is
-       already computed from startedAt. A told start is marked so in the record
-       (rule 23). A time still ahead of now writes NOTHING and says so in words
-       (rules 20, 23). On a running clock the record is kept and only the start
-       moves — that is her correction, not a new session. */
-    const tell = () => {
-        const m243 = String((telling && telling.hhmm) || "").match(/^(\d{1,2}):(\d{2})$/);
-        if (!m243) {
-            setTelling({ ...telling, err: "Pick the time first — nothing is written until you do." });
-            return;
-        }
-        const at = new Date();
-        at.setHours(Number(m243[1]), Number(m243[2]), 0, 0);
-        if (at.getTime() > Date.now()) {
-            setTelling({ ...telling, err: "That is later than now, so I have not written anything. The time you give means today, on this phone's clock." });
-            return;
-        }
-        buzz(20);
-        write({ sessionClock: running
-                ? { ...clock, startedAt: at.getTime(), toldStart: true }
-                : { startedAt: at.getTime(), toldStart: true } });
-        setTelling(null);
-    };
-    /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
-       'Session 1 min.'" and called it a logging artefact. It was.
-  
-       This line used to be `Math.max(1, Math.round(mins))`. Started and stopped
-       a few seconds apart — by accident, or to see what the button does — it
-       banked a MINUTE THAT DID NOT HAPPEN and stamped the day as a completed
-       session. Rule 23: a fallback that substitutes a plausible figure for a real
-       one is a bug, not a kindness.
-  
-       So it banks what it measured, and under her own `clockMinSession` it writes
-       no session at all. The clock's own record is kept either way, so the seconds
-       are not lost and she can still say what it was. */
-    const done = () => {
+    /* THE FINISH SHE TELLS (build 257). Her instruction, 9 September: "I need to
+       be able to set when my session ends like I can now set when it starts."
+       Build 243 gave her the start and stopped there, so a session she forgot to
+       finish could only be ended NOW — which banks every minute since.
+       `endAt` is her told finish; nothing else about this function changes, so
+       the floor, the slot, the adding-to-an-existing-day and the too-short
+       refusal are the same code for a told finish as for a pressed one. */
+    const done = (endAt) => {
         var _a, _b;
         /* SessionClock takes no data prop; the merged thresholds ride on coach.F,
            which is FORMULA_DEFAULTS with her overrides already folded in. */
         const F = (coach && coach.F) || FORMULA_DEFAULTS;
         const floor = Math.max(0, Number(F.clockMinSession) || 0);
-        const m = Math.round(mins);
+        const told = Number(endAt) > 0 ? Number(endAt) : 0;
+        const ran = told ? Math.max(0, (told - clock.startedAt) / 60000) : mins;
+        const m = Math.round(ran);
         const startMins = new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes();
         const slot = startMins < 690 ? "morning" : startMins < 990 ? "midday" : "evening";
-        const stopped = { ...clock, stoppedAt: Date.now(), ranSecs: Math.round(mins * 60) };
+        const stopped = { ...clock, stoppedAt: told || Date.now(), ranSecs: Math.round(ran * 60),
+            ...(told ? { toldEnd: true } : {}) };
         if (m < floor) {
             /* NOT A SESSION, AND SAID SO. Nothing is written onto the day except the
                clock's own record — no completed, no minutes, no invented name. */
@@ -15509,6 +15533,62 @@ function SessionClock({ log, write, coach }) {
             when: (log === null || log === void 0 ? void 0 : log.when) || slot,
         });
     };
+    /* THE START SHE TELLS (build 243). Her instruction, 1 September: "sometimes
+       I forget to click... I can input that I started at eleven o'clock." The
+       time she gives means TODAY, on this phone's clock — the same clock the
+       running face reads, so a told start and a pressed one live on one rail
+       and everything downstream (the minutes, the slot, the too-short floor) is
+       already computed from startedAt. A told start is marked so in the record
+       (rule 23). A time still ahead of now writes NOTHING and says so in words
+       (rules 20, 23). On a running clock the record is kept and only the start
+       moves — that is her correction, not a new session. */
+    const tell = () => {
+        const which = (telling && telling.which) || "start";
+        const m243 = String((telling && telling.hhmm) || "").match(/^(\d{1,2}):(\d{2})$/);
+        if (!m243) {
+            setTelling({ ...telling, err: "Pick the time first — nothing is written until you do." });
+            return;
+        }
+        const at = new Date();
+        at.setHours(Number(m243[1]), Number(m243[2]), 0, 0);
+        if (at.getTime() > Date.now()) {
+            setTelling({ ...telling, err: "That is later than now, so I have not written anything. The time you give means today, on this phone's clock." });
+            return;
+        }
+        /* A FINISH NEEDS A START TO MEASURE FROM, and it cannot come before one.
+           Neither case writes anything, and both say why (rules 20, 23). */
+        if (which === "end") {
+            if (!running) {
+                setTelling({ ...telling, err: "There is no clock running to finish, so I have not written anything. Set the start first and the finish will be here." });
+                return;
+            }
+            if (at.getTime() <= clock.startedAt) {
+                setTelling({ ...telling, err: `That is at or before the start (${hhmm(new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes())}), so I have not written anything. If the start is the wrong one, correct that first.` });
+                return;
+            }
+            buzz(20);
+            done(at.getTime());
+            setTelling(null);
+            return;
+        }
+        buzz(20);
+        write({ sessionClock: running
+                ? { ...clock, startedAt: at.getTime(), toldStart: true }
+                : { startedAt: at.getTime(), toldStart: true } });
+        setTelling(null);
+    };
+    /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
+       'Session 1 min.'" and called it a logging artefact. It was.
+  
+       This line used to be `Math.max(1, Math.round(mins))`. Started and stopped
+       a few seconds apart — by accident, or to see what the button does — it
+       banked a MINUTE THAT DID NOT HAPPEN and stamped the day as a completed
+       session. Rule 23: a fallback that substitutes a plausible figure for a real
+       one is a bug, not a kindness.
+  
+       So it banks what it measured, and under her own `clockMinSession` it writes
+       no session at all. The clock's own record is kept either way, so the seconds
+       are not lost and she can still say what it was. */
     return (React.createElement(Card, { style: { background: running ? C.mint : undefined } },
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" } }, !running ? (React.createElement(React.Fragment, null,
             React.createElement("span", { style: { flex: 1, minWidth: 0 } },
@@ -15522,20 +15602,27 @@ function SessionClock({ log, write, coach }) {
                 React.createElement(Eyebrow, { color: C.moss }, "Session running"),
                 React.createElement("div", { className: "mono", style: { fontSize: 30, fontWeight: 700, color: C.ink, marginTop: 2 } }, face)),
             React.createElement("span", { style: { display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" } },
-                React.createElement(Btn, { kind: "signal", onClick: done }, "Done"),
+                React.createElement(Btn, { kind: "signal", onClick: () => done() }, "Done"),
                 React.createElement("button", { onClick: nevermind, className: "tap", style: {
                         border: "none", background: "transparent", cursor: "pointer",
                         fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px"
                     } }, "never mind \u2014 I didn't train"))))),
-        !telling && (React.createElement("button", { className: "tap", onClick: () => setTelling({ hhmm: "" }), style: {
-                border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
-                fontSize: 11, color: C.muted, fontFamily: "inherit"
-            } }, running ? "started earlier than this?" : "I already started — set the time")),
+        !telling && (React.createElement("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" } },
+            React.createElement("button", { className: "tap", onClick: () => setTelling({ which: "start", hhmm: "" }), style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
+                    fontSize: 11, color: C.muted, fontFamily: "inherit"
+                } }, running ? "started earlier than this?" : "I already started — set the time"),
+            running && (React.createElement("button", { className: "tap", onClick: () => setTelling({ which: "end", hhmm: "" }), style: {
+                    border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
+                    fontSize: 11, color: C.muted, fontFamily: "inherit"
+                } }, "I finished earlier \u2014 set the time")))),
         telling && (React.createElement("div", { style: { marginTop: 10 } },
             React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" } },
-                React.createElement("input", { type: "time", "aria-label": "When you started", value: telling.hhmm, onChange: (e) => setTelling({ hhmm: e.target.value }), style: { border: `1.5px solid ${C.line}`, borderRadius: 9, padding: "8px 10px",
+                React.createElement("input", { type: "time", "aria-label": telling.which === "end" ? "When you finished" : "When you started", value: telling.hhmm, onChange: (e) => setTelling({ which: telling.which, hhmm: e.target.value }), style: { border: `1.5px solid ${C.line}`, borderRadius: 9, padding: "8px 10px",
                         fontSize: 13.5, fontFamily: "inherit", background: "transparent", color: C.ink } }),
-                React.createElement(Btn, { kind: "signal", onClick: tell }, running ? "Correct the start" : "Start from then"),
+                React.createElement(Btn, { kind: "signal", onClick: tell }, telling.which === "end"
+                    ? "Finish at that time"
+                    : running ? "Correct the start" : "Start from then"),
                 React.createElement("button", { className: "tap", onClick: () => setTelling(null), style: {
                         border: "none", background: "transparent", cursor: "pointer",
                         fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px"
@@ -15977,7 +16064,7 @@ const DidToday = ({ rows, isToday, dayLabel, onGo }) => {
         doors));
 };
 function Today({ data, setData, coach, setSheet, goTab }) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     /* one note a day, taken from the pool and never handed out twice */
     useEffect(() => {
         var _a;
@@ -16605,6 +16692,18 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                             border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
                             fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit"
                         } }, "change it")),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 9, flexWrap: "wrap" } },
+                    React.createElement("span", { style: { fontSize: 11.5, color: C.muted } }, "how long it actually was"),
+                    React.createElement("input", { type: "text", inputMode: "numeric", value: (_f = log.minutes) !== null && _f !== void 0 ? _f : "", "aria-label": "How many minutes this session actually was", onChange: (e) => write({ minutes: e.target.value }), placeholder: "min", style: { ...inputStyle, width: 64, padding: "7px 8px", marginBottom: 0, textAlign: "center",
+                            fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600 } }),
+                    React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min")),
+                Number((_g = log.sessionClock) === null || _g === void 0 ? void 0 : _g.ranSecs) > 0 && (() => {
+                    const ran = Math.round(Number(log.sessionClock.ranSecs) / 60);
+                    const has = Number(log.minutes) || 0;
+                    return (React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.45, marginTop: 5 } }, ran === has
+                        ? `That ${ran} came off the clock. If you forgot to press Done it kept running — type what you actually trained, and yours is the number everything is worked out from.`
+                        : `The clock ran ${ran} min and you have said ${has || "nothing"}. Yours is the one that counts.`));
+                })(),
                 appLoggedDay(log) && (React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginTop: 7 } },
                     "This counts as today's session because you logged",
                     " ",
@@ -16619,7 +16718,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     && !(bodyWorkOn(data, coach.t) || {}).mins && (React.createElement("div", { style: { marginTop: 10, padding: "12px 13px", background: C.chalk, borderRadius: 11 } },
                     React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 } }, "How long did that take?"),
                     React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.45, marginBottom: 8 } }, "Effort is minutes multiplied by how hard it felt, so this is the other half of it."),
-                    React.createElement(Field, { label: "Minutes", unit: "min", value: (_f = log.minutes) !== null && _f !== void 0 ? _f : "", onChange: (v) => write({ minutes: v }) }))))),
+                    React.createElement(Field, { label: "Minutes", unit: "min", value: (_h = log.minutes) !== null && _h !== void 0 ? _h : "", onChange: (v) => write({ minutes: v }) }))))),
             (log === null || log === void 0 ? void 0 : log.type) && (!(log === null || log === void 0 ? void 0 : log.completed) || sessionDetail) && (React.createElement(React.Fragment, null,
                 sessionDetail && (React.createElement("div", { style: { marginTop: 10 } },
                     React.createElement(Btn, { kind: "quiet", onClick: () => setSessionDetail(false) }, "Fold it away again"))),
@@ -16634,7 +16733,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 background: String(log.minutes) === String(m) ? C.ink : "transparent",
                                 color: String(log.minutes) === String(m) ? C.chalk : C.muted,
                             } }, m))),
-                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_g = log.minutes) !== null && _g !== void 0 ? _g : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
+                        React.createElement("input", { type: "text", inputMode: "numeric", value: (_j = log.minutes) !== null && _j !== void 0 ? _j : "", onChange: (e) => write({ minutes: e.target.value }), placeholder: "any", style: { ...inputStyle, width: 66, padding: "10px 8px", marginBottom: 0, textAlign: "center",
                                 fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600,
                                 border: `1.5px solid ${((s === null || s === void 0 ? void 0 : s.durations) || []).map(String).includes(String(log.minutes)) ? C.line : C.ink}` } }),
                         React.createElement("span", { className: "mono", style: { fontSize: 10, color: C.muted } }, "min")),
@@ -16650,7 +16749,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                                 fontSize: 11.5, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                             } }, "same today")))),
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" } },
-                        React.createElement(AutoText, { value: (_h = log === null || log === void 0 ? void 0 : log.loads) !== null && _h !== void 0 ? _h : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
+                        React.createElement(AutoText, { value: (_k = log === null || log === void 0 ? void 0 : log.loads) !== null && _k !== void 0 ? _k : "", onChange: (v) => write({ loads: v }), placeholder: "8 kg kettlebell, 5 kg dumbbells \u2014 whatever you actually picked up", style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45, fontSize: 13 } }),
                         React.createElement(MicButton, { onText: (v) => write({ loads: v }), current: (log === null || log === void 0 ? void 0 : log.loads) || "" })),
                     React.createElement("div", { style: { marginTop: 7 } },
                         React.createElement(InfoNote, { small: true, why: "Leave it blank if there were no weights. What you put here is stored against this session on this date, not against the class \u2014 so next month you can see what actually moved rather than what the class usually calls for." }, "what this is for")))),
@@ -16870,7 +16969,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                 React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 5 } }, "The easiest way back in"),
                 React.createElement("div", { style: { fontSize: 14.5, fontWeight: 600, color: C.ink } }, coach.easiest ? coach.easiest.name : "Whatever is smallest today"),
                 React.createElement("div", { style: { fontSize: 12, lineHeight: 1.5, color: C.muted, marginTop: 5 } }, coach.easiest
-                    ? `${((_j = coach.easiest.durations) === null || _j === void 0 ? void 0 : _j[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
+                    ? `${((_l = coach.easiest.durations) === null || _l === void 0 ? void 0 : _l[0]) || 20} minutes. Lowest cost thing in your library — the point today is the restart, not the session.`
                     : "There is nothing in your library small enough to name, so pick the smallest thing you have. The point today is the restart, not the session.")),
             React.createElement(Btn, { kind: "signal", onClick: () => {
                     var _a;
@@ -16947,7 +17046,7 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     React.createElement("div", { className: "disp", style: { fontSize: 18, fontWeight: 700, marginBottom: 6 } }, coach.weeklyDue ? "This week's numbers are open" : "This week's numbers are in"),
                     React.createElement("div", { style: { fontSize: 13, lineHeight: 1.55, color: C.muted, marginBottom: 14 } }, coach.weeklyDue
                         ? "Squat, push-up, cable row, plank, elliptical, reach, balance — about ten minutes. This is what every chart and every score is built from."
-                        : ((_l = (_k = data.weekly) === null || _k === void 0 ? void 0 : _k[coach.ws]) === null || _l === void 0 ? void 0 : _l.fromMonthly)
+                        : ((_o = (_m = data.weekly) === null || _m === void 0 ? void 0 : _m[coach.ws]) === null || _o === void 0 ? void 0 : _o.fromMonthly)
                             ? "Filled in from the monthly benchmark — the weekly is part of it, so you don't do the same exercises twice. Open it any time to correct a number."
                             : "You've filled in the weekly battery. Open it again any time to correct a number."),
                     React.createElement(Btn, { kind: coach.weeklyDue ? "signal" : "ghost", onClick: () => setSheet({ kind: "weekly", key: coach.ws }) }, coach.weeklyDue ? "Enter this week's measurements" : "Review this week's measurements"),
@@ -21331,7 +21430,7 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
     const restoreTest = (id) => patchTest(id, { status: undefined, removedOn: undefined, removedWhy: undefined });
     const restoreDrill = (id) => patchDrill(id, { status: undefined, removedOn: undefined, removedWhy: undefined });
     const row = (item, isTest) => {
-        var _a;
+        var _a, _b;
         return (React.createElement("div", { key: item.id, style: { borderTop: `1px solid ${C.line}` } },
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, padding: "10px 6px" } },
                 React.createElement("button", { onClick: () => setOpenId(openId === item.id ? null : item.id), className: "tap", style: {
@@ -21344,7 +21443,7 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
                         ? `SET ASIDE${item.removedOn ? " " + item.removedOn : ""} · your readings are kept`
                         : isTest
                             ? `${item.unit || "—"} · ${item.better === "lower" ? "lower is better" : "higher is better"}${item.side ? " · left/right" : ""}`
-                            : `${item.mins} min${item.targets ? ` · ${item.targets}` : ""}`)),
+                            : `${drillLength(drillTotalSecs(item))}${item.targets ? ` · ${item.targets}` : ""}`)),
                 isLive(item) ? (React.createElement("button", { onClick: () => (isTest ? removeTest(item.id) : removeDrill(item.id)), className: "tap", "aria-label": `Set aside ${item.label || "this"}`, style: {
                         border: "none", background: "transparent", cursor: "pointer", color: C.clay, fontSize: 16, padding: "4px 6px"
                     } }, "\u00D7")) : (React.createElement("button", { onClick: () => (isTest ? restoreTest(item.id) : restoreDrill(item.id)), className: "tap", style: {
@@ -21401,7 +21500,15 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
                                 background: on ? C.pist : "transparent", color: C.ink, fontFamily: "inherit"
                             } }, dr.label));
                     })))) : (React.createElement(React.Fragment, null,
-                    React.createElement(Field, { label: "Minutes", unit: "", value: (_a = item.mins) !== null && _a !== void 0 ? _a : "", onChange: (v) => patchDrill(item.id, { mins: v }) }),
+                    React.createElement("div", { style: { display: "flex", gap: 8 } },
+                        React.createElement("span", { style: { flex: 1 } },
+                            React.createElement(Field, { label: "Minutes", unit: "", value: (_a = item.mins) !== null && _a !== void 0 ? _a : "", onChange: (v) => patchDrill(item.id, { mins: v }) })),
+                        React.createElement("span", { style: { flex: 1 } },
+                            React.createElement(Field, { label: "Seconds", unit: "", value: (_b = item.secs) !== null && _b !== void 0 ? _b : "", onChange: (v) => patchDrill(item.id, { secs: v }) }))),
+                    React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-8px 0 14px" } },
+                        "They add up: 1 minute and 30 seconds is a minute and a half. Leave minutes blank for anything under a minute \u2014 the clock counts ",
+                        drillLength(drillTotalSecs(item)) || "nothing yet",
+                        "."),
                     React.createElement("div", { style: { display: "flex", gap: 8, margin: "2px 0 12px" } },
                         React.createElement("button", { onClick: () => patchDrill(item.id, { side: !item.side, sideEdited: true }), className: "tap", style: {
                                 flex: 1, padding: "10px 4px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 500,
@@ -23344,21 +23451,24 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
        her file as it is when the answer lands. That is the pattern applyEdits
        above was missing, in the same component, for the same kind of call. */
     const makeList = async (i) => {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e;
         if (listing !== null)
             return;
         setListing(i);
         setListMade(null);
         const listSpend = {};
         try {
+            /* BUILD 258: hers or its own — the only difference is which opening the
+               translator is given, so a list she wrote herself is never "improved". */
+            const mine258 = ((_a = msgs[i]) === null || _a === void 0 ? void 0 : _a.role) === "user";
             const { raw, cut } = await askWithRoom({
-                apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
-                system: LIST_FROM_CHAT_SYSTEM,
+                apiKey: (_b = data.settings) === null || _b === void 0 ? void 0 : _b.apiKey,
+                system: mine258 ? LIST_FROM_CHAT_SYSTEM_HERS : LIST_FROM_CHAT_SYSTEM,
                 /* build 222: it could not pick one of her tabs without being shown them */
-                messages: listFromChatMessage(data, (_b = msgs[i]) === null || _b === void 0 ? void 0 : _b.content),
+                messages: listFromChatMessage(data, (_c = msgs[i]) === null || _c === void 0 ? void 0 : _c.content, mine258),
                 maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
                 usage: listSpend,
-                search: ((_c = data.settings) === null || _c === void 0 ? void 0 : _c.webSearch) === true,
+                search: ((_d = data.settings) === null || _d === void 0 ? void 0 : _d.webSearch) === true,
                 secs: formulas(data.settings).callSecs,
             });
             const out = parseReview(raw);
@@ -23375,7 +23485,9 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
                 : (out && Array.isArray(out.exercises) && out.exercises.length ? [out] : []);
             const usable = wanted.filter((l) => l && Array.isArray(l.exercises) && l.exercises.length);
             if (!usable.length) {
-                setListMade({ error: "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
+                setListMade({ error: ((_e = msgs[i]) === null || _e === void 0 ? void 0 : _e.role) === "user"
+                        ? "I could not find exercises in that message of yours. Write them one per line — the movement, and the sets, reps or hold if you know them — then tap this again. Or ask me for them and tap it under my answer."
+                        : "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
                 return;
             }
             setData((d) => {
@@ -24999,7 +25111,7 @@ Two or three sentences unless she asks for more.`;
                             padding: "6px 11px", borderRadius: 8,
                             fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                         } }, carrying === i ? "carrying on…" : "carry on"))),
-                m.role !== "user" && setData && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } },
+                setData && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } },
                     React.createElement("button", { className: "tap", disabled: listing !== null || editingLists !== null, onClick: () => makeList(i), style: {
                             border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
                             padding: "6px 11px", borderRadius: 8,
@@ -26692,9 +26804,28 @@ HOW TO WRITE IT
 Return ONLY the full updated memory as plain text. No preamble, no code fence, nothing before or
 after it. It replaces what came before, so anything still true must be carried forward — but the
 previous version is kept on her device either way, so nothing you leave out is destroyed.`;
-const LIST_FROM_CHAT_SYSTEM = `You are turning exercises you have ALREADY written for her, in
+/* WHOSE MESSAGE IS BEING TURNED INTO A LIST (build 258). HER INSTRUCTION,
+   9 September: "I want to be able to create exercise lists from my messages to
+   the coach, not only from his messages to me, because I keep sending three,
+   four messages until he gets what I want, and then he can create it, and
+   sometimes he creates it in the wrong place, and this costs a lot of money
+   just because of confusion."
+
+   So the same two buttons sit under her own messages now. Only the OPENING
+   changes — the rules, the shape and the tab-matching are one body used by
+   both, because two copies of this prompt would drift the way rule 34's two
+   payload builders did. */
+const LIST_FROM_CHAT_HEAD = `You are turning exercises you have ALREADY written for her, in
 conversation, into one structured list for her app. Her right shoulder is
-rehabilitating.
+rehabilitating.`;
+const LIST_FROM_CHAT_HEAD_HERS = `You are turning exercises SHE WROTE HERSELF — her own message, in her
+own words, typed, dictated or pasted from somewhere — into one structured list for her app.
+They are her choices and not yours: keep every movement she named, keep her names for them,
+add nothing she did not ask for and drop nothing you do not recognise. If something she wrote
+is not a movement at all, leave it out rather than inventing one. Her right shoulder is
+rehabilitating, so where she has given no dose keep it conservative — but never quietly
+replace a movement she chose.`;
+const LIST_FROM_CHAT_RULES = `
 
 RULES.
 - Use ONLY the exercises in the message. Do not add, drop or substitute any.
@@ -26750,6 +26881,11 @@ work genuinely belongs in different tabs.
 Do NOT write a how-to paragraph — she asked for the variables and the video, not prose.
 "loadKind" must be right: a band is "band", a dumbbell or barbell is "weight", her own
 bodyweight is "none".`;
+/* ONE BODY, TWO OPENINGS — and a check that fails if they ever stop
+   sharing it, because two copies of a prompt this long is exactly how the two
+   payload builders drifted six times (rule 34). */
+const LIST_FROM_CHAT_SYSTEM = LIST_FROM_CHAT_HEAD + LIST_FROM_CHAT_RULES;
+const LIST_FROM_CHAT_SYSTEM_HERS = LIST_FROM_CHAT_HEAD_HERS + LIST_FROM_CHAT_RULES;
 /* HER INSTRUCTION, 13 August: "I need him to edit them too." What the coach
    just said it would change, turned into exact operations against exact ids.
    It may only touch lists that already exist, and it may never invent an id. */
@@ -27000,10 +27136,12 @@ const tabsWithCharters = (data) => (((data.bodywork || []).filter((pg) => pg && 
     .map((pg) => '  "' + (pg.area || "") + '"' + (pg.charter ? ' — charter: ' + pg.charter : "")).join("\n")) || '  (she has none yet)');
 /* the message "put these on my Body page" sends — hoisted, like the tabs
    above, so suite 51's window keeps seeing makeList's updater (build 242) */
-const listFromChatMessage = (data, text) => [{ role: "user", content: 'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
+const listFromChatMessage = (data, text, mine) => [{ role: "user", content: 'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
             + 'exactly, unless none of them could honestly hold this list:\n'
             + tabsWithCharters(data)
-            + '\n\nWHAT I WROTE FOR HER:\n' + String(text || "") }];
+            + (mine
+                ? '\n\nWHAT SHE WROTE HERSELF — her words, her exercises:\n'
+                : '\n\nWHAT I WROTE FOR HER:\n') + String(text || "") }];
 const listInventory = (data) => [bodyInventory(data), registryInventory(data)]
     .filter(Boolean).join("\n\n") || "she has no lists yet";
 /* Everything on COACH_EDITS, with its ids, so a change can be aimed at any
