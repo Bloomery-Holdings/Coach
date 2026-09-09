@@ -525,6 +525,20 @@ const sleepBaseline = (logs, t, settings) => {
 const BAND_DOWN = { green: "steady", steady: "easy", easy: "rest", rest: "rest" };
 const bandByKey = (k) => BAND_OFFSETS.find((b) => b.key === k) || null;
 
+/* HOW LONG A DRILL IS (build 257). HER REPORT: "when I try to change the
+   duration of an exercise that is already in the list, I only have the option
+   to set minutes, not seconds… I tried to change the timer to 40 seconds I was
+   only able to change it to 40 minutes."
+
+   She was right, and it was one missing box. A drill carried `mins` and
+   nothing else, so the editor could only offer minutes and the clock could
+   only count from them. `secs` sits beside it now and the two ADD, so 1 min
+   30 s is a minute and a half — not a choice between them.
+
+   Defined here rather than beside the clock because the ten-minute budget
+   reads it too, and a length that is worked out in two places drifts. */
+const drillMins = (d) => (Number(d && d.mins) || 0) + (Number(d && d.secs) || 0) / 60;
+
 const recoveryBand = (v, baseline, F = FORMULA_DEFAULTS) => {
   if (v === null || v === "" || isNaN(Number(v))) return null;
   const base = baseline || F.recBaselineFallback;
@@ -4621,7 +4635,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "8 September 2026 · 256";
+const BUILD = "9 September 2026 · 258";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -6813,6 +6827,21 @@ exercises, WRITE THE EXERCISES — one per line, each with its dose — and tell
 button. Never tell her you cannot make her a list, and never tell her to type it in herself.
 The two buttons do different jobs: "change my lists" edits things that already exist, one at a
 time; "put these on my Body page" creates a new list out of what you just wrote.
+
+AND SINCE BUILD 258 THE SAME TWO BUTTONS SIT UNDER **HER OWN** MESSAGES. Her instruction:
+"I keep sending three, four messages until he gets what I want, and then he can create it, and
+sometimes he creates it in the wrong place, and this costs a lot of money just because of
+confusion." So when she already knows exactly what she wants on her Body page, she does not
+have to get you to write it back to her first: she types or dictates or pastes the exercises
+in ONE message and taps the button under her own words. Nothing is sent back and forth and
+nothing is re-worded.
+
+WHAT THAT MEANS FOR YOU. If she describes a list she has clearly already decided — she names
+the movements, or pastes them — do not rewrite it and do not ask her to confirm it back to
+you. Tell her, in one line, that the buttons are under her message too and she can tap them
+there. That is not passing her off: it is the shorter route, and it is HER words that land
+rather than your version of them. Where she is asking you to DESIGN something, design it and
+have her tap the button under your answer as before.
 
 WHOLE TABS AND WHOLE LISTS ARE YOURS TOO (builds 222–225). This is new, and you have been
 telling her otherwise. You are not limited to single exercises, and you CAN control which tab
@@ -9279,13 +9308,13 @@ function useCoach(data, day, clock) {
         const d = drillById(id, drills);
         if (!d || d.status === "removed") continue;
         out.push({ ...d, forGoal: true, forGoalText: goalOf[id] || [], suggested: !!suggestedFor[id] });
-        mins += Number(d.mins) || 0; goalMins += Number(d.mins) || 0;
+        mins += drillMins(d); goalMins += drillMins(d);
       }
       /* mobility fills what is left of the ten minutes, never displaces it */
       for (const id of mobIds) {
         const d = drillById(id, drills);
-        if (!d || d.status === "removed" || mins + (Number(d.mins) || 0) > DAILY_BUDGET) continue;
-        out.push(d); mins += Number(d.mins) || 0;
+        if (!d || d.status === "removed" || mins + drillMins(d) > DAILY_BUDGET) continue;
+        out.push(d); mins += drillMins(d);
       }
       /* which goals have nothing to do today. Said out loud, never hidden. */
       const covered = new Set();
@@ -13330,10 +13359,23 @@ const secondsFor = (f) => {
    the WHOLE drill, so a three-minute stretch is a minute and a half a side, not
    three each: two sides at full length is double the work she was prescribed. */
 const drillIsTwoSided = (d) => !!d && (d.side === true || d.bilateral === true);
+/* the whole drill, in seconds, before the two-sided split — and only an
+   exercise that declares NEITHER falls back to reading its own how-to */
+const drillTotalSecs = (d) => {
+  if (!d) return null;
+  const both = drillMins(d);
+  return both > 0 ? Math.round(both * 60) : secondsFor(d);
+};
+/* "2m", "40s", "1m 30s" — never "0m" for a drill that is forty seconds long
+   (rule 23: what the row says is what the clock will count) */
+const drillLength = (secs) => {
+  const t = Math.max(0, Math.round(Number(secs) || 0));
+  const m = Math.floor(t / 60), r = t % 60;
+  return m && r ? `${m}m ${r}s` : m ? `${m}m` : `${r}s`;
+};
 const drillSeconds = (d) => {
   if (!d) return null;
-  const m = Number(d.mins);
-  const whole = (Number.isFinite(m) && m > 0) ? Math.round(m * 60) : secondsFor(d);
+  const whole = drillTotalSecs(d);
   if (!whole) return whole;
   return drillIsTwoSided(d) ? Math.max(15, Math.round(whole / 2)) : whole;
 };
@@ -13388,12 +13430,23 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "", sid
     return () => { if (tick.current) { clearInterval(tick.current); tick.current = null; } };
   }, [running, seconds]);
 
+  /* HER REPORT, 9 September: "after it finishes counting it already changes
+     from 'start' to 'again', but 'again' doesn't work. I want to remove the
+     reset step of the timer."
+
+     BUILD 257. A rung countdown has nought on the clock, and "Again" started
+     from whatever was on the clock — so it started from nought and rang again
+     instantly, which looks exactly like nothing happening. It reloads the
+     prescription itself now. The reset button stays as a way out of a clock
+     that is already running; it is no longer a STEP she has to take. */
   const start = () => {
     if (running) return;
     /* the first tap is the gesture that buys us sound later */
     buzz(20);
+    const from = seconds && (rang || ms <= 0) ? seconds * 1000 : ms;
+    if (from !== ms) setMs(from);
     started.current = Date.now();
-    base.current = ms;
+    base.current = from;
     setRang(false);
     setRunning(true);
   };
@@ -15100,7 +15153,7 @@ function GoalsCard({ data, setData, coach, setSheet }) {
                           border: `1.5px solid ${on ? C.signal : hinted ? C.ochre : C.line}`,
                           background: on ? C.signal : "transparent",
                           color: on ? C.chalk : hinted ? C.ochre : C.muted }}>
-                        {d.label}{d.mins ? ` · ${d.mins}m` : ""}
+                        {d.label}{drillTotalSecs(d) ? ` · ${drillLength(drillTotalSecs(d))}` : ""}
                       </button>
                     );
                   })}
@@ -15259,7 +15312,7 @@ function DrillsCard({ coach, setSheet, data, setData }) {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <span style={{ fontSize: 13.5, fontWeight: 600, color: d.forGoal ? C.ink : C.ink }}>{d.label}</span>
             <span className="mono" style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>
-              {d.mins}m{drillIsTwoSided(d) ? ` · ${Math.round((Number(d.mins) || 0) * 30) / 60}m a side` : ""}</span>
+              {drillLength(drillTotalSecs(d))}{drillIsTwoSided(d) ? ` · ${drillLength(drillSeconds(d))} a side` : ""}</span>
           </div>
           {(d.sets || d.reps || d.freq) && (
             <div className="mono" style={{ fontSize: 11, color: C.moss, marginTop: 3 }}>
@@ -15353,51 +15406,25 @@ function SessionClock({ log, write, coach }) {
 
   const begin = () => { buzz(20); write({ sessionClock: { startedAt: Date.now() } }); };
   const nevermind = () => write({ sessionClock: undefined });
-  /* THE START SHE TELLS (build 243). Her instruction, 1 September: "sometimes
-     I forget to click... I can input that I started at eleven o'clock." The
-     time she gives means TODAY, on this phone's clock — the same clock the
-     running face reads, so a told start and a pressed one live on one rail
-     and everything downstream (the minutes, the slot, the too-short floor) is
-     already computed from startedAt. A told start is marked so in the record
-     (rule 23). A time still ahead of now writes NOTHING and says so in words
-     (rules 20, 23). On a running clock the record is kept and only the start
-     moves — that is her correction, not a new session. */
-  const tell = () => {
-    const m243 = String((telling && telling.hhmm) || "").match(/^(\d{1,2}):(\d{2})$/);
-    if (!m243) { setTelling({ ...telling, err: "Pick the time first — nothing is written until you do." }); return; }
-    const at = new Date();
-    at.setHours(Number(m243[1]), Number(m243[2]), 0, 0);
-    if (at.getTime() > Date.now()) {
-      setTelling({ ...telling, err: "That is later than now, so I have not written anything. The time you give means today, on this phone's clock." });
-      return;
-    }
-    buzz(20);
-    write({ sessionClock: running
-      ? { ...clock, startedAt: at.getTime(), toldStart: true }
-      : { startedAt: at.getTime(), toldStart: true } });
-    setTelling(null);
-  };
-  /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
-     'Session 1 min.'" and called it a logging artefact. It was.
-
-     This line used to be `Math.max(1, Math.round(mins))`. Started and stopped
-     a few seconds apart — by accident, or to see what the button does — it
-     banked a MINUTE THAT DID NOT HAPPEN and stamped the day as a completed
-     session. Rule 23: a fallback that substitutes a plausible figure for a real
-     one is a bug, not a kindness.
-
-     So it banks what it measured, and under her own `clockMinSession` it writes
-     no session at all. The clock's own record is kept either way, so the seconds
-     are not lost and she can still say what it was. */
-  const done = () => {
+  /* THE FINISH SHE TELLS (build 257). Her instruction, 9 September: "I need to
+     be able to set when my session ends like I can now set when it starts."
+     Build 243 gave her the start and stopped there, so a session she forgot to
+     finish could only be ended NOW — which banks every minute since.
+     `endAt` is her told finish; nothing else about this function changes, so
+     the floor, the slot, the adding-to-an-existing-day and the too-short
+     refusal are the same code for a told finish as for a pressed one. */
+  const done = (endAt) => {
     /* SessionClock takes no data prop; the merged thresholds ride on coach.F,
        which is FORMULA_DEFAULTS with her overrides already folded in. */
     const F = (coach && coach.F) || FORMULA_DEFAULTS;
     const floor = Math.max(0, Number(F.clockMinSession) || 0);
-    const m = Math.round(mins);
+    const told = Number(endAt) > 0 ? Number(endAt) : 0;
+    const ran = told ? Math.max(0, (told - clock.startedAt) / 60000) : mins;
+    const m = Math.round(ran);
     const startMins = new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes();
     const slot = startMins < 690 ? "morning" : startMins < 990 ? "midday" : "evening";
-    const stopped = { ...clock, stoppedAt: Date.now(), ranSecs: Math.round(mins * 60) };
+    const stopped = { ...clock, stoppedAt: told || Date.now(), ranSecs: Math.round(ran * 60),
+      ...(told ? { toldEnd: true } : {}) };
 
     if (m < floor) {
       /* NOT A SESSION, AND SAID SO. Nothing is written onto the day except the
@@ -15421,6 +15448,60 @@ function SessionClock({ log, write, coach }) {
       when: log?.when || slot,
     });
   };
+
+  /* THE START SHE TELLS (build 243). Her instruction, 1 September: "sometimes
+     I forget to click... I can input that I started at eleven o'clock." The
+     time she gives means TODAY, on this phone's clock — the same clock the
+     running face reads, so a told start and a pressed one live on one rail
+     and everything downstream (the minutes, the slot, the too-short floor) is
+     already computed from startedAt. A told start is marked so in the record
+     (rule 23). A time still ahead of now writes NOTHING and says so in words
+     (rules 20, 23). On a running clock the record is kept and only the start
+     moves — that is her correction, not a new session. */
+  const tell = () => {
+    const which = (telling && telling.which) || "start";
+    const m243 = String((telling && telling.hhmm) || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!m243) { setTelling({ ...telling, err: "Pick the time first — nothing is written until you do." }); return; }
+    const at = new Date();
+    at.setHours(Number(m243[1]), Number(m243[2]), 0, 0);
+    if (at.getTime() > Date.now()) {
+      setTelling({ ...telling, err: "That is later than now, so I have not written anything. The time you give means today, on this phone's clock." });
+      return;
+    }
+    /* A FINISH NEEDS A START TO MEASURE FROM, and it cannot come before one.
+       Neither case writes anything, and both say why (rules 20, 23). */
+    if (which === "end") {
+      if (!running) {
+        setTelling({ ...telling, err: "There is no clock running to finish, so I have not written anything. Set the start first and the finish will be here." });
+        return;
+      }
+      if (at.getTime() <= clock.startedAt) {
+        setTelling({ ...telling, err: `That is at or before the start (${hhmm(new Date(clock.startedAt).getHours() * 60 + new Date(clock.startedAt).getMinutes())}), so I have not written anything. If the start is the wrong one, correct that first.` });
+        return;
+      }
+      buzz(20);
+      done(at.getTime());
+      setTelling(null);
+      return;
+    }
+    buzz(20);
+    write({ sessionClock: running
+      ? { ...clock, startedAt: at.getTime(), toldStart: true }
+      : { startedAt: at.getTime(), toldStart: true } });
+    setTelling(null);
+  };
+  /* HER REPORT, 17 August: her coach read back "Monday 17 August shows
+     'Session 1 min.'" and called it a logging artefact. It was.
+
+     This line used to be `Math.max(1, Math.round(mins))`. Started and stopped
+     a few seconds apart — by accident, or to see what the button does — it
+     banked a MINUTE THAT DID NOT HAPPEN and stamped the day as a completed
+     session. Rule 23: a fallback that substitutes a plausible figure for a real
+     one is a bug, not a kindness.
+
+     So it banks what it measured, and under her own `clockMinSession` it writes
+     no session at all. The clock's own record is kept either way, so the seconds
+     are not lost and she can still say what it was. */
 
   return (
     <Card style={{ background: running ? C.mint : undefined }}>
@@ -15456,7 +15537,7 @@ function SessionClock({ log, write, coach }) {
               </div>
             </span>
             <span style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-              <Btn kind="signal" onClick={done}>Done</Btn>
+              <Btn kind="signal" onClick={() => done()}>Done</Btn>
               <button onClick={nevermind} className="tap" style={{
                 border: "none", background: "transparent", cursor: "pointer",
                 fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px" }}>
@@ -15469,20 +15550,34 @@ function SessionClock({ log, write, coach }) {
       {/* build 243: the start she tells — offered on both faces, quiet,
           because the one screen she opens every day stays uncluttered */}
       {!telling && (
-        <button className="tap" onClick={() => setTelling({ hhmm: "" })} style={{
-          border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
-          fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
-          {running ? "started earlier than this?" : "I already started — set the time"}
-        </button>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="tap" onClick={() => setTelling({ which: "start", hhmm: "" })} style={{
+            border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
+            fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+            {running ? "started earlier than this?" : "I already started — set the time"}
+          </button>
+          {/* build 257, hers: the same door at the other end of the session */}
+          {running && (
+            <button className="tap" onClick={() => setTelling({ which: "end", hhmm: "" })} style={{
+              border: "none", background: "transparent", cursor: "pointer", padding: "8px 2px 0",
+              fontSize: 11, color: C.muted, fontFamily: "inherit" }}>
+              I finished earlier — set the time
+            </button>
+          )}
+        </div>
       )}
       {telling && (
         <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <input type="time" aria-label="When you started" value={telling.hhmm}
-              onChange={(e) => setTelling({ hhmm: e.target.value })}
+            <input type="time"
+              aria-label={telling.which === "end" ? "When you finished" : "When you started"}
+              value={telling.hhmm}
+              onChange={(e) => setTelling({ which: telling.which, hhmm: e.target.value })}
               style={{ border: `1.5px solid ${C.line}`, borderRadius: 9, padding: "8px 10px",
                 fontSize: 13.5, fontFamily: "inherit", background: "transparent", color: C.ink }} />
-            <Btn kind="signal" onClick={tell}>{running ? "Correct the start" : "Start from then"}</Btn>
+            <Btn kind="signal" onClick={tell}>{telling.which === "end"
+              ? "Finish at that time"
+              : running ? "Correct the start" : "Start from then"}</Btn>
             <button className="tap" onClick={() => setTelling(null)} style={{
               border: "none", background: "transparent", cursor: "pointer",
               fontSize: 11, color: C.muted, fontFamily: "inherit", padding: "2px 4px" }}>
@@ -17184,6 +17279,41 @@ function Today({ data, setData, coach, setSheet, goTab }) {
                     border: "none", background: "transparent", cursor: "pointer", padding: "2px 4px",
                     fontSize: 12, color: C.moss, fontWeight: 600, fontFamily: "inherit" }}>change it</button>
                 </div>
+                {/* HER REPORT, 9 September: "I forgot to click done and it went
+                    out for like 120 minutes and all what I did today was like
+                    40 minutes… I want to edit the number of minutes I've worked
+                    and I can't."
+
+                    She could — behind "change it" — and that is rule 11's own
+                    lesson: a control she cannot find does not exist. The number
+                    is printed on this row, so the box that corrects it is on
+                    this row, and what she types is written as she types it.
+                    "change it" is untouched; this is a shorter way to the same
+                    field, not a replacement for it (rule 2). */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11.5, color: C.muted }}>how long it actually was</span>
+                  <input type="text" inputMode="numeric" value={log.minutes ?? ""}
+                    aria-label="How many minutes this session actually was"
+                    onChange={(e) => write({ minutes: e.target.value })}
+                    placeholder="min"
+                    style={{ ...inputStyle, width: 64, padding: "7px 8px", marginBottom: 0, textAlign: "center",
+                      fontFamily: "'IBM Plex Mono', monospace", fontSize: 13, fontWeight: 600 }} />
+                  <span className="mono" style={{ fontSize: 10, color: C.muted }}>min</span>
+                </div>
+                {/* AND IT SAYS WHERE THE NUMBER CAME FROM, computed from the
+                    clock's own record rather than assumed (rule 23). A clock
+                    left running is exactly the case she hit. */}
+                {Number(log.sessionClock?.ranSecs) > 0 && (() => {
+                  const ran = Math.round(Number(log.sessionClock.ranSecs) / 60);
+                  const has = Number(log.minutes) || 0;
+                  return (
+                    <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, marginTop: 5 }}>
+                      {ran === has
+                        ? `That ${ran} came off the clock. If you forgot to press Done it kept running — type what you actually trained, and yours is the number everything is worked out from.`
+                        : `The clock ran ${ran} min and you have said ${has || "nothing"}. Yours is the one that counts.`}
+                    </div>
+                  );
+                })()}
                 {/* AND IT SAYS WHY IT COUNTS. A day that completed itself from
                     a rep she typed or a list she ticked used to look identical
                     to a session she started, which is how a week of three came
@@ -23720,7 +23850,7 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
               ? `SET ASIDE${item.removedOn ? " " + item.removedOn : ""} · your readings are kept`
               : isTest
               ? `${item.unit || "—"} · ${item.better === "lower" ? "lower is better" : "higher is better"}${item.side ? " · left/right" : ""}`
-              : `${item.mins} min${item.targets ? ` · ${item.targets}` : ""}`}
+              : `${drillLength(drillTotalSecs(item))}${item.targets ? ` · ${item.targets}` : ""}`}
           </div>
         </button>
         {isLive(item) ? (
@@ -23810,8 +23940,18 @@ function MobilityEditor({ data, setData, coach, close, focus }) {
             </>
           ) : (
             <>
-              <Field label="Minutes" unit="" value={item.mins ?? ""}
-                onChange={(v) => patchDrill(item.id, { mins: v })} />
+              {/* HER REPORT, 9 September: only minutes, so a forty-second
+                  cat-cow could only be set to forty MINUTES. The two add. */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <span style={{ flex: 1 }}><Field label="Minutes" unit="" value={item.mins ?? ""}
+                  onChange={(v) => patchDrill(item.id, { mins: v })} /></span>
+                <span style={{ flex: 1 }}><Field label="Seconds" unit="" value={item.secs ?? ""}
+                  onChange={(v) => patchDrill(item.id, { secs: v })} /></span>
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.45, margin: "-8px 0 14px" }}>
+                They add up: 1 minute and 30 seconds is a minute and a half. Leave minutes
+                blank for anything under a minute — the clock counts {drillLength(drillTotalSecs(item)) || "nothing yet"}.
+              </div>
               {/* Rule 12: the same toggle the mobility tests have. sideEdited
                   marks it HERS, so the seed never overrules her again. */}
               <div style={{ display: "flex", gap: 8, margin: "2px 0 12px" }}>
@@ -26568,11 +26708,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     setListing(i); setListMade(null);
     const listSpend = {};
     try {
+      /* BUILD 258: hers or its own — the only difference is which opening the
+         translator is given, so a list she wrote herself is never "improved". */
+      const mine258 = msgs[i]?.role === "user";
       const { raw, cut } = await askWithRoom({
         apiKey: data.settings?.apiKey,
-        system: LIST_FROM_CHAT_SYSTEM,
+        system: mine258 ? LIST_FROM_CHAT_SYSTEM_HERS : LIST_FROM_CHAT_SYSTEM,
         /* build 222: it could not pick one of her tabs without being shown them */
-        messages: listFromChatMessage(data, msgs[i]?.content),
+        messages: listFromChatMessage(data, msgs[i]?.content, mine258),
         maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
         usage: listSpend,
         search: data.settings?.webSearch === true,
@@ -26589,7 +26732,9 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         : (out && Array.isArray(out.exercises) && out.exercises.length ? [out] : []);
       const usable = wanted.filter((l) => l && Array.isArray(l.exercises) && l.exercises.length);
       if (!usable.length) {
-        setListMade({ error: "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
+        setListMade({ error: msgs[i]?.role === "user"
+          ? "I could not find exercises in that message of yours. Write them one per line — the movement, and the sets, reps or hold if you know them — then tap this again. Or ask me for them and tap it under my answer."
+          : "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
         return;
       }
       setData((d) => {
@@ -28304,7 +28449,16 @@ Two or three sentences unless she asks for more.`;
                 </button>
               </div>
             )}
-            {m.role !== "user" && setData && (
+            {/* HER INSTRUCTION, 9 September: "the two buttons under the messages
+                of the coach should also be working from my messages as well."
+                She goes back and forth three or four times getting the coach to
+                understand a list she already knows — and pays for every one of
+                those messages. Her own message is the cheapest possible input,
+                and both calls only ever read the text of the message they were
+                tapped on, so neither needed anything but the gate opening.
+                The row right-aligns itself under her bubbles: the column it
+                sits in already sets the alignment by role. */}
+            {setData && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 <button className="tap" disabled={listing !== null || editingLists !== null}
                   onClick={() => makeList(i)} style={{
@@ -30364,9 +30518,28 @@ Return ONLY the full updated memory as plain text. No preamble, no code fence, n
 after it. It replaces what came before, so anything still true must be carried forward — but the
 previous version is kept on her device either way, so nothing you leave out is destroyed.`;
 
-const LIST_FROM_CHAT_SYSTEM = `You are turning exercises you have ALREADY written for her, in
+/* WHOSE MESSAGE IS BEING TURNED INTO A LIST (build 258). HER INSTRUCTION,
+   9 September: "I want to be able to create exercise lists from my messages to
+   the coach, not only from his messages to me, because I keep sending three,
+   four messages until he gets what I want, and then he can create it, and
+   sometimes he creates it in the wrong place, and this costs a lot of money
+   just because of confusion."
+
+   So the same two buttons sit under her own messages now. Only the OPENING
+   changes — the rules, the shape and the tab-matching are one body used by
+   both, because two copies of this prompt would drift the way rule 34's two
+   payload builders did. */
+const LIST_FROM_CHAT_HEAD = `You are turning exercises you have ALREADY written for her, in
 conversation, into one structured list for her app. Her right shoulder is
-rehabilitating.
+rehabilitating.`;
+const LIST_FROM_CHAT_HEAD_HERS = `You are turning exercises SHE WROTE HERSELF — her own message, in her
+own words, typed, dictated or pasted from somewhere — into one structured list for her app.
+They are her choices and not yours: keep every movement she named, keep her names for them,
+add nothing she did not ask for and drop nothing you do not recognise. If something she wrote
+is not a movement at all, leave it out rather than inventing one. Her right shoulder is
+rehabilitating, so where she has given no dose keep it conservative — but never quietly
+replace a movement she chose.`;
+const LIST_FROM_CHAT_RULES = `
 
 RULES.
 - Use ONLY the exercises in the message. Do not add, drop or substitute any.
@@ -30422,6 +30595,11 @@ work genuinely belongs in different tabs.
 Do NOT write a how-to paragraph — she asked for the variables and the video, not prose.
 "loadKind" must be right: a band is "band", a dumbbell or barbell is "weight", her own
 bodyweight is "none".`;
+/* ONE BODY, TWO OPENINGS — and a check that fails if they ever stop
+   sharing it, because two copies of a prompt this long is exactly how the two
+   payload builders drifted six times (rule 34). */
+const LIST_FROM_CHAT_SYSTEM = LIST_FROM_CHAT_HEAD + LIST_FROM_CHAT_RULES;
+const LIST_FROM_CHAT_SYSTEM_HERS = LIST_FROM_CHAT_HEAD_HERS + LIST_FROM_CHAT_RULES;
 
 /* HER INSTRUCTION, 13 August: "I need him to edit them too." What the coach
    just said it would change, turned into exact operations against exact ids.
@@ -30651,11 +30829,13 @@ const tabsWithCharters = (data) => (((data.bodywork || []).filter((pg) => pg && 
 
 /* the message "put these on my Body page" sends — hoisted, like the tabs
    above, so suite 51's window keeps seeing makeList's updater (build 242) */
-const listFromChatMessage = (data, text) => [{ role: "user", content:
+const listFromChatMessage = (data, text, mine) => [{ role: "user", content:
   'THE TABS SHE ALREADY HAS ON HER BODY PAGE. "area" must be ONE OF THESE, copied\n'
   + 'exactly, unless none of them could honestly hold this list:\n'
   + tabsWithCharters(data)
-  + '\n\nWHAT I WROTE FOR HER:\n' + String(text || "") }];
+  + (mine
+      ? '\n\nWHAT SHE WROTE HERSELF — her words, her exercises:\n'
+      : '\n\nWHAT I WROTE FOR HER:\n') + String(text || "") }];
 
 const listInventory = (data) => [bodyInventory(data), registryInventory(data)]
   .filter(Boolean).join("\n\n") || "she has no lists yet";
