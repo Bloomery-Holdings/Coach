@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 264";
+const BUILD = "18 September 2026 · 265";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -31894,6 +31894,23 @@ const landLists = (d, usable, today, fallbackArea) => {
     /* An area she already has gains a list; a new area becomes a programme of
        its own. Nothing existing is touched (rule 20). */
     if (at >= 0) {
+      /* CHANGING A LIST IS REPLACING IT, AND A REPLACE IS A SET-ASIDE (265).
+         HER QUESTION, 18 September: "why is the tab change my lists not there?
+         Only put this list on my page." Because the chat's version reads
+         English — "take out anything that hurts my knee" — and that is what
+         the model is for. This is the version that fits how she actually
+         works: she writes the list herself, so changing one means pasting the
+         corrected version over it.
+
+         Rule 20 governs what "over it" may mean. The old list is SET ASIDE —
+         dated, still in her file, still one tap from coming back with every
+         reading she logged against it under it — never deleted. Same
+         `status: "removed"` shape `bwOps.setListAside` writes, so the Arrange
+         screen's "put it back" already works on it with nothing new taught. */
+      if (one.replaces) {
+        pgs = pgs.map((pg, k) => (k !== at ? pg : { ...pg, lists: (pg.lists || []).map((l) =>
+          (l.id !== one.replaces ? l : { ...l, status: "removed", removedOn: today })) }));
+      }
       const n = (pgs[at].lists || []).length + 1;
       const shaped = shapeLists([{ title: one.title, focus: one.focus, video: one.video, exercises: one.exercises }], n);
       landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
@@ -33323,18 +33340,34 @@ function PasteLists({ data, setData, coach }) {
   /* WHERE EACH ONE WOULD LAND, worked out the same way the landing does it, so
      what she is shown and what happens cannot disagree (rule 36). */
   const live = (data.bodywork || []).filter((pg) => pg && pg.status !== "removed");
-  const whereFor = (areaName) => {
+  const whereFor = (areaName, title) => {
     const hit = findAreaLike(live.map((pg) => ({ ...pg, name: pg.area })), String(areaName || ""));
-    return hit >= 0 ? { name: live[hit].area, made: false } : { name: String(areaName || "").trim(), made: true };
+    if (hit < 0) return { name: String(areaName || "").trim(), made: true, pg: null, same: null };
+    const pg = live[hit];
+    /* ONE SHE ALREADY HAS, by the name she gave it. `findByName` is the same
+       matcher the rest of the app uses for her words, and it returns nothing
+       when two rows answer — guessing which list she meant is how the wrong
+       one gets set aside (rules 20, 23). */
+    const rows = (pg.lists || []).filter((l) => l && l.status !== "removed");
+    const i = String(title || "").trim() ? findByName(rows, title, (x) => x.title) : -1;
+    return { name: pg.area, made: false, pg, same: i >= 0 ? rows[i] : null };
   };
 
+  /* DEFAULTS TO ADDING. A replace sets something of hers aside, so it is never
+     what happens because she did not notice a toggle (rule 20). */
+  const [swap, setSwap] = useState({});
   const save = () => {
     if (!read || !read.lists || !read.lists.length) return;
-    setData((d) => landLists(d, read.lists, coach.t, "the list you pasted").data);
+    const lists = read.lists.map((l, li) => {
+      const w = whereFor(l.area, l.title);
+      return swap[li] && w.same ? { ...l, replaces: w.same.id } : l;
+    });
+    setData((d) => landLists(d, lists, coach.t, "the list you pasted").data);
     setDone({ lists: read.lists.length,
       n: read.lists.reduce((a, l) => a + l.exercises.length, 0),
-      tabs: [...new Set(read.lists.map((l) => whereFor(l.area).name))] });
-    setRead(null); setText(""); setOpen(false);
+      swapped: lists.filter((l) => l.replaces).length,
+      tabs: [...new Set(read.lists.map((l) => whereFor(l.area, l.title).name))] });
+    setRead(null); setText(""); setOpen(false); setSwap({});
   };
 
   if (!open) {
@@ -33349,7 +33382,11 @@ function PasteLists({ data, setData, coach }) {
         {done && (
           <div style={{ fontSize: 12, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
             {done.n} exercise{done.n === 1 ? "" : "s"} in {done.lists} list{done.lists === 1 ? "" : "s"},
-            in {done.tabs.join(" and ")}. Nothing was sent and nothing was spent.
+            in {done.tabs.join(" and ")}.
+            {done.swapped
+              ? ` ${done.swapped} list${done.swapped === 1 ? "" : "s"} you had ${done.swapped === 1 ? "was" : "were"} set aside, not deleted — the Arrange screen puts ${done.swapped === 1 ? "it" : "them"} back with your readings under ${done.swapped === 1 ? "it" : "them"}.`
+              : ""}
+            {" "}Nothing was sent and nothing was spent.
           </div>
         )}
       </div>
@@ -33399,7 +33436,7 @@ function PasteLists({ data, setData, coach }) {
             This is what I read, and where each one goes. Nothing is saved until you tap below.
           </div>
           {lists.map((l, li) => {
-            const w = whereFor(l.area);
+            const w = whereFor(l.area, l.title);
             return (
               <div key={li} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>
@@ -33407,7 +33444,22 @@ function PasteLists({ data, setData, coach }) {
                 </div>
                 <div style={{ fontSize: 11, color: w.made ? C.ochre : C.moss, marginBottom: 4 }}>
                   → {w.name || "a tab of its own"}{w.made ? " · a new tab" : " · a tab you already have"}
+                  {w.same ? ` · you already have a list called "${w.same.title}"` : ""}
                 </div>
+                {/* CHANGING ONE, rather than ending up with two (build 265) */}
+                {w.same && (
+                  <button className="tap"
+                    onClick={() => setSwap((x) => ({ ...x, [li]: !x[li] }))} style={{
+                      border: `1.5px solid ${swap[li] ? C.signal : C.line}`,
+                      background: swap[li] ? C.signal : "transparent",
+                      color: swap[li] ? C.chalk : C.signal,
+                      cursor: "pointer", padding: "5px 10px", borderRadius: 8,
+                      fontSize: 11, fontWeight: 600, fontFamily: "inherit", marginBottom: 6 }}>
+                    {swap[li]
+                      ? "replacing it — the old one is set aside, not deleted"
+                      : "adding a second one — tap to replace the one you have"}
+                  </button>
+                )}
                 {l.video && (
                   <div style={{ fontSize: 11, color: C.moss, lineHeight: 1.4, marginBottom: 4,
                     wordBreak: "break-all" }}>your video, kept exactly: {l.video}</div>
