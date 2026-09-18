@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 262";
+const BUILD = "18 September 2026 · 263";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -27918,8 +27918,33 @@ Two or three sentences unless she asks for more.`;
            the clock in the uncached half, where it was always going to change.
            Both go, in the same order, every message — this changes what is
            MARKED, not what is sent. */
+        /* BUILD 263 — 259 IS REVERTED, AND THIS IS WHY.
+
+           HER REPORT, 18 September: "$0.37 · 1,127 in, 366 out", and "the cost
+           is even higher than the one before". Both true. 1,127 in and 366 out
+           is under a cent at her prices; the missing 36c was ~60,000 tokens of
+           CACHE WRITE that the row never showed her.
+
+           259 marked BOTH halves on the claim that her live state does not
+           change during a talk. Build 256 had already measured that it does —
+           its own comment, still sitting on CACHE_BREAK, says the running
+           memory "is the first thing here that moves between one message and
+           the next, so this is the measured boundary the cache mark belongs
+           on." I marked the moving half anyway, so every message missed the
+           longer prefix and paid to WRITE it again:
+
+             256-258   3,519 read at a tenth + 2,386 at full   ~0.8c a message
+             259-262   5,905 written at 1.25x, 2x on the hour  ~3.5c a message
+
+           Rule 36 states the trap in one line — "a cache mark on a block that
+           changes between messages costs 1.25x and saves nothing" — and 259
+           was written in the same session that quoted it. The mark goes back
+           on the boundary that was measured, not the one that was hoped for.
+
+           259's OTHER fix, `saysPhrase`, is untouched: that one was real and
+           has nothing to do with this. */
         system: (() => { const p = splitPayload(payloadStable());
-          return { stable: [p.fixed, p.rest], live: liveContext() }; })(),
+          return { stable: p.fixed, live: p.rest + "\n" + liveContext() }; })(),
         messages: next.map(blockify),
         search: data.settings?.webSearch === true,
         usage: spend,
@@ -27992,7 +28017,9 @@ Two or three sentences unless she asks for more.`;
         cacheTtl: carryPlan.mode === "1h" ? "1h" : "5m",
         maxTokens: Math.max(500, Number(formulas(data.settings).replyLong) || 1800),
         apiKey: data.settings?.apiKey,
-        system: { stable: [carryParts.fixed, carryParts.rest], live: liveContext() },
+        /* build 263: the same revert, at the same boundary — the two call
+           sites must agree or the cache misses on whichever is wrong */
+        system: { stable: carryParts.fixed, live: carryParts.rest + "\n" + liveContext() },
         messages: [...upto.map((m) => ({ role: m.role, content: m.content })),
           { role: "user", content: "You ran out of room and stopped mid-sentence. "
             + "Carry straight on from where you stopped. Do not start again, do not "
@@ -28848,7 +28875,16 @@ Two or three sentences unless she asks for more.`;
         {(() => {
           const here = (data.chats || []).find((c) => c.id === sessionId.current) || {};
           const all = spendSince(data, null);
-          const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0;
+          /* WHAT SHE IS SHOWN IS WHAT SHE SPENT (build 263, rule 36).
+
+             The row said "1,127 in, 366 out" beside $0.37 — arithmetic that
+             does not work at her prices, because `tokensIn` is `usage.in`
+             alone and the cache tokens, which `centsFor` bills at 1.25x, 2x
+             or a tenth, were not in it. Sixty thousand of them were missing
+             from the line she reads to decide whether the app is worth using.
+             A total that does not add up is worse than no total. */
+          const cached = (Number(here.cacheWrite) || 0) + (Number(here.cacheRead) || 0);
+          const started = Number(here.tokensIn) > 0 || Number(here.tokensOut) > 0 || cached > 0;
           return (
             <div aria-label="what this is costing"
               style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
@@ -28856,6 +28892,7 @@ Two or three sentences unless she asks for more.`;
               <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
                 {started
                   ? `this talk ${money(here.cost || 0)} · ${(Number(here.tokensIn) || 0).toLocaleString()} in, ${(Number(here.tokensOut) || 0).toLocaleString()} out`
+                    + (cached ? `, ${cached.toLocaleString()} cached` : "")
                   : "this talk — nothing spent yet"}
               </span>
               <span className="mono" style={{ fontSize: 10.5, color: C.muted }}>
