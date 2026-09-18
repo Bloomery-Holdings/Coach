@@ -4873,7 +4873,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 266";
+const BUILD = "18 September 2026 · 267";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -29835,7 +29835,7 @@ const orderSay = (o) => {
     if (o.kind === "backTab")
         return `Put the "${g.pg.area}" tab back, with everything that was in it.`;
     if (o.kind === "addTab")
-        return `Make a new tab called "${o.to}", with an empty list in it.`;
+        return `Make a new tab called "${o.to}", with nothing in it yet.`;
     if (o.kind === "addList")
         return `Add an empty list called "${o.to}" to ${g.pg.area}.`;
     if (o.kind === "back")
@@ -29871,9 +29871,18 @@ const doOrder = (d, o, today) => {
             lists: (pg.lists || []).map((l) => (l.id !== listId ? l : { ...l,
                 exercises: (l.exercises || []).map((x) => (x.id !== exId ? x : { ...x, ...how })) })) })) });
     if (o.kind === "addTab") {
+        /* AND IT ARRIVES EMPTY. `bwOps.addArea` hands a new tab a placeholder
+           "List 1", which is exactly what she reported on 18 September — "the new
+           tab I asked to create gave me a list that I didn't ask for". The coach's
+           own applier has stripped it since build 232; this is the same edit, in
+           the same words, on the other route. Rule 34's lesson generalised: a
+           capability is not finished until every path that uses it has been told. */
         const made = bwOps.addArea(d, today);
         const fresh = (made.bodywork || [])[(made.bodywork || []).length - 1];
-        return fresh ? bwOps.renameArea(made, fresh.id, o.to) : made;
+        if (!fresh)
+            return made;
+        const named = bwOps.renameArea(made, fresh.id, o.to);
+        return { ...named, bodywork: (named.bodywork || []).map((p) => (p.id === fresh.id ? { ...p, lists: [] } : p)) };
     }
     if (o.kind === "addList") {
         const made = bwOps.addList(d, g.pg.id, today);
@@ -29946,8 +29955,20 @@ function PasteLists({ data, setData, coach }) {
     const [text, setText] = useState("");
     const [read, setRead] = useState(null);
     const [done, setDone] = useState(null);
+    /* ONE TAP IS ONE WRITE (build 267). HER REPORT, 18 September: "the duplicated
+       list is probably because I pushed the button of 'put the list on my body
+       page' twice." She is right, and it reproduces: every button below guards on
+       `read`, which is STATE, so two taps inside one frame both see the same
+       `read`, both pass the guard, and both write. A ref is set by the first tap
+       and is already true for the second one in the same frame, which state is
+       not. It is released when she reads again, so a deliberate second paste is
+       never blocked — only a double tap on the same one. */
+    const spent = useRef(false);
+    const onceOnly = (fn) => () => { if (spent.current)
+        return; spent.current = true; fn(); };
     const readIt = () => {
         setDone(null);
+        spent.current = false; /* a fresh read is a fresh write (build 267) */
         /* AN ORDER OR A LIST (build 266). Her words, with the screenshot: "What is
            this reply????? There is nothing that gives an order to change my
            lists." A sentence is an order; lines with doses are a list. The order
@@ -29966,7 +29987,7 @@ function PasteLists({ data, setData, coach }) {
             : { none: true });
     };
     /* SHE TAPS, AND ONLY THEN (rule 20). Nothing above this line writes. */
-    const doIt = () => {
+    const doIt = onceOnly(() => {
         const o = read && read.order;
         if (!o || !o.got || !o.got.one)
             return;
@@ -29975,7 +29996,7 @@ function PasteLists({ data, setData, coach }) {
         setRead(null);
         setText("");
         setOpen(false);
-    };
+    });
     /* WHERE EACH ONE WOULD LAND, worked out the same way the landing does it, so
        what she is shown and what happens cannot disagree (rule 36). */
     const live = (data.bodywork || []).filter((pg) => pg && pg.status !== "removed");
@@ -29995,7 +30016,7 @@ function PasteLists({ data, setData, coach }) {
     /* DEFAULTS TO ADDING. A replace sets something of hers aside, so it is never
        what happens because she did not notice a toggle (rule 20). */
     const [swap, setSwap] = useState({});
-    const save = () => {
+    const save = onceOnly(() => {
         if (!read || !read.lists || !read.lists.length)
             return;
         const lists = read.lists.map((l, li) => {
@@ -30011,7 +30032,7 @@ function PasteLists({ data, setData, coach }) {
         setText("");
         setOpen(false);
         setSwap({});
-    };
+    });
     if (!open) {
         return (React.createElement("div", { style: { marginBottom: 16 } },
             React.createElement("button", { onClick: () => { setOpen(true); setDone(null); }, className: "tap", style: {
@@ -30089,13 +30110,13 @@ function PasteLists({ data, setData, coach }) {
                 " that answer to \"",
                 read.order.got.want,
                 "\". I have changed nothing \u2014 say which one:"),
-            read.order.got.many.map((x, i) => (React.createElement("button", { key: i, className: "tap", onClick: () => {
+            read.order.got.many.map((x, i) => (React.createElement("button", { key: i, className: "tap", onClick: onceOnly(() => {
                     setData((d) => doOrder(d, { ...read.order, got: { one: x } }, coach.t));
                     setDone({ order: orderSay({ ...read.order, got: { one: x } }) });
                     setRead(null);
                     setText("");
                     setOpen(false);
-                }, style: { display: "block", width: "100%", textAlign: "left", marginBottom: 6,
+                }), style: { display: "block", width: "100%", textAlign: "left", marginBottom: 6,
                     border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
                     padding: "8px 11px", borderRadius: 8, fontSize: 12, color: C.ink,
                     fontFamily: "inherit" } }, orderRowSay(x)))))),
