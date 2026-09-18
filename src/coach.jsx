@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 267";
+const BUILD = "18 September 2026 · 268";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -31911,11 +31911,15 @@ const landLists = (d, usable, today, fallbackArea) => {
         pgs = pgs.map((pg, k) => (k !== at ? pg : { ...pg, lists: (pg.lists || []).map((l) =>
           (l.id !== one.replaces ? l : { ...l, status: "removed", removedOn: today })) }));
       }
-      const n = (pgs[at].lists || []).length + 1;
+      /* AFTER THE ONES SHE CAN SEE (268), not after the whole array — a tab
+         holding one set-aside list used to hand the next paste a number that
+         already belonged to something. */
+      const n = (pgs[at].lists || []).filter((l) => l && l.status !== "removed").length + 1;
       const shaped = shapeLists([{ title: one.title, focus: one.focus, video: one.video, exercises: one.exercises }], n);
       landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
       if (!focus) focus = { pg: pgs[at].id, list: shaped[0].id };
-      pgs = pgs.map((pg, k) => (k !== at ? pg : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
+      pgs = pgs.map((pg, k) => (k !== at ? pg : { ...pg,
+        lists: bwOps.renumber([...(pg.lists || []), ...shaped]) }));
       return;
     }
     const pgId = newId();
@@ -32787,8 +32791,20 @@ const bwOps = {
     (pg.id !== pgId ? pg : { ...pg, charter: String(charter || "") })) }),
 
   /* renumber so the numbers she reads follow the order she put them in. The
-     id never changes, which is what keeps her history attached. */
-  renumber: (lists) => (lists || []).map((l, i) => ({ ...l, n: i + 1 })),
+     id never changes, which is what keeps her history attached.
+
+     BUILD 268: it numbered by POSITION IN THE ARRAY, set-aside lists included,
+     so a tab that had lost one read "List 1, List 3, List 4" on screen and sent
+     the same gap to her coach. Her words, 18 September: "number it properly
+     going forward." Settled here, at the one definition every path already
+     calls — the Arrange screen, adding, moving between tabs and the coach's own
+     applier — rather than at each of them (rule 33's discipline).
+
+     A set-aside list KEEPS the number it had. It is not counted, because she
+     cannot see it, and it is not renumbered, because nothing of hers is
+     rewritten by being put away (rule 20). */
+  renumber: (lists) => { let k = 0;
+    return (lists || []).map((l) => (l && l.status === "removed" ? l : { ...l, n: ++k })); },
 
   addList: (d, pgId, today) => ({ ...d, bodywork: (d.bodywork || []).map((pg) => {
     if (pg.id !== pgId) return pg;
@@ -33393,6 +33409,9 @@ const pickBy = (pool, want, nameOf) => {
 const ORDER_VERBS = [
   ["back", /\b(?:put|puts|bring|brings|brought|take|takes|taken|took|get|gets|got|have|has|want|wants)((?:\s+[\w,'’-]+){0,6})\s+back\b/i],
   ["back", /\b(?:restored?|reinstates?d?|revived?|undo|un-?removed?|un-?deleted?|recovers?e?d?|unhide|unhidden)\b/i],
+  /* NUMBERING (268). It sits above the aside and move rows because "rearrange"
+     and "sort out" would otherwise be read as taking something off. */
+  ["renum", /\b(?:re-?arrange[sd]?|re-?order(?:s|ed)?|re-?number(?:s|ed)?|renumbering|numbering|number(?:s|ed)?\s+(?:it|them|these|those|the)?\s*(?:properly|correctly|right|again|in order)|tidy(?:\s+up)?\s+the\s+(?:numbers?|numbering|order)|sort\s+out\s+the\s+(?:numbers?|numbering|order))\b/i],
   ["aside", /\b(?:take|takes|taken|took|set|sets|put|puts|clear|clears|cleared|throw|throws|thrown|threw|move|moves|moved|strip|stripped|leave|leaves|left|cut|cuts)((?:\s+[\w,'’-]+){0,6})\s+(?:off|out|away|aside)\b/i],
   ["aside", /\b(?:removes?d?|deletes?d?|get\s+rid\s+of|drops?|dropped|bins?|binned|scraps?|scrapped|chucks?e?d?|ditch(?:es|ed)?|erases?d?|junks?e?d?|kills?e?d?|eliminates?d?|excludes?d?|omits?|omitted|unlists?e?d?|discards?e?d?|retires?d?|archives?d?|hides?|hidden|do\s+not\s+want|don'?t\s+want|no\s+longer\s+want|should\s+not\s+be\s+there|shouldn'?t\s+be\s+(?:there|in)|does\s+not\s+belong)\b/i],
   ["rename", /\b(?:renames?d?|re-?names?d?|retitles?d?|re-?titles?d?|relabels?(?:led)?|change\s+the\s+(?:name|title)\s+of|calls?|called|names?|named)\b/i],
@@ -33445,6 +33464,41 @@ const takeList = (s, data) => {
     if (saysList(tail) || pickBy(allLists(data), tail, (x) => x.list.title).one) return { head, listWant: tail };
   }
   return { head: str.trim(), listWant: null };
+};
+
+/* WHAT THE NUMBERS WOULD BECOME (268). Live lists run 1..N in the order they
+   are in; set-aside ones are skipped and keep theirs. Where a title starts with
+   its own number — "List 9 — standing, no kit", which is how she writes them —
+   the number IN THE TITLE is brought into line too, because a list numbered 2
+   called "List 9" is not numbered properly by any reading. Her own words in the
+   title are otherwise untouched, and she sees every line of this before she
+   taps. */
+const TITLE_N = /^(\s*list\s*)(\d+)(\s*(?:[—–-]\s*)?)/i;
+const numberLists = (lists) => {
+  let k = 0;
+  return (lists || []).map((l) => {
+    if (!l || l.status === "removed") return l;
+    k += 1;
+    const t = String(l.title || "");
+    const m = t.match(TITLE_N);
+    return { ...l, n: k, title: m ? t.replace(TITLE_N, `${m[1]}${k}${m[3]}`) : t };
+  });
+};
+/* THE TAB SHE NAMED, however much else is in the sentence. "rearrange the
+   lists inside the COOLDOWN TAB number it properly going forward" has one tab
+   name in it and a lot of words around it, so this walks back from the word
+   "tab" and takes the longest run of words that is actually a tab of hers —
+   which is a match, never a guess (rule 23). */
+const areaByWord = (data, said) => {
+  const re = /\s+(?:tabs?|sections?|areas?)\b/ig; let m;
+  while ((m = re.exec(said))) {
+    const w = said.slice(0, m.index).trim().split(/\s+/).filter(Boolean);
+    for (let k = Math.min(6, w.length); k >= 1; k--) {
+      const pg = areaIn(data, w.slice(w.length - k).join(" "));
+      if (pg) return pg;
+    }
+  }
+  return null;
 };
 
 /* SHE TYPED AN ORDER. Returns what it WOULD do, never does it. */
@@ -33572,6 +33626,14 @@ const readOrder = (text, data) => {
       to: areaIn(data, destWant), toWant: bareName(destWant), said };
   }
 
+  if (kind === "renum") {
+    let pg = areaByWord(data, raw);
+    if (!pg) { const A = takeArea(rest, data); if (A.area) pg = areaIn(data, A.area); }
+    if (!pg && bTab) pg = areaIn(data, bTab[1]);
+    if (!pg) return { kind: "renum", got: { noTab: bareName(rest) }, said };
+    return { kind: "renum", got: { one: { pg } }, said };
+  }
+
   if (kind === "add") {
     const wantsList = saysList(rest) && !/^\s*(?:a|an|the)?\s*(?:new\s+)?(?:tab|section|area)\b/i.test(rest);
     const nm = rest.match(/(?:called|named|titled|for)\s+(.+)$/i)
@@ -33613,6 +33675,20 @@ const orderSay = (o) => {
   if (o.kind === "renameTab") return `Rename the "${g.pg.area}" tab to "${o.to}". Its lists and everything in them stay exactly where they are.`;
   if (o.kind === "asideTab") return `Set the whole "${g.pg.area}" tab aside, with its ${(g.pg.lists || []).filter((l) => l && l.status !== "removed").length} list(s). ${KEPT}`;
   if (o.kind === "backTab") return `Put the "${g.pg.area}" tab back, with everything that was in it.`;
+  if (o.kind === "renum") {
+    const was = (g.pg.lists || []).filter((l) => l && l.status !== "removed");
+    const now = numberLists(g.pg.lists).filter((l) => l && l.status !== "removed");
+    const moved = was.map((l, i) => [l, now[i]])
+      .filter(([a, b]) => a.n !== b.n || a.title !== b.title);
+    const put = (l) => `${l.n === undefined ? "?" : l.n}. ${l.title || "Untitled list"}`;
+    const aside = (g.pg.lists || []).filter((l) => l && l.status === "removed").length;
+    return `Number the ${was.length} list${was.length === 1 ? "" : "s"} in ${g.pg.area} 1 to ${was.length}, in the order they are in now.`
+      + (moved.length
+        ? ` ${moved.length} change${moved.length === 1 ? "s" : ""}: ${moved.map(([a, b]) => `${put(a)} → ${put(b)}`).join(" · ")}.`
+        : " They are already numbered right — nothing would change.")
+      + (aside ? ` The ${aside} set-aside list${aside === 1 ? "" : "s"} keep${aside === 1 ? "s" : ""} ${aside === 1 ? "its" : "their"} own number and ${aside === 1 ? "is" : "are"} not counted.` : "")
+      + " Nothing moves position — where you want a different ORDER, the Arrange screen moves them.";
+  }
   if (o.kind === "addTab") return `Make a new tab called "${o.to}", with nothing in it yet.`;
   if (o.kind === "addList") return `Add an empty list called "${o.to}" to ${g.pg.area}.`;
   if (o.kind === "back") return `Put "${g.list.title || "Untitled list"}" back into ${g.pg.area}, with everything that was under it.`;
@@ -33661,6 +33737,8 @@ const doOrder = (d, o, today) => {
     const fresh = pg && (pg.lists || [])[(pg.lists || []).length - 1];
     return fresh ? bwOps.renameList(made, pg.id, fresh.id, o.to) : made;
   }
+  if (o.kind === "renum") return { ...d, bodywork: (d.bodywork || []).map((pg) =>
+    (pg.id !== g.pg.id ? pg : { ...pg, lists: numberLists(pg.lists) })) };
   if (o.kind === "renameTab") return bwOps.renameArea(d, g.pg.id, o.to);
   if (o.kind === "asideTab") return bwOps.setAreaAside(d, g.pg.id, today);
   if (o.kind === "backTab") return bwOps.putAreaBack(d, g.pg.id);
@@ -33839,8 +33917,10 @@ function PasteLists({ data, setData, coach }) {
         {" "}<span className="mono">wall angels shouldn't be in there</span>,
         {" "}<span className="mono">move standing, no kit into shoulders</span>.
         {" "}It can take a tab or a list off, put one back, rename either,
-        move a list between tabs, make a tab, and take a single movement out of
-        a list. Either way it shows you first, nothing happens until you tap,
+        move a list between tabs, make a tab, take a single movement out of a
+        list, and put the numbering of a whole tab back in order —
+        {" "}<span className="mono">rearrange the lists in my cooldown tab and
+        number them properly</span>. Either way it shows you first, nothing happens until you tap,
         and it never sends anything and never costs anything.
       </div>
       <AutoText rows={6} value={text} onChange={setText}
@@ -33863,8 +33943,8 @@ function PasteLists({ data, setData, coach }) {
           That is not a list I can read, and not an order I recognise. A list wants a
           movement and a dose with a dash between them — "Wall angels — 1 x 10". An order
           wants a word for what to do with it somewhere in the sentence — take off, remove,
-          get rid of, put back, restore, rename, call, move, add — and the name of the list,
-          tab or movement you mean. Nothing has changed.
+          get rid of, put back, restore, rename, call, move, add, rearrange, renumber — and
+          the name of the list, tab or movement you mean. Nothing has changed.
         </div>
       )}
 
