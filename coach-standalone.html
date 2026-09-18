@@ -4580,6 +4580,30 @@ const cachePolicy = (data, F) => {
    rule that matters: a hard morning is never the conversation that gets cut
    short. Rule 4 says the coach walks down a ladder rung by rung; a ladder needs
    room. */
+/* WHOLE WORDS, NOT SUBSTRINGS (build 259). MEASURED, 11 September, after she
+   asked why a few messages had cost 31c.
+
+   Both lists below were matched with `includes`, so a word INSIDE another word
+   raised the ceiling:
+
+     "plan"  is inside PLANK      — "how were my planks?" bought 1,400 tokens
+     "low"   is inside LOWER, FOLLOW, ALLOW, BELOW, SLOW
+     "hard"  is inside HARDER     — "should I go harder?" bought 1,800
+     "cant"  is inside SIGNIFICANT
+
+   Output is FIVE TIMES the price of input, so a ceiling raised by a word that
+   is not there is the most expensive kind of mistake the app can make. This
+   changes no ceiling and nothing the coach knows — only which ceiling applies.
+   It is the same fault `sessionShape` had at build 248, fixed the same way and
+   settled ONCE at the definition rather than at the two call sites (rule 33).
+
+   Punctuation is flattened on both sides, so "can't" still matches "I can't
+   face it" and a phrase like "should i" still matches across its space. */
+const saysPhrase = (text, phrase) => {
+    const flat = (x) => " " + String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() + " ";
+    const p = flat(phrase).trim();
+    return p !== "" && flat(text).indexOf(" " + p + " ") !== -1;
+};
 const REPLY_LONG_WORDS = ["why", "explain", "how come", "what do you think", "should i", "compare",
     "difference", "walk me", "talk me", "plan", "design", "reason", "understand", "worried", "confused"];
 const HARD_MORNING_WORDS = ["can't", "cant", "cannot", "can not", "couldn't", "couldnt",
@@ -4591,9 +4615,9 @@ const replyBudget = (text, coach, F) => {
     /* A HARD MORNING GETS THE ROOM, whatever she typed and however short it was.
        Her mood tap outranks the question, exactly as it does everywhere else. */
     const mood = coach && coach.moodToday;
-    if ((mood && mood !== "good") || HARD_MORNING_WORDS.some((w) => s.includes(w)))
+    if ((mood && mood !== "good") || HARD_MORNING_WORDS.some((w) => saysPhrase(s, w)))
         return f.replyLong;
-    if (REPLY_LONG_WORDS.some((w) => s.includes(w)))
+    if (REPLY_LONG_WORDS.some((w) => saysPhrase(s, w)))
         return f.replyThinking;
     if (s.length <= f.replyShortChars)
         return f.replyShort;
@@ -4631,16 +4655,41 @@ const askModel = async ({ system, messages, apiKey, maxTokens = 1000, usage, sea
        change during a conversation, which carries the cache mark, and the few
        lines that do, which follow it uncached and cost almost nothing. */
     const halves = typeof system === "string" ? { stable: system, live: "" } : (system || {});
-    const stable = String(halves.stable || "");
+    /* TWO MARKS, NOT ONE (build 259). MEASURED, 11 September.
+  
+       Build 256 moved the single mark to the boundary between her coach and her
+       live state, because a session logged invalidated the whole 5,900 tokens.
+       That was right and it was not enough: MEASURED, the payload is
+       BYTE-IDENTICAL between one message of a talk and the next — so the 2,386
+       tokens behind the mark were being re-sent at full price on every message
+       of every conversation, for nothing.
+  
+       The cache takes up to four breakpoints and matches the LONGEST prefix that
+       still agrees. So both boundaries are marked:
+  
+         · after her coach's rules and voice (build 256's boundary)
+         · after her live state as well — the whole stable payload
+  
+       Within a talk the longer one hits and all 5,900 are read at a tenth.
+       After she logs something the longer one misses, the SHORTER one still
+       hits, and only the 2,386-token tail is written again. Strictly better than
+       either mark alone, and nothing the coach is told changes — only what is
+       marked.
+  
+       `stable` may be a string or a list of parts; each part gets its own mark.
+       Concatenated they are exactly what an uncached call sends, so the two
+       routes cannot say different things (rule 36). */
+    const parts = (Array.isArray(halves.stable) ? halves.stable : [halves.stable])
+        .map((x) => String(x || "")).filter((x) => x !== "");
     const live = String(halves.live || "");
+    const stampCache = cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" };
     const body = { model: "claude-sonnet-4-6", max_tokens: maxTokens, messages,
-        /* `cache && stable`: a cached block with no text in it is not a cheaper
-           call, it is a rejected one (build 256). */
-        system: cache && stable
-            ? [{ type: "text", text: stable,
-                    cache_control: cacheTtl === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" } },
+        /* `cache && parts.length`: a cached block with no text in it is not a
+           cheaper call, it is a rejected one (build 256). */
+        system: cache && parts.length
+            ? [...parts.map((text) => ({ type: "text", text, cache_control: stampCache })),
                 ...(live ? [{ type: "text", text: live }] : [])]
-            : stable + (live ? "\n" + live : "") };
+            : parts.join("") + (live ? "\n" + live : "") };
     if (search)
         body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
     const limit = Math.max(15, Number(secs) || Number(FORMULA_DEFAULTS.callSecs) || 120);
@@ -4824,7 +4873,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "9 September 2026 · 258";
+const BUILD = "14 September 2026 · 261";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -14002,7 +14051,34 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "", sid
     const face = shown >= 60
         ? `${Math.floor(shown / 60)}:${String(Math.floor(shown % 60)).padStart(2, "0")}`
         : shown.toFixed(1);
-    const tone = rang ? C.clay : running ? C.signal : C.muted;
+    /* ---- IT HAS RUNG, AND THAT IS ARITHMETIC (build 260) ------------------
+  
+       HER REPORT, 11 September: "the reset button of the timer in the body lists
+       is still the same and I have to go and say reset and then hit the start
+       button to start a new timer every time I exercise the same exercise right
+       and left."
+  
+       Build 257 made "Again" reload the prescription, and it does — MEASURED. So
+       why was she still resetting? Because `rang` is component state initialised
+       to false, and it does NOT survive the phone reclaiming the app (rule 39).
+       `ms` does — it is recomputed from the wall clock — so a hold that ran out
+       while she was doing the exercise came back reading 0.0 with `rang` false:
+  
+         · the button said "Start" instead of "Again"
+         · and "log left" / "log right" were GONE, because they are offered on
+           `rang` — so the number she had just earned had nowhere to go
+  
+       A clock at nought that is not running HAS rung. That is arithmetic, and it
+       is the second way of knowing the same thing (rule 23). */
+    const rung = rang || (!!seconds && !running && ms <= 0);
+    /* AND THE RESET STEP GOES (her instruction, twice). Reset is only the
+       shortest route in ONE state: a clock she paused part-way through and wants
+       back at the top. Fresh, running or rung, it is a second button competing
+       with the one that already does the right thing. */
+    const partWay = seconds
+        ? (!rung && ms > 0 && ms < seconds * 1000)
+        : ms > 0;
+    const tone = rung ? C.clay : running ? C.signal : C.muted;
     return (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
             padding: compact ? "6px 0 0" : "10px 0 0" } },
         React.createElement("span", { className: "mono", "aria-live": "off", style: { fontSize: compact ? 17 : 21, fontWeight: 600,
@@ -14011,8 +14087,8 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "", sid
                 padding: "7px 13px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
                 border: "none", background: running ? C.ink : C.signal, color: C.chalk,
                 fontFamily: "inherit"
-            } }, running ? "Pause" : rang ? "Again" : "Start"),
-        onStop && (!seconds || rang) && (sides ? (React.createElement(React.Fragment, null,
+            } }, running ? "Pause" : rung ? "Again" : "Start"),
+        onStop && (!seconds || rung) && (sides ? (React.createElement(React.Fragment, null,
             React.createElement("button", { onClick: () => take("L"), className: "tap", style: {
                     padding: "7px 11px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 600,
                     border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
@@ -14027,11 +14103,11 @@ function Timer({ seconds = null, onStop = null, compact = false, label = "", sid
                 border: `1.5px solid ${C.line}`, background: "transparent", color: C.ink,
                 fontFamily: "inherit"
             } }, "Use it"))),
-        React.createElement("button", { onClick: reset, className: "tap", style: {
+        partWay && (React.createElement("button", { onClick: reset, className: "tap", style: {
                 border: "none", background: "transparent", cursor: "pointer", padding: "7px 4px",
                 fontSize: 11.5, color: C.muted, fontFamily: "inherit"
-            } }, "reset"),
-        rang && (React.createElement("span", { style: { fontSize: 11.5, color: C.clay, fontWeight: 600 } },
+            } }, "back to the top")),
+        rung && (React.createElement("span", { style: { fontSize: 11.5, color: C.clay, fontWeight: 600 } },
             "time",
             label ? ` — ${label}` : ""))));
 }
@@ -23370,6 +23446,9 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
     };
     const [listing, setListing] = useState(null); /* index being turned into a list */
     const [listMade, setListMade] = useState(null); /* { area, n, count } | { error } */
+    /* WHAT THE APP READ OUT OF HER OWN MESSAGE, before anything is written.
+       Nothing here has cost her anything and nothing here has been saved. */
+    const [parsed, setParsed] = useState(null); /* { i, area, groups, asOne } */
     /* build 229: shown once when a long talk has just been folded away */
     const [rolled, setRolled] = useState(null);
     /* BUILD 230: the cutoff is a PROPERTY OF THE TALK, not an event in send.
@@ -23450,9 +23529,14 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
        makeList reads `d.bodywork` INSIDE the setData updater, so it builds on
        her file as it is when the answer lands. That is the pattern applyEdits
        above was missing, in the same component, for the same kind of call. */
-    const makeList = async (i) => {
-        var _a, _b, _c, _d, _e;
+    const makeList = async (i, force) => {
+        var _a, _b, _c, _d, _e, _f;
         if (listing !== null)
+            return;
+        /* HER OWN WORDS COST NOTHING. A message she wrote is read by the app
+           before anything is sent anywhere; the model is only reached for a list
+           the app genuinely could not read, or when she asks for it by name. */
+        if (!force && ((_a = msgs[i]) === null || _a === void 0 ? void 0 : _a.role) === "user" && readMine(i))
             return;
         setListing(i);
         setListMade(null);
@@ -23460,15 +23544,15 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
         try {
             /* BUILD 258: hers or its own — the only difference is which opening the
                translator is given, so a list she wrote herself is never "improved". */
-            const mine258 = ((_a = msgs[i]) === null || _a === void 0 ? void 0 : _a.role) === "user";
+            const mine258 = ((_b = msgs[i]) === null || _b === void 0 ? void 0 : _b.role) === "user";
             const { raw, cut } = await askWithRoom({
-                apiKey: (_b = data.settings) === null || _b === void 0 ? void 0 : _b.apiKey,
+                apiKey: (_c = data.settings) === null || _c === void 0 ? void 0 : _c.apiKey,
                 system: mine258 ? LIST_FROM_CHAT_SYSTEM_HERS : LIST_FROM_CHAT_SYSTEM,
                 /* build 222: it could not pick one of her tabs without being shown them */
-                messages: listFromChatMessage(data, (_c = msgs[i]) === null || _c === void 0 ? void 0 : _c.content, mine258),
+                messages: listFromChatMessage(data, (_d = msgs[i]) === null || _d === void 0 ? void 0 : _d.content, mine258),
                 maxTokens: Math.max(1000, Number(formulas(data.settings).listTokens) || 3000),
                 usage: listSpend,
-                search: ((_d = data.settings) === null || _d === void 0 ? void 0 : _d.webSearch) === true,
+                search: ((_e = data.settings) === null || _e === void 0 ? void 0 : _e.webSearch) === true,
                 secs: formulas(data.settings).callSecs,
             });
             const out = parseReview(raw);
@@ -23485,58 +23569,12 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
                 : (out && Array.isArray(out.exercises) && out.exercises.length ? [out] : []);
             const usable = wanted.filter((l) => l && Array.isArray(l.exercises) && l.exercises.length);
             if (!usable.length) {
-                setListMade({ error: ((_e = msgs[i]) === null || _e === void 0 ? void 0 : _e.role) === "user"
+                setListMade({ error: ((_f = msgs[i]) === null || _f === void 0 ? void 0 : _f.role) === "user"
                         ? "I could not find exercises in that message of yours. Write them one per line — the movement, and the sets, reps or hold if you know them — then tap this again. Or ask me for them and tap it under my answer."
                         : "I could not find exercises in that message. Ask me for the exercises first, then tap this again." });
                 return;
             }
-            setData((d) => {
-                /* EACH LIST GOES WHERE IT SAID (build 225). One pass per list, folding
-                   the result forward, so two lists naming the same tab land in the same
-                   tab rather than the second one founding a copy of it. */
-                let pgs = d.bodywork || [];
-                const landed = [];
-                let focus = null;
-                usable.forEach((one) => {
-                    const area = String(one.area || "the coach's list").trim();
-                    /* THE SCATTERING (build 222). This compared the area name the model
-                       invented against hers with EXACT lowercase equality — so "shoulder
-                       mobility", "Shoulder mobility work" and "Shoulders, hips, back"
-                       were three different tabs, and every list she asked for founded
-                       another one. She ended up with eleven. Matched the way the rest of
-                       the app matches her words. */
-                    const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
-                    const hit = findAreaLike(live.map((x) => ({ ...x.pg, name: x.pg.area })), area);
-                    const at = hit >= 0 ? live[hit].k : -1;
-                    /* An area she already has gains a list; a new area becomes a
-                       programme of its own. Nothing existing is touched (rule 20). */
-                    if (at >= 0) {
-                        const n = (pgs[at].lists || []).length + 1;
-                        const shaped = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], n);
-                        landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
-                        if (!focus)
-                            focus = { pg: pgs[at].id, list: shaped[0].id };
-                        pgs = pgs.map((pg, k) => (k !== at ? pg
-                            : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
-                        return;
-                    }
-                    const pgId = newId();
-                    const shapedNew = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], 1);
-                    landed.push({ area, n: 1, count: one.exercises.length, made: true });
-                    if (!focus)
-                        focus = { pg: pgId, list: shapedNew[0].id };
-                    pgs = [...pgs, {
-                            id: pgId, area, line: "Written for you in conversation.",
-                            mins: Math.max(1, Math.round(one.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
-                            created: coach.t, fromChat: true,
-                            lists: shapedNew,
-                            log: {}, rounds: [], status: "active"
-                        }];
-                });
-                setListMade({ landed, area: (landed[0] || {}).area, n: (landed[0] || {}).n,
-                    count: landed.reduce((a2, l) => a2 + l.count, 0) });
-                return { ...d, ...(focus ? { bodyFocus: focus } : {}), bodywork: pgs };
-            });
+            landUsable(usable);
         }
         catch (e) {
             const why = String((e && e.message) || e || "unknown");
@@ -23552,6 +23590,78 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
             noteSpend(setData, "list", listSpend, coach.t);
             setListing(null);
         }
+    };
+    /* ONE LANDING, USED BY BOTH ROUTES (rule 34's lesson, applied before it
+       bites a seventh time). The model route and the free route below write her
+       Body page through THIS function and no other, so they cannot drift. */
+    const landUsable = (usable) => {
+        setData((d) => {
+            /* EACH LIST GOES WHERE IT SAID (build 225). One pass per list, folding
+               the result forward, so two lists naming the same tab land in the same
+               tab rather than the second one founding a copy of it. */
+            let pgs = d.bodywork || [];
+            const landed = [];
+            let focus = null;
+            usable.forEach((one) => {
+                const area = String(one.area || "the coach's list").trim();
+                /* THE SCATTERING (build 222). This compared the area name the model
+                   invented against hers with EXACT lowercase equality — so "shoulder
+                   mobility", "Shoulder mobility work" and "Shoulders, hips, back"
+                   were three different tabs, and every list she asked for founded
+                   another one. She ended up with eleven. Matched the way the rest of
+                   the app matches her words. */
+                const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
+                const hit = findAreaLike(live.map((x) => ({ ...x.pg, name: x.pg.area })), area);
+                const at = hit >= 0 ? live[hit].k : -1;
+                /* An area she already has gains a list; a new area becomes a
+                   programme of its own. Nothing existing is touched (rule 20). */
+                if (at >= 0) {
+                    const n = (pgs[at].lists || []).length + 1;
+                    const shaped = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], n);
+                    landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
+                    if (!focus)
+                        focus = { pg: pgs[at].id, list: shaped[0].id };
+                    pgs = pgs.map((pg, k) => (k !== at ? pg
+                        : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
+                    return;
+                }
+                const pgId = newId();
+                const shapedNew = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], 1);
+                landed.push({ area, n: 1, count: one.exercises.length, made: true });
+                if (!focus)
+                    focus = { pg: pgId, list: shapedNew[0].id };
+                pgs = [...pgs, {
+                        id: pgId, area, line: "Written for you in conversation.",
+                        mins: Math.max(1, Math.round(one.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
+                        created: coach.t, fromChat: true,
+                        lists: shapedNew,
+                        log: {}, rounds: [], status: "active"
+                    }];
+            });
+            setListMade({ landed, area: (landed[0] || {}).area, n: (landed[0] || {}).n,
+                count: landed.reduce((a2, l) => a2 + l.count, 0) });
+            return { ...d, ...(focus ? { bodyFocus: focus } : {}), bodywork: pgs };
+        });
+    };
+    /* ---- HER OWN LIST, READ HERE, FOR NOTHING (build 261) ---------------
+       Her instruction, 14 September: "if I paste it, then there should be
+       absolutely zero cost." So: her message is read where she stands, shown to
+       her, and written only when she taps. No key, no call, no signal needed —
+       everything except the coach's own words works offline (rule 21). */
+    const readMine = (i) => {
+        var _a;
+        const parse = listFromText((_a = msgs[i]) === null || _a === void 0 ? void 0 : _a.content);
+        if (!parse.groups.length)
+            return false;
+        setListMade(null);
+        setParsed({ i, area: parse.area, groups: parse.groups, asOne: parse.groups.length === 1 });
+        return true;
+    };
+    const saveParsed = () => {
+        if (!parsed)
+            return;
+        landUsable(parsedToLists({ groups: parsed.groups }, parsed.area || "the list you pasted", parsed.asOne));
+        setParsed(null);
     };
     const endRef = useRef(null);
     /* HER REPORT, 14 August: "where did u put the token and money counter????"
@@ -24660,7 +24770,7 @@ Two or three sentences unless she asks for more.`;
                    MARKED, not what is sent. */
                 system: (() => {
                     const p = splitPayload(payloadStable());
-                    return { stable: p.fixed, live: p.rest + "\n" + liveContext() };
+                    return { stable: [p.fixed, p.rest], live: liveContext() };
                 })(),
                 messages: next.map(blockify),
                 search: ((_b = data.settings) === null || _b === void 0 ? void 0 : _b.webSearch) === true,
@@ -24739,7 +24849,7 @@ Two or three sentences unless she asks for more.`;
                 cacheTtl: carryPlan.mode === "1h" ? "1h" : "5m",
                 maxTokens: Math.max(500, Number(formulas(data.settings).replyLong) || 1800),
                 apiKey: (_a = data.settings) === null || _a === void 0 ? void 0 : _a.apiKey,
-                system: { stable: carryParts.fixed, live: carryParts.rest + "\n" + liveContext() },
+                system: { stable: [carryParts.fixed, carryParts.rest], live: liveContext() },
                 messages: [...upto.map((m) => ({ role: m.role, content: m.content })),
                     { role: "user", content: "You ran out of room and stopped mid-sentence. "
                             + "Carry straight on from where you stopped. Do not start again, do not "
@@ -25122,6 +25232,62 @@ Two or three sentences unless she asks for more.`;
                             padding: "6px 11px", borderRadius: 8,
                             fontSize: 11, color: C.signal, fontWeight: 600, fontFamily: "inherit"
                         } }, editingLists === i ? "changing your lists…" : "change my lists")))),
+                parsed && parsed.i === i && (React.createElement("div", { style: { width: "92%", marginTop: 8, background: C.card,
+                        border: `1.5px solid ${C.signal}`, borderRadius: 12, padding: "12px 14px" } },
+                    React.createElement("div", { style: { fontSize: 12.5, fontWeight: 600, color: C.ink, marginBottom: 2 } }, "I read this myself \u2014 nothing sent, nothing spent."),
+                    React.createElement("div", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 10 } }, "Nothing is saved until you tap below. Change anything first."),
+                    React.createElement(Field, { label: "Which tab it joins", unit: "", type: "text", value: parsed.area, onChange: (v) => setParsed((p) => ({ ...p, area: v })) }),
+                    parsed.groups.length > 1 && (React.createElement("button", { className: "tap", onClick: () => setParsed((p) => ({ ...p, asOne: !p.asOne })), style: { border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+                            padding: "6px 11px", borderRadius: 8, fontSize: 11, color: C.signal,
+                            fontWeight: 600, fontFamily: "inherit", marginBottom: 10 } }, parsed.asOne
+                        ? `one list of ${parsed.groups.reduce((a, g) => a + g.exercises.length, 0)} — tap for ${parsed.groups.length} separate lists`
+                        : `${parsed.groups.length} separate lists — tap to make it one`)),
+                    (parsed.asOne ? [{ title: parsed.groups[0].title,
+                            video: (parsed.groups.find((g) => g.video) || {}).video || "",
+                            exercises: parsed.groups.reduce((a, g) => a.concat(g.exercises), []) }]
+                        : parsed.groups).map((g, gi) => (React.createElement("div", { key: gi, style: { marginBottom: 12 } },
+                        React.createElement(Field, { label: `List ${gi + 1} — what it is`, unit: "", type: "text", value: g.title || "", onChange: (v) => setParsed((p) => {
+                                const gs = p.groups.map((x, k) => (p.asOne ? (k === 0 ? { ...x, title: v } : x)
+                                    : (k === gi ? { ...x, title: v } : x)));
+                                return { ...p, groups: gs };
+                            }) }),
+                        g.video && (React.createElement("div", { style: { fontSize: 11, color: C.moss, lineHeight: 1.45, marginBottom: 6,
+                                wordBreak: "break-all" } },
+                            "your video \u2014 kept exactly: ",
+                            g.video)),
+                        g.exercises.map((e, ei) => (React.createElement("div", { key: ei, style: { fontSize: 12, color: C.ink, lineHeight: 1.5,
+                                padding: "4px 0", borderBottom: `1px solid ${C.line}` } },
+                            e.name,
+                            React.createElement("span", { style: { color: C.muted } },
+                                " \u2014 ",
+                                e.dose),
+                            React.createElement("span", { className: "mono", style: { color: C.muted, fontSize: 10.5 } },
+                                e.sets ? ` ${e.sets} sets` : "",
+                                e.reps ? ` ${e.reps} reps` : "",
+                                e.hold ? ` ${e.hold}s hold` : "",
+                                e.sides ? " · each side" : "",
+                                e.tool ? ` · ${e.tool}` : ""))))))),
+                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 } },
+                        React.createElement("button", { className: "tap", onClick: saveParsed, style: {
+                                padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                                fontWeight: 600, border: "none", background: C.signal, color: C.chalk,
+                                fontFamily: "inherit"
+                            } }, "put them on my Body page"),
+                        React.createElement("button", { className: "tap", onClick: () => setParsed(null), style: {
+                                padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+                                border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+                                fontFamily: "inherit"
+                            } }, "not now"),
+                        React.createElement("button", { className: "tap", disabled: listing !== null, onClick: () => {
+                                setParsed(null);
+                                setListing(i);
+                                setListMade(null);
+                                makeList(i, true);
+                            }, style: {
+                                padding: "8px 12px", borderRadius: 9, cursor: "pointer", fontSize: 11,
+                                border: "none", background: "transparent", color: C.muted,
+                                fontFamily: "inherit"
+                            } }, "let the coach write it instead")))),
                 m.role === "user" && (editing === i ? (React.createElement("div", { style: { width: "85%", marginTop: 6 } },
                     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-end", marginBottom: 8 } },
                         React.createElement(AutoText, { rows: 3, value: editDraft, onChange: setEditDraft, style: { ...inputStyle, marginBottom: 0, lineHeight: 1.45 } }),
@@ -27942,10 +28108,231 @@ const doseInto = (text) => {
     }
     return Object.keys(out).length ? out : null;
 };
+/* ============================================================================
+   READING A LIST SHE WROTE HERSELF — NO MODEL, NO KEY, NO COST (build 261)
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 14 September: "I create my own lists on my Claude chat and
+   then I paste them into my app. I just want them to be created. Why does the
+   coach have to be included? And why does the cost have to be included if I'm
+   the one who's creating everything?"
+
+   She was right, and nothing in the app answered her. `makeList` was written
+   for the case where the COACH wrote the list. Build 258 added a second
+   opening for her own messages — it changed the wording the translator is
+   given, not whether a translator runs — so a list she had written herself,
+   complete, cost exactly the same as one she had asked for. And a long one
+   cost DOUBLE and built nothing, because askWithRoom retries at twice the
+   ceiling and a list is the thing most likely to overflow it.
+
+   This reads her text where she stands. Everything the Body page needs is
+   already in what she types; the only field the model was really adding is the
+   how-to paragraph, and where she pastes a video that IS the how-to.
+
+   TWO REAL EXAMPLES OF HERS, AND THEY DO NOT AGREE, which is why nothing here
+   guesses silently and everything is shown to her before it is saved:
+
+     Posture tab — add a list.          |  POSTURE EXERCISES
+                                        |
+     List 9 — standing, no kit          |  Wall angels — 1 x 10 slow
+     Video: https://1drv.ms/v/...       |  Wall thoracic extension — 1 x 40 sec hold
+     Arms out, palms turning back — 12 reps
+     ...                                |  Thread the needle with rotation — 3 x 12 each side
+
+   WHAT IS SPLIT ON, AND WHY IT MATTERS. The em dash, never a bare hyphen and
+   never a comma. Her lines include "Prone towel pull-apart, arms overhead" and
+   "Side-lying dumbbell arm sweep, 180 degrees" — a comma split cuts both names
+   in half and a hyphen split cuts "pull-apart" and "Side-lying". A SPACED
+   hyphen is accepted because it cannot appear inside a word.
+
+   HER WORDS ARE KEPT. `dose` is her own right-hand text, verbatim, and
+   shapeLists prefers it over doseFrom. That is not decoration: doseFrom tests
+   hold before reps and has no branch for both without sets, so her
+   "12 reps + 40 second hold" would have displayed as "40 seconds" and the reps
+   would have vanished off the card (rule 23 — never show her a number the app
+   made up in place of one she gave). sets/reps/hold are parsed alongside for
+   the card and the timer; the sentence she wrote is what she reads.
+   ========================================================================= */
+/* one dose phrase — everything to the right of the dash — into numbers */
+const doseRead = (raw) => {
+    const t = String(raw || "").toLowerCase();
+    const out = { sets: "", reps: "", hold: "", sides: "", loadKind: "none", tool: "", timer: "" };
+    /* both sides, and which kind. "each" is the same numbers both ways; "lr"
+       is when the two sides are scored separately. Her lists say "each side",
+       so that is what they get — never "lr" on a guess (rule 23). */
+    if (/\b(l\s*\/\s*r|left and right|each side separately)\b/.test(t))
+        out.sides = "lr";
+    else if (/\b(each side|per side|both sides|each way|a side)\b/.test(t))
+        out.sides = "each";
+    /* "A x B" — B is a hold when a time word follows it, otherwise reps.
+       "1 x 40 sec hold" is one set of a forty-second hold, not forty reps. */
+    const cross = t.match(/(\d+)\s*[x×]\s*(\d+)\s*([a-z]*)/);
+    if (cross) {
+        out.sets = cross[1];
+        /* THE WHOLE WORD, NOT ITS FIRST LETTER. Caught by running this against her
+           own paste: "1 x 10 slow" begins with an s, and a prefix test read SLOW as
+           SECONDS — so ten slow reps became a ten-second hold with a countdown on
+           it. The same shape of fault as build 259's `includes`, one day later. */
+        if (/^(s|sec|secs|second|seconds|min|mins|minute|minutes)$/.test(cross[3] || ""))
+            out.hold = cross[2];
+        else
+            out.reps = cross[2];
+    }
+    /* a time, wherever it sits — "10 sec hold" inside a longer phrase counts */
+    if (!out.hold) {
+        const sec = t.match(/(\d+)\s*(s|sec|secs|second|seconds)\b/);
+        if (sec)
+            out.hold = sec[1];
+    }
+    /* a rep count, and "counts" is her word for reps */
+    if (!out.reps) {
+        const rep = t.match(/(\d+)\s*(rep|reps|count|counts|times)\b/);
+        if (rep)
+            out.reps = rep[1];
+    }
+    /* WHAT SHE NEEDS FOR IT. A band is not a weight and a towel is neither —
+       rule 12's "a band is not a weight", read off her own words. */
+    if (/\b(dumbbell|dumbbells|kettlebell|weight|weights|kg|plate)\b/.test(t)) {
+        out.loadKind = "weight";
+        out.tool = "dumbbell";
+    }
+    else if (/\bband\b/.test(t)) {
+        out.loadKind = "band";
+        out.tool = "band";
+    }
+    else if (/\btowel\b/.test(t)) {
+        out.loadKind = "none";
+        out.tool = "towel";
+    }
+    if (/\boptional\b/.test(t) && out.tool)
+        out.tool += " (optional)";
+    /* a hold counts down; a straight rep count needs no clock */
+    out.timer = out.hold ? "down" : "";
+    return out;
+};
+/* the tool may be named in the movement rather than in the dose —
+   "Prone towel W", "Side-lying shoulder blade squeeze with dumbbell" */
+const toolFromName = (name) => {
+    const t = String(name || "").toLowerCase();
+    if (/\b(dumbbell|dumbbells|kettlebell)\b/.test(t))
+        return { loadKind: "weight", tool: "dumbbell" };
+    if (/\bband\b/.test(t))
+        return { loadKind: "band", tool: "band" };
+    if (/\btowel\b/.test(t))
+        return { loadKind: "none", tool: "towel" };
+    return null;
+};
+const DASH = /\s(?:—|–|-{1,2})\s/; /* spaced only: never inside a word */
+const URL_RE = /https?:\/\/\S+/i;
+/* THE NAME OF A TAB, OUT OF THE WAY SHE ANNOUNCES IT. "Posture tab — add a
+   list." and "POSTURE EXERCISES" both mean the tab she calls Posture. Settled
+   in ONE place because both branches below need it and a second copy is how
+   two readers drift (rule 33). Only ever a suggestion: findAreaLike matches it
+   against her real tabs and the screen shows her which one it found. */
+const headWord = (s) => String(s || "")
+    .replace(/[:.]+$/, "")
+    .replace(/\s+(tab|tabs|exercises|exercise|list|lists|routine|programme|program)$/i, "")
+    .trim() || String(s || "").trim();
+/* SHE WROTE IT, SO IT IS READ, NOT INTERPRETED.
+   Returns { area, groups: [{ title, video, exercises[] }], unread[] }.
+   `area` and `title` are only ever SUGGESTIONS — the screen shows them and she
+   changes them before anything is written (rule 20: nothing lands unasked). */
+const listFromText = (text) => {
+    const lines = String(text || "").replace(/\r/g, "").split("\n");
+    const groups = [];
+    const unread = [];
+    let area = "";
+    let cur = null;
+    const open = () => { if (!cur) {
+        cur = { title: "", video: "", exercises: [] };
+        groups.push(cur);
+    } return cur; };
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        /* a blank line ends the group she was writing — her second example uses
+           them to separate wall work from prone work from side-lying work */
+        if (line === "") {
+            cur = null;
+            return;
+        }
+        /* a video, however she wrote it: "Video: <url>", or a bare url */
+        const url = (line.match(URL_RE) || [])[0];
+        if (url && !DASH.test(line.replace(URL_RE, ""))) {
+            open().video = url;
+            return;
+        }
+        const bits = line.split(DASH);
+        if (bits.length >= 2) {
+            const name = bits[0].trim().replace(/^[-*•\d.)\s]+/, "").trim();
+            const dose = bits.slice(1).join(" — ").trim();
+            /* a dash line with no number on the right is not an exercise — it is a
+               heading she happened to punctuate ("Posture tab — add a list.") */
+            if (!/\d/.test(dose)) {
+                if (!area)
+                    area = headWord(name);
+                else
+                    open().title = dose.replace(/\.$/, "");
+                return;
+            }
+            const d = doseRead(dose);
+            const byName = toolFromName(name);
+            if (byName && d.tool === "") {
+                d.loadKind = byName.loadKind;
+                d.tool = byName.tool;
+            }
+            open().exercises.push({
+                name,
+                dose, /* HER WORDS, kept whole */
+                sets: d.sets, reps: d.reps, hold: d.hold,
+                sides: d.sides, side: d.sides === "each" || d.sides === "lr",
+                loadKind: d.loadKind, tool: d.tool, timer: d.timer,
+                how: "", video: "", search: name, machine: "",
+            });
+            return;
+        }
+        /* no dash, no url: a heading. The first names the tab, the rest name lists. */
+        const head = line.replace(/[:.]$/, "").trim();
+        if (!head)
+            return;
+        if (!area) {
+            area = headWord(head);
+            return;
+        }
+        if (cur && cur.exercises.length)
+            cur = null; /* a heading starts a new group */
+        open().title = head;
+    });
+    /* a group that caught a title or a video but no exercises is not a list */
+    const real = groups.filter((g) => g.exercises.length);
+    /* a video written above the first group covers the whole paste */
+    const loose = groups.find((g) => g.video && !g.exercises.length);
+    if (loose && real.length)
+        real.forEach((g) => { if (!g.video)
+            g.video = loose.video; });
+    return { area, groups: real, unread };
+};
+/* what the parser read, in the shape the lander already takes. One list per
+   group she separated with a blank line, or all of it as one — her tap. */
+const parsedToLists = (parse, area, asOne) => {
+    const gs = (parse && parse.groups) || [];
+    if (!gs.length)
+        return [];
+    if (asOne) {
+        const vid = (gs.find((g) => g.video) || {}).video || "";
+        return [{ area, title: gs[0].title || "", focus: "", video: vid,
+                exercises: gs.reduce((a, g) => a.concat(g.exercises.map((e) => ({ ...e, video: e.video || g.video || vid }))), []) }];
+    }
+    return gs.map((g) => ({ area, title: g.title || "", focus: "", video: g.video || "",
+        exercises: g.exercises.map((e) => ({ ...e, video: e.video || g.video || "" })) }));
+};
 const shapeLists = (raw, startAt) => (raw || []).map((l, i) => ({
     id: newId(), n: startAt + i,
     title: String(l.title || `List ${startAt + i}`),
     focus: String(l.focus || ""),
+    /* ONE VIDEO OF THE WHOLE LIST (build 261). Her paste puts a single
+       `Video: <url>` line above the exercises — it is one film of the list, not
+       one per movement, and saying so is more honest than copying the same link
+       onto every row. An exercise's own link still wins where she gives one. */
+    video: String(l.video || ""),
     exercises: (Array.isArray(l.exercises) ? l.exercises : []).map((x) => ({
         id: newId(),
         name: String(x.name || "Exercise"),
@@ -28435,7 +28822,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                 padding: "4px 8px", borderRadius: 6, background: C.chalk, color: C.muted } }, x))))),
         ex.targets && (React.createElement("div", { style: { fontSize: 11.5, color: C.moss, marginTop: 6 } }, ex.targets)),
         React.createElement("div", { style: { marginTop: 6 } },
-            React.createElement("a", { href: videoFor({ video: ex.video, label: ex.search || ex.name }), target: "_blank", rel: "noreferrer", style: {
+            React.createElement("a", { href: videoFor({ video: ex.video || (list && list.video) || "", label: ex.search || ex.name }), target: "_blank", rel: "noreferrer", style: {
                     fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none"
                 } }, ex.video ? "watch it →" : "find it on video →")),
         React.createElement("div", { style: { marginTop: 10, padding: "10px 12px", background: C.card, borderRadius: 10 } },
