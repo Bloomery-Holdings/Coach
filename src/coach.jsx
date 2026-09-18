@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 265";
+const BUILD = "18 September 2026 · 266";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -33284,6 +33284,388 @@ function TidySheet({ data, setData, coach, close }) {
 }
 
 /* ============================================================================
+   AN ORDER, NOT A LIST — READ HERE, FOR NOTHING (build 266)
+   ---------------------------------------------------------------------------
+   HER REPORT, 18 September, with the screenshot. She typed into the paste box:
+
+       "Remove the extra balance list from under my stability tab"
+
+   and got back "I could not find exercises in that. Each line wants a movement
+   and a dose." **What is this reply????? There is nothing that gives an order
+   to change my lists.**
+
+   She is right twice over. She gave an ORDER and the box only understood
+   LISTS, so it answered with the format for a thing she was not doing. And the
+   order was a real one: her own coach had already told her the Stability ball
+   tab holds "balance" TWICE — lists 2 and 3, the same name — which is the
+   duplicate she reported on 18 September and which nothing free could remove.
+
+   So the box reads both now. A paste is a list; a sentence is an order. The
+   orders are the ones bwOps already does for nothing — set a list aside,
+   rename one, move one to another tab. No model, no key, no network: this is
+   a small vocabulary matched with regular expressions, and when it does not
+   recognise something it says so plainly rather than guessing (rule 23).
+
+   TWO RULES IT WILL NOT BREAK.
+
+   It never acts on its own — everything below returns a DESCRIPTION, and she
+   taps to apply it (rule 20). And where her words fit more than one list it
+   changes NOTHING and shows her both, which is the same discipline
+   `findByName` has had since build 212: guessing which row she meant is how
+   the wrong one gets set aside. Her "extra balance" against two lists both
+   called "balance" is exactly that case, and it is the whole reason she is
+   here.
+   ========================================================================= */
+
+/* the words around the thing she is naming, taken off so "the extra balance
+   list" finds the list she calls "balance". Prepositions go too: "from UNDER
+   my stability tab" chains two of them and build 266's first cut kept "under
+   my stability" as the tab name — caught by the check. */
+const orderNoise = /^(the|my|an?|that|this|extra|duplicate|second|other|spare|old|new|whole|entire|same|first|last|from|in|on|under|inside|out of|of|within|into|onto|to)\s+/i;
+const orderTail = /[\s,]+(please|now|thanks|thank you|for me|as well|too|any\s*more|anymore|altogether|completely|entirely|instead|ok|okay|though|then)$/i;
+const bareName = (x) => {
+  let s = String(x || "").trim().replace(/^["'“”‘’]+|["'“”‘’.,!?;:]+$/g, "");
+  let last = null;
+  while (s !== last) { last = s; s = s.replace(orderNoise, "").replace(orderTail, "").trim(); }
+  return s.replace(/\s+(list|lists|tab|tabs|programme|program|section|sections|area|areas|page)$/i, "")
+    .trim().replace(/^["'“”‘’]+|["'“”‘’.,!?;:]+$/g, "");
+};
+/* the name she typed, kept as she typed it — for a NEW name, where stripping
+   "new" or "the" out of what she wants it CALLED would be wrong */
+const titleOf = (x) => String(x || "").trim()
+  .replace(/^(?:a|an|the)\s+/i, "").replace(/^new\s+(?=\S)/i, "")
+  .replace(/^["'“”‘’]+|["'“”‘’.,!?;:]+$/g, "").trim();
+
+/* every live list she has, with the tab it sits in — one place, so the reader
+   and the preview cannot disagree about what exists */
+const allLists = (data) => {
+  const out = [];
+  ((data && data.bodywork) || []).filter((pg) => pg && pg.status !== "removed")
+    .forEach((pg) => ((pg.lists || []).filter((l) => l && l.status !== "removed"))
+      .forEach((l, i, arr) => out.push({ pg, list: l, n: i + 1, of: arr.length })));
+  return out;
+};
+const goneLists = (data) => {
+  const out = [];
+  ((data && data.bodywork) || []).filter((pg) => pg && pg.status !== "removed")
+    .forEach((pg) => (pg.lists || []).filter((l) => l && l.status === "removed")
+      .forEach((l) => out.push({ pg, list: l, n: 0, of: 0, back: true })));
+  return out;
+};
+const liveAreas = (data) => ((data && data.bodywork) || []).filter((pg) => pg && pg.status !== "removed");
+const goneAreas = (data) => ((data && data.bodywork) || []).filter((pg) => pg && pg.status === "removed");
+const areaIn = (data, want) => {
+  const live = liveAreas(data);
+  const i = findAreaLike(live.map((pg) => ({ ...pg, name: pg.area })), bareName(want));
+  return i >= 0 ? live[i] : null;
+};
+const okey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/* ONE MATCHER, used for tabs, lists and exercises, so they cannot behave
+   differently. Exact first, then containment either way. More than one answers
+   -> it returns them ALL and the caller changes nothing (rules 20, 23). */
+const pickBy = (pool, want, nameOf) => {
+  const w = okey(bareName(want));
+  if (!w) return { none: true };
+  let hits = pool.filter((x) => okey(nameOf(x)) === w);
+  if (!hits.length) hits = pool.filter((x) => okey(nameOf(x)).includes(w) || w.includes(okey(nameOf(x))));
+  if (!hits.length) return { none: true, want: bareName(want) };
+  if (hits.length > 1) return { many: hits, want: bareName(want) };
+  return { one: hits[0] };
+};
+
+/* ============================================================================
+   THE VOCABULARY IS NOT A COMMAND LINE (build 266).
+   HER INSTRUCTION, 18 September: **"Don't limit the vocabulary to start with."**
+
+   So the verb is looked for ANYWHERE in the sentence rather than required at
+   the front of it; everything before it is framing and is ignored — "can you
+   please", "I want you to", even "Stability tab — ". The synonyms are as wide
+   as I can write them. Split verbs are understood, so "take the balance list
+   OUT of my stability tab" is the same order as "take out the balance list".
+   And a sentence it cannot read is answered with what it DOES understand,
+   never with a guess (rule 23).
+
+   Ties go to the earlier row, which is why "back" sits above "move": "put the
+   balance list back" and "put the balance list in my posture tab" both begin
+   with "put" and are not the same instruction.
+   ========================================================================= */
+const ORDER_VERBS = [
+  ["back", /\b(?:put|puts|bring|brings|brought|take|takes|taken|took|get|gets|got|have|has|want|wants)((?:\s+[\w,'’-]+){0,6})\s+back\b/i],
+  ["back", /\b(?:restored?|reinstates?d?|revived?|undo|un-?removed?|un-?deleted?|recovers?e?d?|unhide|unhidden)\b/i],
+  ["aside", /\b(?:take|takes|taken|took|set|sets|put|puts|clear|clears|cleared|throw|throws|thrown|threw|move|moves|moved|strip|stripped|leave|leaves|left|cut|cuts)((?:\s+[\w,'’-]+){0,6})\s+(?:off|out|away|aside)\b/i],
+  ["aside", /\b(?:removes?d?|deletes?d?|get\s+rid\s+of|drops?|dropped|bins?|binned|scraps?|scrapped|chucks?e?d?|ditch(?:es|ed)?|erases?d?|junks?e?d?|kills?e?d?|eliminates?d?|excludes?d?|omits?|omitted|unlists?e?d?|discards?e?d?|retires?d?|archives?d?|hides?|hidden|do\s+not\s+want|don'?t\s+want|no\s+longer\s+want|should\s+not\s+be\s+there|shouldn'?t\s+be\s+(?:there|in)|does\s+not\s+belong)\b/i],
+  ["rename", /\b(?:renames?d?|re-?names?d?|retitles?d?|re-?titles?d?|relabels?(?:led)?|change\s+the\s+(?:name|title)\s+of|calls?|called|names?|named)\b/i],
+  ["move", /\b(?:moves?d?|shifts?e?d?|transfers?(?:red)?|relocates?d?|reassigns?e?d?|migrates?d?|sends?|sent|sticks?|stuck|puts?|files?d?|belongs?)\b/i],
+  ["add", /\b(?:adds?e?d?|makes?|made|creates?d?|starts?e?d?|set\s+up|opens?e?d?|new)\b/i],
+];
+
+/* THE OBJECT CAN COME FIRST. "the balance list should be taken off" is the
+   same instruction as "take off the balance list", and it is the way she
+   actually writes when she is looking at the thing. Everything before the verb
+   is framing UNLESS there is nothing after the verb — then the framing IS the
+   object, with the auxiliaries taken off the end of it. */
+const orderAux = /[\s,]*\b(?:should|shall|must|can|could|would|will|need|needs|needed|has|have|had|is|are|was|were|be|been|being|to|get|got|really|please|now|also|maybe|probably|just|then|kindly|rather|actually)\b[\s,]*$/i;
+const framingOff = (x) => {
+  let s2 = String(x || "").trim(), last = null;
+  while (s2 !== last) { last = s2; s2 = s2.replace(orderAux, "").trim(); }
+  return s2.replace(/^(?:and|but|so|then|ok|okay|hey|hi|please|i|you)\b\s*/i, "").trim();
+};
+
+/* WHERE ONE THING ENDS AND THE NEXT BEGINS. "the extra balance list FROM UNDER
+   my stability tab" is two references, not one. A tail is only taken as a
+   reference of its own when it says what it is ("... tab") or when it is
+   something she actually has — otherwise "the range OF movement list" would be
+   torn in half, which is exactly the kind of guess rule 23 forbids. */
+const ORDER_SEP = "\\s+(?:from|out\\s+of|inside|within|in|on|under|of)\\s+";
+const sepsIn = (s) => {
+  const out = []; const re = new RegExp(ORDER_SEP, "ig"); let m;
+  while ((m = re.exec(String(s || "")))) out.push({ at: m.index, end: m.index + m[0].length });
+  return out;
+};
+const saysTab = (s) => /\b(tabs?|sections?|areas?|pages?)\b/i.test(String(s || ""));
+const saysList = (s) => /\b(lists?|programmes?|programs?)\b/i.test(String(s || ""));
+/* the tab she named, taken off the end */
+const takeArea = (s, data) => {
+  const str = String(s || ""); const pts = sepsIn(str);
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const tail = str.slice(pts[i].end).trim();
+    if (saysTab(tail) || areaIn(data, tail)) return { head: str.slice(0, pts[i].at).trim(), area: tail };
+  }
+  return { head: str.trim(), area: null };
+};
+/* the list she named, taken off the end of what is left — so the front of it
+   is an exercise inside that list */
+const takeList = (s, data) => {
+  const str = String(s || ""); const pts = sepsIn(str);
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const tail = str.slice(pts[i].end).trim();
+    const head = str.slice(0, pts[i].at).trim();
+    if (!head) continue;
+    if (saysList(tail) || pickBy(allLists(data), tail, (x) => x.list.title).one) return { head, listWant: tail };
+  }
+  return { head: str.trim(), listWant: null };
+};
+
+/* SHE TYPED AN ORDER. Returns what it WOULD do, never does it. */
+const readOrder = (text, data) => {
+  const one = String(text || "").trim();
+  if (!one || /\n/.test(one) || one.length > 240) return null;
+  /* A PASTED LIST IS NOT AN ORDER. A dose in the line means she is pasting
+     movements, and the list reader owns it. */
+  if (/\d+\s*[x×]\s*\d+|\b\d+\s*(?:reps?|secs?|seconds?|mins?|minutes?)\b/i.test(one)) return null;
+  const raw = one.replace(/\s+/g, " ");
+
+  /* the verb, anywhere in it */
+  let pick = null;
+  ORDER_VERBS.forEach(([kind, re]) => {
+    const m = raw.match(new RegExp(re.source, "i"));
+    if (!m) return;
+    if (!pick || m.index < pick.m.index) pick = { kind, m };
+  });
+  if (!pick) return null;
+  const kind = pick.kind, m0 = pick.m;
+  const said = raw;
+  /* everything before the verb is framing — except a tab named in it, which is
+     how she writes it when she is looking at the tab: "Stability tab — remove
+     the extra balance list" */
+  const before = raw.slice(0, m0.index);
+  const bTab = before.match(/([\w][\w ,'’&/-]*?)\s+(?:tab|section|area)\b/i);
+  let rest = ((m0[1] || "").trim() + " " + raw.slice(m0.index + m0[0].length)).trim();
+  rest = rest.replace(/^[,:;—–-]\s*/, "").replace(/^(?:it|that|this|them|those)\b\s*/i, "").trim();
+  rest = rest.replace(orderTail, "").trim();
+  const beforeSaid = framingOff(before);          /* the passive object */
+  const said2 = (x) => (bareName(x) ? x : beforeSaid);
+
+  const listIn = (nameWant, areaWant) => {
+    let pool = allLists(data);
+    if (areaWant) {
+      const pg = areaIn(data, areaWant);
+      if (!pg) return { noTab: bareName(areaWant) };
+      pool = pool.filter((x) => x.pg.id === pg.id);
+    }
+    const got = pickBy(pool, nameWant, (x) => x.list.title);
+    if (got.none && areaWant) got.in = bareName(areaWant);
+    return got;
+  };
+
+  /* what she is naming: a tab, a list, or an exercise inside a list */
+  const target = (phrase, kindWord) => {
+    const A = takeArea(phrase, data);
+    const areaWant = A.area || (bTab ? bTab[1] : null);
+    const L = takeList(A.head, data);
+    /* an exercise inside a named list */
+    if (L.listWant && L.head) {
+      const where = listIn(L.listWant, areaWant);
+      if (where.noTab) return { kind: kindWord + "Ex", got: where };
+      if (where.one) {
+        const pool = (where.one.list.exercises || [])
+          .filter((e) => e && (kindWord === "back" ? e.status === "removed" : e.status !== "removed"))
+          .map((ex) => ({ ...where.one, ex }));
+        const got = pickBy(pool, L.head, (x) => x.ex.name);
+        if (!got.none) { return { kind: kindWord + "Ex", got }; }
+      }
+      if (where.many) return { kind: kindWord + "Ex", got: where };
+    }
+    /* a whole tab — only when she said tab and did not also name one to look in */
+    if (saysTab(A.head) && !saysList(A.head) && !A.area) {
+      const pool = (kindWord === "back" ? goneAreas(data) : liveAreas(data)).map((pg) => ({ pg }));
+      const got = pickBy(pool, A.head, (x) => x.pg.area);
+      return { kind: kindWord + "Tab", got };
+    }
+    /* a list */
+    if (kindWord === "back") {
+      let pool = goneLists(data);
+      if (areaWant) {
+        const pg = areaIn(data, areaWant);
+        if (!pg) return { kind: "back", got: { noTab: bareName(areaWant) } };
+        pool = pool.filter((x) => x.pg.id === pg.id);
+      }
+      return { kind: "back", got: pickBy(pool, A.head, (x) => x.list.title) };
+    }
+    return { kind: kindWord, got: listIn(A.head, areaWant) };
+  };
+
+  if (kind === "aside" || kind === "back") {
+    const r = target(said2(rest), kind === "back" ? "back" : "aside");
+    return { kind: r.kind, got: r.got, said };
+  }
+
+  if (kind === "rename") {
+    const pts = []; const re = /(?:^|\s+)(?:to|as|into)\s+/ig; let mm;
+    while ((mm = re.exec(rest))) pts.push({ at: mm.index, end: mm.index + mm[0].length });
+    const asRename = (r, to) => ({ kind: r.kind === "asideTab" ? "renameTab"
+      : r.kind === "asideEx" ? "renameEx" : "rename", got: r.got, to: titleOf(to), said });
+    if (pts.length) {
+      const cut = pts[pts.length - 1];
+      const head = rest.slice(0, cut.at).trim() || beforeSaid;
+      return asRename(target(head, "aside"), rest.slice(cut.end));   /* same finder, different verb */
+    }
+    /* "CALL THE BALANCE LIST STEADY" — no word between the two names, so the
+       longest front of it that actually names something of hers wins, and what
+       is left is what she wants it called. Nothing resolves -> nothing happens. */
+    const w = rest.split(" ").filter(Boolean);
+    for (let i = w.length - 1; i >= 1; i--) {
+      const r2 = target(w.slice(0, i).join(" "), "aside");
+      if (r2.got && r2.got.one) return asRename(r2, w.slice(i).join(" "));
+    }
+    /* "THE POSTURE TAB SHOULD BE CALLED MORNINGS" — the name is in the framing */
+    if (beforeSaid && rest) {
+      const r3 = target(beforeSaid, "aside");
+      if (r3.got && (r3.got.one || r3.got.many)) return asRename(r3, rest);
+    }
+    return { kind: "rename", got: { none: true, want: bareName(rest) }, said };
+  }
+
+  if (kind === "move") {
+    const pts = []; const re = /(?:^|\s+)(?:to|into|in|onto|under|inside)\s+/ig; let mm;
+    while ((mm = re.exec(rest))) pts.push({ at: mm.index, end: mm.index + mm[0].length });
+    if (!pts.length) return { kind: "move", got: { none: true, want: bareName(rest) }, said };
+    const cut = pts[pts.length - 1];
+    const destWant = rest.slice(cut.end);
+    /* ONLY A LIST MOVES. A tab does not go inside a tab, and a movement travels
+       with the list it is in — so this resolves a list and nothing else, rather
+       than offering her something the app would then not do (rule 11). */
+    const A = takeArea(rest.slice(0, cut.at).trim() || beforeSaid, data);
+    const areaWant = A.area || (bTab ? bTab[1] : null);
+    return { kind: "move", got: listIn(A.head, areaWant),
+      to: areaIn(data, destWant), toWant: bareName(destWant), said };
+  }
+
+  if (kind === "add") {
+    const wantsList = saysList(rest) && !/^\s*(?:a|an|the)?\s*(?:new\s+)?(?:tab|section|area)\b/i.test(rest);
+    const nm = rest.match(/(?:called|named|titled|for)\s+(.+)$/i)
+      || rest.match(/\b(?:tab|section|area|list)\s+(.+)$/i)
+      || rest.match(/^(?:a\s+|an\s+|the\s+)?(?:new\s+)?(.+?)\s+(?:tab|section|area|list)$/i);
+    const to = titleOf(nm ? nm[1] : rest);
+    if (!to) return { kind: "addTab", got: { none: true, want: "" }, said };
+    if (wantsList) {
+      const A = takeArea(rest, data);
+      const areaWant = A.area || (bTab ? bTab[1] : null);
+      const pg = areaWant ? areaIn(data, areaWant) : null;
+      if (areaWant && !pg) return { kind: "addList", got: { noTab: bareName(areaWant) }, to, said };
+      if (pg) return { kind: "addList", got: { one: { pg } }, to: to.replace(new RegExp(ORDER_SEP + ".*$", "i"), "").trim(), said };
+    }
+    if (!saysTab(rest) && !wantsList) return null;   /* "make it harder" is not an order */
+    return { kind: "addTab", got: { one: {} }, to, said };
+  }
+
+  return null;
+};
+
+/* ONE ROW OF AN AMBIGUOUS ANSWER, in her words — used by the picker, so what
+   the buttons say and what the sentence says cannot drift */
+const orderRowSay = (x) => {
+  if (!x) return "";
+  if (x.ex) return `${x.ex.name} — in "${x.list.title || "Untitled list"}", ${x.pg.area}`;
+  if (x.list) return `${x.list.title || "Untitled list"} — ${x.n ? `list ${x.n} of ${x.of} in ` : ""}${x.pg.area}`
+    + `, ${(x.list.exercises || []).filter((e) => e && e.status !== "removed").length} exercises`;
+  if (x.pg) return `${x.pg.area} — the whole tab, `
+    + `${(x.pg.lists || []).filter((l) => l && l.status !== "removed").length} lists`;
+  return "";
+};
+
+/* WHAT IT WOULD DO, in her words, so the button and the sentence agree */
+const orderSay = (o) => {
+  if (!o || !o.got || !o.got.one) return "";
+  const g = o.got.one;
+  const KEPT = "Everything you logged against it is kept and the Arrange screen puts it back.";
+  if (o.kind === "renameTab") return `Rename the "${g.pg.area}" tab to "${o.to}". Its lists and everything in them stay exactly where they are.`;
+  if (o.kind === "asideTab") return `Set the whole "${g.pg.area}" tab aside, with its ${(g.pg.lists || []).filter((l) => l && l.status !== "removed").length} list(s). ${KEPT}`;
+  if (o.kind === "backTab") return `Put the "${g.pg.area}" tab back, with everything that was in it.`;
+  if (o.kind === "addTab") return `Make a new tab called "${o.to}", with an empty list in it.`;
+  if (o.kind === "addList") return `Add an empty list called "${o.to}" to ${g.pg.area}.`;
+  if (o.kind === "back") return `Put "${g.list.title || "Untitled list"}" back into ${g.pg.area}, with everything that was under it.`;
+  if (o.kind === "asideEx") return `Take "${g.ex.name}" out of "${g.list.title || "Untitled list"}" in ${g.pg.area}. ${KEPT}`;
+  if (o.kind === "backEx") return `Put "${g.ex.name}" back into "${g.list.title || "Untitled list"}" in ${g.pg.area}, with everything you logged against it.`;
+  if (o.kind === "renameEx") return `Rename "${g.ex.name}" to "${o.to}", in "${g.list.title || "Untitled list"}". Everything you logged against it stays with it.`;
+  const which = `"${g.list.title || "Untitled list"}" (list ${g.n} of ${g.of} in ${g.pg.area})`;
+  if (o.kind === "aside") return `Set ${which} aside. ${KEPT}`;
+  if (o.kind === "rename") return `Rename ${which} to "${o.to}". Nothing else changes.`;
+  if (o.kind === "move") return o.to
+    ? `Move ${which} into ${o.to.area}, with its exercises and everything you logged against them.`
+    : `Move ${which} into a tab called "${o.toWant}" — which you do not have yet.`;
+  return "";
+};
+
+/* and the ONE place that applies it, so nothing can drift. Everything
+   structural goes through `bwOps`, which is what her own Arrange screen has
+   used since 219 — so an order and a tap do exactly the same thing. */
+const doOrder = (d, o, today) => {
+  if (!o || !o.got || !o.got.one) return d;
+  const g = o.got.one;
+  /* ONE WRITER FOR A MOVEMENT INSIDE A LIST. Set aside keeps it in her file,
+     dated, with every reading still keyed to its id (rule 20). */
+  const exWrite = (data, pgId, listId, exId, how) => ({ ...data,
+    bodywork: (data.bodywork || []).map((pg) => (pg.id !== pgId ? pg : { ...pg,
+      lists: (pg.lists || []).map((l) => (l.id !== listId ? l : { ...l,
+        exercises: (l.exercises || []).map((x) => (x.id !== exId ? x : { ...x, ...how })) })) })) });
+
+  if (o.kind === "addTab") {
+    const made = bwOps.addArea(d, today);
+    const fresh = (made.bodywork || [])[(made.bodywork || []).length - 1];
+    return fresh ? bwOps.renameArea(made, fresh.id, o.to) : made;
+  }
+  if (o.kind === "addList") {
+    const made = bwOps.addList(d, g.pg.id, today);
+    const pg = (made.bodywork || []).find((p) => p && p.id === g.pg.id);
+    const fresh = pg && (pg.lists || [])[(pg.lists || []).length - 1];
+    return fresh ? bwOps.renameList(made, pg.id, fresh.id, o.to) : made;
+  }
+  if (o.kind === "renameTab") return bwOps.renameArea(d, g.pg.id, o.to);
+  if (o.kind === "asideTab") return bwOps.setAreaAside(d, g.pg.id, today);
+  if (o.kind === "backTab") return bwOps.putAreaBack(d, g.pg.id);
+  if (o.kind === "back") return bwOps.putListBack(d, g.pg.id, g.list.id);
+  if (o.kind === "asideEx") return exWrite(d, g.pg.id, g.list.id, g.ex.id, { status: "removed", removedOn: today });
+  if (o.kind === "backEx") return exWrite(d, g.pg.id, g.list.id, g.ex.id, { status: "active", removedOn: undefined });
+  if (o.kind === "renameEx") return exWrite(d, g.pg.id, g.list.id, g.ex.id, { name: o.to });
+  if (o.kind === "aside") return bwOps.setListAside(d, g.pg.id, g.list.id, today);
+  if (o.kind === "rename") return bwOps.renameList(d, g.pg.id, g.list.id, o.to);
+  if (o.kind === "move" && o.to) return bwOps.moveListToArea(d, g.pg.id, g.list.id, o.to.id, today);
+  return d;
+};
+
+/* ============================================================================
    ONE PLACE TO MAKE LISTS, THAT IS NOT THE CONVERSATION (build 264)
    ---------------------------------------------------------------------------
    HER INSTRUCTION, 18 September, and this is the whole specification:
@@ -33328,13 +33710,29 @@ function PasteLists({ data, setData, coach }) {
   const [done, setDone] = useState(null);
 
   const readIt = () => {
+    setDone(null);
+    /* AN ORDER OR A LIST (build 266). Her words, with the screenshot: "What is
+       this reply????? There is nothing that gives an order to change my
+       lists." A sentence is an order; lines with doses are a list. The order
+       is tried first because a one-line instruction has no doses in it and
+       would otherwise fall straight through to "I could not find exercises". */
+    const order = readOrder(text, data);
+    if (order) { setRead({ order }); return; }
     /* NO `areaKnown` — she names the tabs in what she wrote, exactly as she
        does when she sends it to the coach. The app reads them (build 264). */
     const parse = listFromText(text);
-    setDone(null);
     setRead(parse.groups.length
       ? { lists: parsedToLists(parse, parse.area || "", false) }
       : { none: true });
+  };
+
+  /* SHE TAPS, AND ONLY THEN (rule 20). Nothing above this line writes. */
+  const doIt = () => {
+    const o = read && read.order;
+    if (!o || !o.got || !o.got.one) return;
+    setData((d) => doOrder(d, o, coach.t));
+    setDone({ order: orderSay(o) });
+    setRead(null); setText(""); setOpen(false);
   };
 
   /* WHERE EACH ONE WOULD LAND, worked out the same way the landing does it, so
@@ -33379,7 +33777,12 @@ function PasteLists({ data, setData, coach }) {
           color: C.signal, fontFamily: "inherit" }}>
           put a list on my Body page — free, nothing is sent
         </button>
-        {done && (
+        {done && done.order && (
+          <div style={{ fontSize: 12, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
+            Done. {done.order} Nothing was sent and nothing was spent.
+          </div>
+        )}
+        {done && !done.order && (
           <div style={{ fontSize: 12, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
             {done.n} exercise{done.n === 1 ? "" : "s"} in {done.lists} list{done.lists === 1 ? "" : "s"},
             in {done.tabs.join(" and ")}.
@@ -33402,11 +33805,21 @@ function PasteLists({ data, setData, coach }) {
         Paste your lists
       </div>
       <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
-        Write it the way you write it for your coach. Name a tab on its own line
-        — "Posture tab" — and everything under it goes there. One movement a
-        line, the name and the dose either side of a dash. A line that is just a
-        link is the video for that list. This never sends anything and never
-        costs anything.
+        <strong>A list, or an order.</strong> Write a list the way you write it
+        for your coach: name a tab on its own line — "Posture tab" — and
+        everything under it goes there, one movement a line, the name and the
+        dose either side of a dash. A line that is just a link is the video for
+        that list.
+        {" "}Or just say what you want changed, in your own words and in any
+        order — <span className="mono">can you take the extra balance list out of
+        my stability tab</span>, <span className="mono">the posture tab should be
+        called mornings</span>, <span className="mono">put list 9 back</span>,
+        {" "}<span className="mono">wall angels shouldn't be in there</span>,
+        {" "}<span className="mono">move standing, no kit into shoulders</span>.
+        {" "}It can take a tab or a list off, put one back, rename either,
+        move a list between tabs, make a tab, and take a single movement out of
+        a list. Either way it shows you first, nothing happens until you tap,
+        and it never sends anything and never costs anything.
       </div>
       <AutoText rows={6} value={text} onChange={setText}
         style={{ ...inputStyle, marginBottom: 8, lineHeight: 1.45 }} />
@@ -33425,8 +33838,58 @@ function PasteLists({ data, setData, coach }) {
 
       {read && read.none && (
         <div style={{ fontSize: 11.5, color: C.clay, lineHeight: 1.5 }}>
-          I could not find exercises in that. Each line wants a movement and a dose with a
-          dash between them — "Wall angels — 1 x 10". Nothing has changed.
+          That is not a list I can read, and not an order I recognise. A list wants a
+          movement and a dose with a dash between them — "Wall angels — 1 x 10". An order
+          wants a word for what to do with it somewhere in the sentence — take off, remove,
+          get rid of, put back, restore, rename, call, move, add — and the name of the list,
+          tab or movement you mean. Nothing has changed.
+        </div>
+      )}
+
+      {/* AN ORDER: what it would do, and nothing until she taps (build 266) */}
+      {read && read.order && read.order.got && read.order.got.one && (
+        <div>
+          <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55, marginBottom: 8 }}>
+            {orderSay(read.order)}
+          </div>
+          <button className="tap" onClick={doIt} style={{
+            padding: "9px 15px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+            border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit" }}>
+            do it
+          </button>
+        </div>
+      )}
+
+      {/* TWO ANSWER, SO NOTHING HAPPENS. Her case exactly: the coach had already
+          told her the Stability ball tab holds "balance" twice. Guessing which
+          one she meant is how the wrong list gets set aside (rules 20, 23). */}
+      {read && read.order && read.order.got && read.order.got.many && (
+        <div>
+          <div style={{ fontSize: 12.5, color: C.clay, lineHeight: 1.55, marginBottom: 8 }}>
+            You have {read.order.got.many.length} that answer to
+            "{read.order.got.want}". I have changed nothing — say which one:
+          </div>
+          {read.order.got.many.map((x, i) => (
+            <button key={i} className="tap"
+              onClick={() => { setData((d) => doOrder(d, { ...read.order, got: { one: x } }, coach.t));
+                setDone({ order: orderSay({ ...read.order, got: { one: x } }) });
+                setRead(null); setText(""); setOpen(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6,
+                border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+                padding: "8px 11px", borderRadius: 8, fontSize: 12, color: C.ink,
+                fontFamily: "inherit" }}>
+              {orderRowSay(x)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {read && read.order && read.order.got && (read.order.got.none || read.order.got.noTab) && (
+        <div style={{ fontSize: 11.5, color: C.clay, lineHeight: 1.5 }}>
+          {read.order.got.noTab
+            ? `You do not have a tab called "${read.order.got.noTab}".`
+            : `I cannot find ${/Ex$/.test(read.order.kind) ? "a movement" : /Tab$/.test(read.order.kind) ? "a tab" : "a list"} called "${read.order.got.want || ""}"${read.order.got.in ? ` in ${read.order.got.in}` : ""}${/back/i.test(read.order.kind) ? " that has been set aside" : ""}.`}
+          {" "}Nothing has changed.
         </div>
       )}
 
