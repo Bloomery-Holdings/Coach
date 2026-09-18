@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 266";
+const BUILD = "18 September 2026 · 267";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -33613,7 +33613,7 @@ const orderSay = (o) => {
   if (o.kind === "renameTab") return `Rename the "${g.pg.area}" tab to "${o.to}". Its lists and everything in them stay exactly where they are.`;
   if (o.kind === "asideTab") return `Set the whole "${g.pg.area}" tab aside, with its ${(g.pg.lists || []).filter((l) => l && l.status !== "removed").length} list(s). ${KEPT}`;
   if (o.kind === "backTab") return `Put the "${g.pg.area}" tab back, with everything that was in it.`;
-  if (o.kind === "addTab") return `Make a new tab called "${o.to}", with an empty list in it.`;
+  if (o.kind === "addTab") return `Make a new tab called "${o.to}", with nothing in it yet.`;
   if (o.kind === "addList") return `Add an empty list called "${o.to}" to ${g.pg.area}.`;
   if (o.kind === "back") return `Put "${g.list.title || "Untitled list"}" back into ${g.pg.area}, with everything that was under it.`;
   if (o.kind === "asideEx") return `Take "${g.ex.name}" out of "${g.list.title || "Untitled list"}" in ${g.pg.area}. ${KEPT}`;
@@ -33642,9 +33642,18 @@ const doOrder = (d, o, today) => {
         exercises: (l.exercises || []).map((x) => (x.id !== exId ? x : { ...x, ...how })) })) })) });
 
   if (o.kind === "addTab") {
+    /* AND IT ARRIVES EMPTY. `bwOps.addArea` hands a new tab a placeholder
+       "List 1", which is exactly what she reported on 18 September — "the new
+       tab I asked to create gave me a list that I didn't ask for". The coach's
+       own applier has stripped it since build 232; this is the same edit, in
+       the same words, on the other route. Rule 34's lesson generalised: a
+       capability is not finished until every path that uses it has been told. */
     const made = bwOps.addArea(d, today);
     const fresh = (made.bodywork || [])[(made.bodywork || []).length - 1];
-    return fresh ? bwOps.renameArea(made, fresh.id, o.to) : made;
+    if (!fresh) return made;
+    const named = bwOps.renameArea(made, fresh.id, o.to);
+    return { ...named, bodywork: (named.bodywork || []).map((p) =>
+      (p.id === fresh.id ? { ...p, lists: [] } : p)) };
   }
   if (o.kind === "addList") {
     const made = bwOps.addList(d, g.pg.id, today);
@@ -33709,8 +33718,20 @@ function PasteLists({ data, setData, coach }) {
   const [read, setRead] = useState(null);
   const [done, setDone] = useState(null);
 
+  /* ONE TAP IS ONE WRITE (build 267). HER REPORT, 18 September: "the duplicated
+     list is probably because I pushed the button of 'put the list on my body
+     page' twice." She is right, and it reproduces: every button below guards on
+     `read`, which is STATE, so two taps inside one frame both see the same
+     `read`, both pass the guard, and both write. A ref is set by the first tap
+     and is already true for the second one in the same frame, which state is
+     not. It is released when she reads again, so a deliberate second paste is
+     never blocked — only a double tap on the same one. */
+  const spent = useRef(false);
+  const onceOnly = (fn) => () => { if (spent.current) return; spent.current = true; fn(); };
+
   const readIt = () => {
     setDone(null);
+    spent.current = false;   /* a fresh read is a fresh write (build 267) */
     /* AN ORDER OR A LIST (build 266). Her words, with the screenshot: "What is
        this reply????? There is nothing that gives an order to change my
        lists." A sentence is an order; lines with doses are a list. The order
@@ -33727,13 +33748,13 @@ function PasteLists({ data, setData, coach }) {
   };
 
   /* SHE TAPS, AND ONLY THEN (rule 20). Nothing above this line writes. */
-  const doIt = () => {
+  const doIt = onceOnly(() => {
     const o = read && read.order;
     if (!o || !o.got || !o.got.one) return;
     setData((d) => doOrder(d, o, coach.t));
     setDone({ order: orderSay(o) });
     setRead(null); setText(""); setOpen(false);
-  };
+  });
 
   /* WHERE EACH ONE WOULD LAND, worked out the same way the landing does it, so
      what she is shown and what happens cannot disagree (rule 36). */
@@ -33754,7 +33775,8 @@ function PasteLists({ data, setData, coach }) {
   /* DEFAULTS TO ADDING. A replace sets something of hers aside, so it is never
      what happens because she did not notice a toggle (rule 20). */
   const [swap, setSwap] = useState({});
-  const save = () => {
+
+  const save = onceOnly(() => {
     if (!read || !read.lists || !read.lists.length) return;
     const lists = read.lists.map((l, li) => {
       const w = whereFor(l.area, l.title);
@@ -33766,7 +33788,7 @@ function PasteLists({ data, setData, coach }) {
       swapped: lists.filter((l) => l.replaces).length,
       tabs: [...new Set(read.lists.map((l) => whereFor(l.area, l.title).name))] });
     setRead(null); setText(""); setOpen(false); setSwap({});
-  };
+  });
 
   if (!open) {
     return (
@@ -33871,9 +33893,9 @@ function PasteLists({ data, setData, coach }) {
           </div>
           {read.order.got.many.map((x, i) => (
             <button key={i} className="tap"
-              onClick={() => { setData((d) => doOrder(d, { ...read.order, got: { one: x } }, coach.t));
+              onClick={onceOnly(() => { setData((d) => doOrder(d, { ...read.order, got: { one: x } }, coach.t));
                 setDone({ order: orderSay({ ...read.order, got: { one: x } }) });
-                setRead(null); setText(""); setOpen(false); }}
+                setRead(null); setText(""); setOpen(false); })}
               style={{ display: "block", width: "100%", textAlign: "left", marginBottom: 6,
                 border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
                 padding: "8px 11px", borderRadius: 8, fontSize: 12, color: C.ink,
