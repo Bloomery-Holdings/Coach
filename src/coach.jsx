@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 263";
+const BUILD = "18 September 2026 · 264";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -31932,7 +31932,12 @@ const listFromText = (text, opts) => {
      parser guessing (rule 23). Caught by the check, not by reading it. */
   let area = (opts && opts.areaKnown) ? String(opts.areaKnown) : "";
   let cur = null;
-  const open = () => { if (!cur) { cur = { title: "", video: "", exercises: [] }; groups.push(cur); } return cur; };
+  /* EACH LIST REMEMBERS ITS OWN TAB (build 264). Her instruction, 18
+     September: "it will result into a new list or a new tab or a tab with
+     other lists inside it the way it currently does." One paste can name
+     several tabs, exactly as the chat button has since build 225 — so the tab
+     is a property of each group, not of the paste. */
+  const open = () => { if (!cur) { cur = { area, title: "", video: "", exercises: [] }; groups.push(cur); } return cur; };
 
   lines.forEach((rawLine) => {
     const line = rawLine.trim();
@@ -31951,6 +31956,9 @@ const listFromText = (text, opts) => {
       /* a dash line with no number on the right is not an exercise — it is a
          heading she happened to punctuate ("Posture tab — add a list.") */
       if (!/\d/.test(dose)) {
+        /* "Posture tab — add a list." names a tab; "List 9 — standing, no kit"
+           titles a list. The word TAB is what tells them apart (build 264). */
+        if (/\btabs?\b/i.test(name)) { area = headWord(name); cur = null; return; }
         if (!area) area = headWord(name);
         else open().title = dose.replace(/\.$/, "");
         return;
@@ -31969,9 +31977,12 @@ const listFromText = (text, opts) => {
       return;
     }
 
-    /* no dash, no url: a heading. The first names the tab, the rest name lists. */
+    /* no dash, no url: a heading. One that says TAB names a tab — and may do
+       so part-way down, so one paste can fill several. The first heading names
+       the tab when none has been named yet. Anything else titles a list. */
     const head = line.replace(/[:.]$/, "").trim();
     if (!head) return;
+    if (/\btabs?\b/i.test(head)) { area = headWord(head); cur = null; return; }
     if (!area) { area = headWord(head); return; }
     if (cur && cur.exercises.length) cur = null;      /* a heading starts a new group */
     open().title = head;
@@ -31996,7 +32007,8 @@ const parsedToLists = (parse, area, asOne) => {
     return [{ area, title: gs[0].title || "", focus: "", video: vid,
       exercises: gs.reduce((a, g) => a.concat(g.exercises.map((e) => ({ ...e, video: e.video || g.video || vid }))), []) }];
   }
-  return gs.map((g) => ({ area, title: g.title || "", focus: "", video: g.video || "",
+  /* build 264: the tab each group named, falling back to the paste's own */
+  return gs.map((g) => ({ area: g.area || area, title: g.title || "", focus: "", video: g.video || "",
     exercises: g.exercises.map((e) => ({ ...e, video: e.video || g.video || "" })) }));
 };
 
@@ -33209,21 +33221,15 @@ function TidySheet({ data, setData, coach, close }) {
               <div style={{ marginTop: 8 }}>
                 <Tiny onClick={() => setData((d) => bwOps.addList(d, pg.id, coach.t))}>+ add a list to this tab</Tiny>
               </div>
-              {/* HER REPORT, 18 September: "It still cost me 19 cents just to
-                  send myself the list and put it on my body page. Why am I
-                  paying money just to put something on the application? I
-                  don't need anything from the coach."
-
-                  She was right, and build 261 only got half of it. The reader
-                  was free; the only DOOR to it was a message in the chat, and
-                  a message has to be SENT — the whole payload, a reply, and
-                  the fold at the end of the talk. She was paying for somewhere
-                  to tap the free button. Rule 11: a page is not built until it
-                  has a door she would actually find, and rule 32: the app does
-                  not make her go through the coach for something the coach is
-                  not needed for. This is that door, and it opens on nothing at
-                  all. */}
-              <PasteList pg={pg} setData={setData} coach={coach} />
+              {/* BUILD 264: the paste box moved OFF the tab and onto the page.
+                  Her instruction, 18 September: "I don't want to go inside each
+                  and every single list and copy and paste things myself —
+                  that's not what I asked for. I just asked for making the
+                  lists... in a different place other than the conversation."
+                  262 put one box inside every tab, which is the app making her
+                  do the sorting. One box, at the top of the page, reading the
+                  tabs out of what she wrote — the same thing the chat button
+                  does, in a place that costs nothing. */}
             </div>
           </Card>
         );
@@ -33261,100 +33267,113 @@ function TidySheet({ data, setData, coach, close }) {
 }
 
 /* ============================================================================
-   PASTE A LIST STRAIGHT ONTO THE PAGE — NOTHING SENT, NOTHING SPENT (262)
+   ONE PLACE TO MAKE LISTS, THAT IS NOT THE CONVERSATION (build 264)
    ---------------------------------------------------------------------------
-   HER REPORT, 18 September, after build 261: "It still cost me 19 cents just to
-   send myself the list and put it on my tab, on my body page. Why am I paying
-   money just to put something on the application? I don't need anything from
-   the coach. I don't need anything from the API. The list is ready and I just
-   asked the application to put it on my body page under a specific tab."
+   HER INSTRUCTION, 18 September, and this is the whole specification:
 
-   WHAT WAS ACTUALLY WRONG, and it was not the reader. `listFromText` really is
-   free and really does work. But at 261 it was reachable from exactly ONE
-   place — a message in the chat — and a message has to be SENT first: the whole
-   stable payload, a reply at up to the ceiling, and the memory fold when the
-   talk ends. The reading cost nothing and the DOORWAY cost 19c. Rule 11 says a
-   page is not built until it has a door she would actually find; rule 32 says
-   the app must never make her go through the coach for something the coach is
-   not needed for. Both were broken by putting the only door inside a
-   conversation.
+     "I need to have the same mechanism of 'put this list on my body page' so
+      it will result into a new list or a new tab or a tab with other lists
+      inside it the way it currently does. I don't want to go inside each and
+      every single list and copy and paste things myself — that's not what I
+      asked for. I just asked for making the lists, whether to change lists or
+      to put lists on my body page, in a different place other than the
+      conversation between me and the coach. Since it does not need an API to
+      do it and it does not need the coach intervention, since I'm doing the
+      list myself and I'm not asking the coach to do anything."
 
-   This is the door, on the tab itself. No key, no call, no signal, no fold —
-   everything except the coach's own words works offline (rule 21). She is
-   standing on the tab, so nothing has to be matched or guessed: `pg.area` is
-   the answer, not a suggestion.
+   So this is the SAME button, moved. Not a different way of working: the same
+   reading, the same routing, the same result — a new list, a new tab, or a
+   list added to a tab she already has — with the conversation taken out of it.
+
+   262 got this wrong twice over. It put a box inside every tab, which made her
+   do the sorting the app is supposed to do, and it forced the tab she was
+   standing on, which threw away the tab names she had written. Both are the
+   app making her do the work (rule 32).
+
+   AND HER WORRY, answered rather than argued with: "I don't know if it's going
+   to come up with all the details — the hold, for how many seconds, and if
+   there is right and left." It does, and the preview below shows her before
+   anything is saved. Measured against her own pastes:
+
+     Hands to the shoulder blades — 12 reps + 40 second hold
+        -> reps 12, hold 40s, countdown
+     Overhead clasp with side reach — 40 seconds per side
+        -> hold 40s, each side, countdown, left and right boxes
+     Side-lying shoulder blade squeeze with dumbbell — 3 x 12 each side
+        -> 3 sets, 12 reps, each side, dumbbell
+
+   No key, no call, no signal, no fold. It cannot cost anything.
    ========================================================================= */
-function PasteList({ pg, setData, coach }) {
+function PasteLists({ data, setData, coach }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [read, setRead] = useState(null);   /* { groups, asOne } — never saved yet */
+  const [read, setRead] = useState(null);
   const [done, setDone] = useState(null);
 
   const readIt = () => {
-    const parse = listFromText(text, { areaKnown: pg.area });
+    /* NO `areaKnown` — she names the tabs in what she wrote, exactly as she
+       does when she sends it to the coach. The app reads them (build 264). */
+    const parse = listFromText(text);
     setDone(null);
-    if (!parse.groups.length) {
-      setRead({ groups: [], asOne: true, none: true });
-      return;
-    }
-    setRead({ groups: parse.groups, asOne: parse.groups.length === 1 });
+    setRead(parse.groups.length
+      ? { lists: parsedToLists(parse, parse.area || "", false) }
+      : { none: true });
   };
 
-  /* WHAT SHE WOULD GET, exactly — one list or one per blank-line group */
-  const shown = !read || !read.groups.length ? []
-    : read.asOne
-    ? [{ title: read.groups[0].title,
-         video: (read.groups.find((g) => g.video) || {}).video || "",
-         exercises: read.groups.reduce((a, g) => a.concat(g.exercises), []) }]
-    : read.groups;
+  /* WHERE EACH ONE WOULD LAND, worked out the same way the landing does it, so
+     what she is shown and what happens cannot disagree (rule 36). */
+  const live = (data.bodywork || []).filter((pg) => pg && pg.status !== "removed");
+  const whereFor = (areaName) => {
+    const hit = findAreaLike(live.map((pg) => ({ ...pg, name: pg.area })), String(areaName || ""));
+    return hit >= 0 ? { name: live[hit].area, made: false } : { name: String(areaName || "").trim(), made: true };
+  };
 
   const save = () => {
-    const lists = shown.map((g) => ({
-      area: pg.area, title: g.title || "", focus: "", video: g.video || "",
-      exercises: g.exercises.map((e) => ({ ...e, video: e.video || g.video || "" })),
-    }));
-    setData((d) => landLists(d, lists, coach.t, pg.area).data);
-    setDone({ lists: lists.length, n: lists.reduce((a, l) => a + l.exercises.length, 0) });
+    if (!read || !read.lists || !read.lists.length) return;
+    setData((d) => landLists(d, read.lists, coach.t, "the list you pasted").data);
+    setDone({ lists: read.lists.length,
+      n: read.lists.reduce((a, l) => a + l.exercises.length, 0),
+      tabs: [...new Set(read.lists.map((l) => whereFor(l.area).name))] });
     setRead(null); setText(""); setOpen(false);
   };
 
   if (!open) {
     return (
-      <div style={{ marginTop: 4 }}>
-        {/* NOT <Tiny>: that one is declared INSIDE the Arrange component and is
-            not in scope here. Same look, its own button — caught by checking
-            the identifier rather than by the parser, which cannot see it
-            (rule 29: passes every static check and still white-pages). */}
+      <div style={{ marginBottom: 16 }}>
         <button onClick={() => { setOpen(true); setDone(null); }} className="tap" style={{
-          border: "none", background: "transparent", cursor: "pointer",
-          padding: "3px 0", fontSize: 11, fontFamily: "inherit", whiteSpace: "nowrap",
-          color: C.signal, fontWeight: 600 }}>
-          + paste a list into this tab — free, nothing is sent
+          border: `1.5px solid ${C.signal}`, background: "transparent", cursor: "pointer",
+          padding: "9px 14px", borderRadius: 9, fontSize: 12, fontWeight: 600,
+          color: C.signal, fontFamily: "inherit" }}>
+          put a list on my Body page — free, nothing is sent
         </button>
         {done && (
-          <div style={{ fontSize: 11.5, color: C.moss, lineHeight: 1.45, marginTop: 6 }}>
+          <div style={{ fontSize: 12, color: C.moss, lineHeight: 1.5, marginTop: 8 }}>
             {done.n} exercise{done.n === 1 ? "" : "s"} in {done.lists} list{done.lists === 1 ? "" : "s"},
-            in {pg.area}. Nothing was sent and nothing was spent.
+            in {done.tabs.join(" and ")}. Nothing was sent and nothing was spent.
           </div>
         )}
       </div>
     );
   }
 
+  const lists = (read && read.lists) || [];
+
   return (
-    <div style={{ marginTop: 8, background: C.chalk, border: `1.5px solid ${C.line}`,
-      borderRadius: 12, padding: "12px 14px" }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
-        Paste your list — it goes into {pg.area}
+    <div style={{ marginBottom: 16, background: C.card, border: `1.5px solid ${C.signal}`,
+      borderRadius: 12, padding: "14px 16px" }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
+        Paste your lists
       </div>
-      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 8 }}>
-        One movement a line, the name and the dose either side of a dash.
-        A line that is just a link is the video for the list.
-        This never sends anything and never costs anything.
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>
+        Write it the way you write it for your coach. Name a tab on its own line
+        — "Posture tab" — and everything under it goes there. One movement a
+        line, the name and the dose either side of a dash. A line that is just a
+        link is the video for that list. This never sends anything and never
+        costs anything.
       </div>
-      <AutoText rows={5} value={text} onChange={setText}
+      <AutoText rows={6} value={text} onChange={setText}
         style={{ ...inputStyle, marginBottom: 8, lineHeight: 1.45 }} />
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         <MicButton onText={setText} current={text} />
         <button className="tap" onClick={readIt} disabled={!text.trim()} style={{
           padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
@@ -33368,48 +33387,51 @@ function PasteList({ pg, setData, coach }) {
       </div>
 
       {read && read.none && (
-        <div style={{ fontSize: 11.5, color: C.clay, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 11.5, color: C.clay, lineHeight: 1.5 }}>
           I could not find exercises in that. Each line wants a movement and a dose with a
           dash between them — "Wall angels — 1 x 10". Nothing has changed.
         </div>
       )}
 
-      {read && !!shown.length && (
+      {!!lists.length && (
         <>
-          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 6 }}>
-            This is what I read. Nothing is saved until you tap below.
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>
+            This is what I read, and where each one goes. Nothing is saved until you tap below.
           </div>
-          {read.groups.length > 1 && (
-            <button className="tap" onClick={() => setRead((r) => ({ ...r, asOne: !r.asOne }))}
-              style={{ border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
-                padding: "6px 11px", borderRadius: 8, fontSize: 11, color: C.signal,
-                fontWeight: 600, fontFamily: "inherit", marginBottom: 8 }}>
-              {read.asOne
-                ? `one list of ${shown[0].exercises.length} — tap for ${read.groups.length} separate lists`
-                : `${read.groups.length} separate lists — tap to make it one`}
-            </button>
-          )}
-          {shown.map((g, gi) => (
-            <div key={gi} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
-                {g.title || `List ${gi + 1}`}
-              </div>
-              {g.video && (
-                <div style={{ fontSize: 11, color: C.moss, lineHeight: 1.4, marginBottom: 4,
-                  wordBreak: "break-all" }}>your video, kept exactly: {g.video}</div>
-              )}
-              {g.exercises.map((e, ei) => (
-                <div key={ei} style={{ fontSize: 12, color: C.ink, lineHeight: 1.5,
-                  padding: "3px 0", borderBottom: `1px solid ${C.line}` }}>
-                  {e.name}<span style={{ color: C.muted }}> — {e.dose}</span>
+          {lists.map((l, li) => {
+            const w = whereFor(l.area);
+            return (
+              <div key={li} style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>
+                  {l.title || `List ${li + 1}`}
                 </div>
-              ))}
-            </div>
-          ))}
+                <div style={{ fontSize: 11, color: w.made ? C.ochre : C.moss, marginBottom: 4 }}>
+                  → {w.name || "a tab of its own"}{w.made ? " · a new tab" : " · a tab you already have"}
+                </div>
+                {l.video && (
+                  <div style={{ fontSize: 11, color: C.moss, lineHeight: 1.4, marginBottom: 4,
+                    wordBreak: "break-all" }}>your video, kept exactly: {l.video}</div>
+                )}
+                {l.exercises.map((e, ei) => (
+                  <div key={ei} style={{ fontSize: 12, color: C.ink, lineHeight: 1.5,
+                    padding: "3px 0", borderBottom: `1px solid ${C.line}` }}>
+                    {e.name}
+                    <span style={{ color: C.muted }}> — {e.dose}</span>
+                    {/* what the card will actually ask her for, so the worry she
+                        raised is answered on screen and not in a promise */}
+                    <span className="mono" style={{ color: C.muted, fontSize: 10.5 }}>
+                      {e.hold ? ` ${e.hold}s hold` : ""}{e.side ? " · left and right" : ""}
+                      {e.tool ? ` · ${e.tool}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
           <button className="tap" onClick={save} style={{
-            padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            padding: "9px 15px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
             border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit" }}>
-            put {shown.length === 1 ? "it" : "them"} in {pg.area}
+            put {lists.length === 1 ? "it" : "them"} on my Body page
           </button>
         </>
       )}
@@ -34087,6 +34109,15 @@ Add as many body areas as you want. Each keeps its own ten, and the chips above 
           <span style={{ fontSize: 12.5, color: C.muted }}>what this is</span>
         </InfoNote>
       </div>
+
+      {/* BUILD 264 — THE SAME BUTTON, SOMEWHERE THAT COSTS NOTHING.
+          Her instruction, 18 September: "I just asked for making the lists,
+          whether to change lists or to put lists on my body page, in a
+          different place other than the conversation between me and the coach.
+          Since it does not need an API to do it." At the top of the page, above
+          the tabs, because a control she has to hunt for does not exist (rule
+          11) and the tabs are what it decides, not what it needs told. */}
+      <PasteLists data={data} setData={setData} coach={coach} />
 
       {/* HER QUESTION, 10 August: "Why do you have two chips having the same
           exercises — the Today one and the What you want to do one?"
