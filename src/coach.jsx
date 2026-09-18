@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "14 September 2026 · 261";
+const BUILD = "18 September 2026 · 262";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -26844,49 +26844,19 @@ function CoachChat({ data, setData, coach, close, seed, about, goTab, setSheet }
      bites a seventh time). The model route and the free route below write her
      Body page through THIS function and no other, so they cannot drift. */
   const landUsable = (usable) => {
+      /* BUILD 262: ONE LANDING, and this time actually. The 262 edit that
+         lifted it left this copy in place and only added a comment saying
+         it had not — which is the drift fault of rule 34, committed inside
+         the very edit claiming to prevent it, and caught by the check
+         rather than by reading it back. `landLists` is module level and the
+         Body page paste box calls the same one. What is left here is only
+         what the CHAT has to say about the result. */
       setData((d) => {
-        /* EACH LIST GOES WHERE IT SAID (build 225). One pass per list, folding
-           the result forward, so two lists naming the same tab land in the same
-           tab rather than the second one founding a copy of it. */
-        let pgs = d.bodywork || [];
-        const landed = [];
-        let focus = null;
-        usable.forEach((one) => {
-          const area = String(one.area || "the coach's list").trim();
-          /* THE SCATTERING (build 222). This compared the area name the model
-             invented against hers with EXACT lowercase equality — so "shoulder
-             mobility", "Shoulder mobility work" and "Shoulders, hips, back"
-             were three different tabs, and every list she asked for founded
-             another one. She ended up with eleven. Matched the way the rest of
-             the app matches her words. */
-          const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
-          const hit = findAreaLike(live.map((x) => ({ ...x.pg, name: x.pg.area })), area);
-          const at = hit >= 0 ? live[hit].k : -1;
-          /* An area she already has gains a list; a new area becomes a
-             programme of its own. Nothing existing is touched (rule 20). */
-          if (at >= 0) {
-            const n = (pgs[at].lists || []).length + 1;
-            const shaped = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], n);
-            landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
-            if (!focus) focus = { pg: pgs[at].id, list: shaped[0].id };
-            pgs = pgs.map((pg, k) => (k !== at ? pg
-              : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
-            return;
-          }
-          const pgId = newId();
-          const shapedNew = shapeLists([{ title: one.title, focus: one.focus, exercises: one.exercises }], 1);
-          landed.push({ area, n: 1, count: one.exercises.length, made: true });
-          if (!focus) focus = { pg: pgId, list: shapedNew[0].id };
-          pgs = [...pgs, {
-            id: pgId, area, line: "Written for you in conversation.",
-            mins: Math.max(1, Math.round(one.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
-            created: coach.t, fromChat: true,
-            lists: shapedNew,
-            log: {}, rounds: [], status: "active" }];
-        });
-        setListMade({ landed, area: (landed[0] || {}).area, n: (landed[0] || {}).n,
-          count: landed.reduce((a2, l) => a2 + l.count, 0) });
-        return { ...d, ...(focus ? { bodyFocus: focus } : {}), bodywork: pgs };
+        const out = landLists(d, usable, coach.t, "the coach's list");
+        setListMade({ landed: out.landed, area: (out.landed[0] || {}).area,
+          n: (out.landed[0] || {}).n,
+          count: out.landed.reduce((a2, l) => a2 + l.count, 0) });
+        return out.data;
       });
   };
 
@@ -31859,15 +31829,71 @@ const headWord = (s) => String(s || "")
   .replace(/\s+(tab|tabs|exercises|exercise|list|lists|routine|programme|program)$/i, "")
   .trim() || String(s || "").trim();
 
+/* WHERE A READ LIST ACTUALLY LANDS (build 262).
+
+   Lifted out of CoachChat, where it was `landUsable`, because build 262 gives
+   the free reader a second door — one on the Body page that needs no
+   conversation — and two copies of this is precisely how the two payload
+   builders drifted six times (rule 34's lesson). One function, both doors,
+   pure: data in, data out, no setState of its own.
+
+   `fallbackArea` is the tab the caller is standing on. From the Body page that
+   is known exactly and nothing has to be matched at all. */
+const landLists = (d, usable, today, fallbackArea) => {
+  let pgs = d.bodywork || [];
+  const landed = [];
+  let focus = null;
+  (usable || []).forEach((one) => {
+    const area = String(one.area || fallbackArea || "the list you pasted").trim();
+    /* THE SCATTERING (build 222). This compared the area name the model
+       invented against hers with EXACT lowercase equality — so "shoulder
+       mobility", "Shoulder mobility work" and "Shoulders, hips, back" were
+       three different tabs, and every list she asked for founded another one.
+       She ended up with eleven. Matched the way the rest of the app matches
+       her words. */
+    const live = pgs.map((pg, k) => ({ pg, k })).filter((x) => x.pg && x.pg.status !== "removed");
+    const hit = findAreaLike(live.map((x) => ({ ...x.pg, name: x.pg.area })), area);
+    const at = hit >= 0 ? live[hit].k : -1;
+    /* An area she already has gains a list; a new area becomes a programme of
+       its own. Nothing existing is touched (rule 20). */
+    if (at >= 0) {
+      const n = (pgs[at].lists || []).length + 1;
+      const shaped = shapeLists([{ title: one.title, focus: one.focus, video: one.video, exercises: one.exercises }], n);
+      landed.push({ area: pgs[at].area, n, count: one.exercises.length, made: false });
+      if (!focus) focus = { pg: pgs[at].id, list: shaped[0].id };
+      pgs = pgs.map((pg, k) => (k !== at ? pg : { ...pg, lists: [...(pg.lists || []), ...shaped] }));
+      return;
+    }
+    const pgId = newId();
+    const shapedNew = shapeLists([{ title: one.title, focus: one.focus, video: one.video, exercises: one.exercises }], 1);
+    landed.push({ area, n: 1, count: one.exercises.length, made: true });
+    if (!focus) focus = { pg: pgId, list: shapedNew[0].id };
+    pgs = [...pgs, {
+      id: pgId, area, line: "Written by you.",
+      mins: Math.max(1, Math.round(one.exercises.reduce((a2, x) => a2 + (Number(x.mins) || 2), 0))),
+      created: today, fromChat: true,
+      lists: shapedNew,
+      log: {}, rounds: [], status: "active" }];
+  });
+  return { data: { ...d, ...(focus ? { bodyFocus: focus } : {}), bodywork: pgs }, landed, focus };
+};
+
 /* SHE WROTE IT, SO IT IS READ, NOT INTERPRETED.
    Returns { area, groups: [{ title, video, exercises[] }], unread[] }.
    `area` and `title` are only ever SUGGESTIONS — the screen shows them and she
    changes them before anything is written (rule 20: nothing lands unasked). */
-const listFromText = (text) => {
+const listFromText = (text, opts) => {
   const lines = String(text || "").replace(/\r/g, "").split("\n");
   const groups = [];
   const unread = [];
-  let area = "";
+  /* WHEN SHE IS STANDING ON THE TAB, THE FIRST HEADING IS THE LIST (build 262).
+     Pasting into the chat she writes "Posture tab — add a list." first, so the
+     first heading names the TAB. Pasting on the Body page she does not — the
+     tab is the one she is looking at — so the first heading is "List 9 —
+     standing, no kit", and reading that as a tab name swallowed her title: the
+     list came out called "List 2". The caller says which it is rather than the
+     parser guessing (rule 23). Caught by the check, not by reading it. */
+  let area = (opts && opts.areaKnown) ? String(opts.areaKnown) : "";
   let cur = null;
   const open = () => { if (!cur) { cur = { title: "", video: "", exercises: [] }; groups.push(cur); } return cur; };
 
@@ -33146,6 +33172,21 @@ function TidySheet({ data, setData, coach, close }) {
               <div style={{ marginTop: 8 }}>
                 <Tiny onClick={() => setData((d) => bwOps.addList(d, pg.id, coach.t))}>+ add a list to this tab</Tiny>
               </div>
+              {/* HER REPORT, 18 September: "It still cost me 19 cents just to
+                  send myself the list and put it on my body page. Why am I
+                  paying money just to put something on the application? I
+                  don't need anything from the coach."
+
+                  She was right, and build 261 only got half of it. The reader
+                  was free; the only DOOR to it was a message in the chat, and
+                  a message has to be SENT — the whole payload, a reply, and
+                  the fold at the end of the talk. She was paying for somewhere
+                  to tap the free button. Rule 11: a page is not built until it
+                  has a door she would actually find, and rule 32: the app does
+                  not make her go through the coach for something the coach is
+                  not needed for. This is that door, and it opens on nothing at
+                  all. */}
+              <PasteList pg={pg} setData={setData} coach={coach} />
             </div>
           </Card>
         );
@@ -33178,6 +33219,163 @@ function TidySheet({ data, setData, coach, close }) {
       )}
 
       <Btn kind="quiet" onClick={close}>Done</Btn>
+    </div>
+  );
+}
+
+/* ============================================================================
+   PASTE A LIST STRAIGHT ONTO THE PAGE — NOTHING SENT, NOTHING SPENT (262)
+   ---------------------------------------------------------------------------
+   HER REPORT, 18 September, after build 261: "It still cost me 19 cents just to
+   send myself the list and put it on my tab, on my body page. Why am I paying
+   money just to put something on the application? I don't need anything from
+   the coach. I don't need anything from the API. The list is ready and I just
+   asked the application to put it on my body page under a specific tab."
+
+   WHAT WAS ACTUALLY WRONG, and it was not the reader. `listFromText` really is
+   free and really does work. But at 261 it was reachable from exactly ONE
+   place — a message in the chat — and a message has to be SENT first: the whole
+   stable payload, a reply at up to the ceiling, and the memory fold when the
+   talk ends. The reading cost nothing and the DOORWAY cost 19c. Rule 11 says a
+   page is not built until it has a door she would actually find; rule 32 says
+   the app must never make her go through the coach for something the coach is
+   not needed for. Both were broken by putting the only door inside a
+   conversation.
+
+   This is the door, on the tab itself. No key, no call, no signal, no fold —
+   everything except the coach's own words works offline (rule 21). She is
+   standing on the tab, so nothing has to be matched or guessed: `pg.area` is
+   the answer, not a suggestion.
+   ========================================================================= */
+function PasteList({ pg, setData, coach }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [read, setRead] = useState(null);   /* { groups, asOne } — never saved yet */
+  const [done, setDone] = useState(null);
+
+  const readIt = () => {
+    const parse = listFromText(text, { areaKnown: pg.area });
+    setDone(null);
+    if (!parse.groups.length) {
+      setRead({ groups: [], asOne: true, none: true });
+      return;
+    }
+    setRead({ groups: parse.groups, asOne: parse.groups.length === 1 });
+  };
+
+  /* WHAT SHE WOULD GET, exactly — one list or one per blank-line group */
+  const shown = !read || !read.groups.length ? []
+    : read.asOne
+    ? [{ title: read.groups[0].title,
+         video: (read.groups.find((g) => g.video) || {}).video || "",
+         exercises: read.groups.reduce((a, g) => a.concat(g.exercises), []) }]
+    : read.groups;
+
+  const save = () => {
+    const lists = shown.map((g) => ({
+      area: pg.area, title: g.title || "", focus: "", video: g.video || "",
+      exercises: g.exercises.map((e) => ({ ...e, video: e.video || g.video || "" })),
+    }));
+    setData((d) => landLists(d, lists, coach.t, pg.area).data);
+    setDone({ lists: lists.length, n: lists.reduce((a, l) => a + l.exercises.length, 0) });
+    setRead(null); setText(""); setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <div style={{ marginTop: 4 }}>
+        {/* NOT <Tiny>: that one is declared INSIDE the Arrange component and is
+            not in scope here. Same look, its own button — caught by checking
+            the identifier rather than by the parser, which cannot see it
+            (rule 29: passes every static check and still white-pages). */}
+        <button onClick={() => { setOpen(true); setDone(null); }} className="tap" style={{
+          border: "none", background: "transparent", cursor: "pointer",
+          padding: "3px 0", fontSize: 11, fontFamily: "inherit", whiteSpace: "nowrap",
+          color: C.signal, fontWeight: 600 }}>
+          + paste a list into this tab — free, nothing is sent
+        </button>
+        {done && (
+          <div style={{ fontSize: 11.5, color: C.moss, lineHeight: 1.45, marginTop: 6 }}>
+            {done.n} exercise{done.n === 1 ? "" : "s"} in {done.lists} list{done.lists === 1 ? "" : "s"},
+            in {pg.area}. Nothing was sent and nothing was spent.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 8, background: C.chalk, border: `1.5px solid ${C.line}`,
+      borderRadius: 12, padding: "12px 14px" }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
+        Paste your list — it goes into {pg.area}
+      </div>
+      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 8 }}>
+        One movement a line, the name and the dose either side of a dash.
+        A line that is just a link is the video for the list.
+        This never sends anything and never costs anything.
+      </div>
+      <AutoText rows={5} value={text} onChange={setText}
+        style={{ ...inputStyle, marginBottom: 8, lineHeight: 1.45 }} />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <MicButton onText={setText} current={text} />
+        <button className="tap" onClick={readIt} disabled={!text.trim()} style={{
+          padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
+          border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit" }}>
+          read it
+        </button>
+        <button className="tap" onClick={() => { setOpen(false); setRead(null); }} style={{
+          padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12,
+          border: `1.5px solid ${C.line}`, background: "transparent", color: C.muted,
+          fontFamily: "inherit" }}>close</button>
+      </div>
+
+      {read && read.none && (
+        <div style={{ fontSize: 11.5, color: C.clay, lineHeight: 1.45 }}>
+          I could not find exercises in that. Each line wants a movement and a dose with a
+          dash between them — "Wall angels — 1 x 10". Nothing has changed.
+        </div>
+      )}
+
+      {read && !!shown.length && (
+        <>
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.45, marginBottom: 6 }}>
+            This is what I read. Nothing is saved until you tap below.
+          </div>
+          {read.groups.length > 1 && (
+            <button className="tap" onClick={() => setRead((r) => ({ ...r, asOne: !r.asOne }))}
+              style={{ border: `1.5px solid ${C.line}`, background: "transparent", cursor: "pointer",
+                padding: "6px 11px", borderRadius: 8, fontSize: 11, color: C.signal,
+                fontWeight: 600, fontFamily: "inherit", marginBottom: 8 }}>
+              {read.asOne
+                ? `one list of ${shown[0].exercises.length} — tap for ${read.groups.length} separate lists`
+                : `${read.groups.length} separate lists — tap to make it one`}
+            </button>
+          )}
+          {shown.map((g, gi) => (
+            <div key={gi} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 2 }}>
+                {g.title || `List ${gi + 1}`}
+              </div>
+              {g.video && (
+                <div style={{ fontSize: 11, color: C.moss, lineHeight: 1.4, marginBottom: 4,
+                  wordBreak: "break-all" }}>your video, kept exactly: {g.video}</div>
+              )}
+              {g.exercises.map((e, ei) => (
+                <div key={ei} style={{ fontSize: 12, color: C.ink, lineHeight: 1.5,
+                  padding: "3px 0", borderBottom: `1px solid ${C.line}` }}>
+                  {e.name}<span style={{ color: C.muted }}> — {e.dose}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <button className="tap" onClick={save} style={{
+            padding: "8px 14px", borderRadius: 9, cursor: "pointer", fontSize: 12, fontWeight: 600,
+            border: "none", background: C.signal, color: C.chalk, fontFamily: "inherit" }}>
+            put {shown.length === 1 ? "it" : "them"} in {pg.area}
+          </button>
+        </>
+      )}
     </div>
   );
 }
