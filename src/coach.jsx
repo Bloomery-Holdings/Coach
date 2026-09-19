@@ -4684,7 +4684,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "18 September 2026 · 268";
+const BUILD = "19 September 2026 · 269";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -27943,8 +27943,18 @@ Two or three sentences unless she asks for more.`;
 
            259's OTHER fix, `saysPhrase`, is untouched: that one was real and
            has nothing to do with this. */
+        /* BUILD 269. BOTH halves carry a mark, and only the clock stays out.
+           Measured on 19 September, not assumed: the half after the break is
+           byte-identical between two messages of the same talk, and identical
+           again after she logs a session. It moves when she ticks a list on her
+           Body page or has the fold set to every message — and then the SHORT
+           mark still hits and only the tail is written.
+
+           What she was paying before this: 26,000 of her own tokens at the
+           full price on every message, because the caller handed askModel one
+           part when it has taken a list since 256. */
         system: (() => { const p = splitPayload(payloadStable());
-          return { stable: p.fixed, live: p.rest + "\n" + liveContext() }; })(),
+          return { stable: [p.fixed, p.rest], live: liveContext() }; })(),
         messages: next.map(blockify),
         search: data.settings?.webSearch === true,
         usage: spend,
@@ -28017,9 +28027,10 @@ Two or three sentences unless she asks for more.`;
         cacheTtl: carryPlan.mode === "1h" ? "1h" : "5m",
         maxTokens: Math.max(500, Number(formulas(data.settings).replyLong) || 1800),
         apiKey: data.settings?.apiKey,
-        /* build 263: the same revert, at the same boundary — the two call
-           sites must agree or the cache misses on whichever is wrong */
-        system: { stable: carryParts.fixed, live: carryParts.rest + "\n" + liveContext() },
+        /* THE TWO CALL SITES MUST AGREE or the cache misses on whichever is
+           wrong — and this one is the call GUARANTEED to be sending a prefix
+           the message before it just wrote, so it is the one that must hit. */
+        system: { stable: [carryParts.fixed, carryParts.rest], live: liveContext() },
         messages: [...upto.map((m) => ({ role: m.role, content: m.content })),
           { role: "user", content: "You ran out of room and stopped mid-sentence. "
             + "Carry straight on from where you stopped. Do not start again, do not "
