@@ -287,6 +287,7 @@ const FORMULA_DEFAULTS = {
   editTokens: 3000,        /* room the "change my lists" call has to answer in     */
   listTokens: 3000,        /* room the "put these on my Body page" call has        */
   briefNoteSittings: 8,    /* battery sittings her own wins are quoted from    */
+  briefSecs: 45,           /* quiet seconds before the briefing file is rewritten */
 
   /* ---- HOW A RECOVERY BAND MAPS ONTO HOW HARD A CLASS MAY BE -------------
      Her decision, 14 August. Every class in her library carries a cost from
@@ -4348,6 +4349,44 @@ const splitPayload = (text) => {
 /* what she sees, and what she is charged for, are the same characters */
 const showPayload = (text) => { const p = splitPayload(text); return p.fixed + p.rest; };
 
+/* ============================================================================
+   WHAT IS ACTUALLY IN IT (build 270)
+   ---------------------------------------------------------------------------
+   HER INSTRUCTION, 15 August: "measure why it is 75k words immediately. that
+   is nonsense." The screen for it was built and has never worked: it started a
+   new section at any line beginning "- CAPITAL", and the payload does not
+   write its headings that way. Measured on 19 September against a file her
+   size, it reported ONE section, "the opening", at 100% — so every time she
+   asked where her tokens were, the app answered "all of them, everywhere".
+
+   A heading is one of two things and nothing else:
+     · a banner, === LIKE THIS ===
+     · a line opening in capitals that announces itself with a colon or an
+       em dash — "BODY WORK RUNNING:", "HER OWN LISTS — ..."
+
+   An ALL-CAPS SENTENCE ending in a full stop is prose inside a block, not a
+   heading. That one rule is what stops the running memory being filed under
+   "ENTERED WINS." — the last line of its own preamble.
+
+   Tokens, not words: tokens are what she is billed in, at the same 3.8
+   characters the send screen already uses, so two screens cannot disagree. */
+const PAYLOAD_HEAD = /^(?:={2,}\s*(.+?)\s*={2,}|([A-Z][A-Z0-9 ,()/&'-]{3,}[:—].*))$/;
+const payloadParts = (text) => {
+  const out = [];
+  let cur = { name: "(the opening)", chars: 0 };
+  String(text || "").split("\n").forEach((l) => {
+    const m = l.match(PAYLOAD_HEAD);
+    if (m) {
+      if (cur.chars > 1) out.push(cur);
+      cur = { name: String(m[1] || m[2] || l).trim().slice(0, 60), chars: 0 };
+    }
+    cur.chars += l.length + 1;
+  });
+  if (cur.chars > 1) out.push(cur);
+  return out.map((x) => ({ ...x, tokens: Math.round(x.chars / 3.8) }))
+    .sort((a, b) => b.tokens - a.tokens);
+};
+
 const msgTimes = (data) => {
   const out = [];
   ((data && data.chats) || []).forEach((c) => ((c && c.messages) || []).forEach((m) => {
@@ -4684,7 +4723,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 September 2026 · 269";
+const BUILD = "19 September 2026 · 271";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -8147,6 +8186,85 @@ const uploadToDrive = async (d, clientId, quiet) => {
     return "ok";
   } catch (e) { return "failed"; }
 };
+/* ============================================================================
+   THE BRIEFING FILE — ONE NAME, ALWAYS CURRENT (build 271)
+   ---------------------------------------------------------------------------
+   Her coach moves out of the app and into a Claude conversation, which her
+   subscription already pays for. What that conversation needs is to know who
+   she is, and this is how it finds out: one file, in the folder the app already
+   made, whose name never changes.
+
+   It is NOT the data dump. It is what `briefText` builds — the same words the
+   API was being sent and charged for — so a conversation reading this file and
+   the coach that used to run in the app are given the same thing. One builder,
+   no drift (rule 34's standing warning).
+
+   Her window governs it exactly as it governs the chat, and the file says which
+   window it used, so the coach reading it knows the shape of what it has. */
+const BRIEF_NAME = "coach-briefing.md";
+const briefingText = (d, coach) => {
+  const win = (d && d.settings && d.settings.chatScope) || CHAT_SCOPE_DEFAULT;
+  const bounded = scopeReady(win) ? narrowTo(d, win, coach.t) : d;
+  const body = showPayload(briefText(bounded, coach, { windowLabel: scopeLabel(win) }));
+  return "# Your coach's briefing\n\n"
+    + `Written by the Coach app on ${coach.t}, and rewritten every time she logs\n`
+    + `something. This is the whole of what her coach is given. The window she\n`
+    + `has set is "${scopeLabel(win)}".\n\n`
+    + "**Read this file at the start of every conversation — it changes.**\n\n---\n\n"
+    + body + "\n";
+};
+
+/* FIND IT BY THE NAME THAT NEVER CHANGES, and PATCH it rather than making a
+   second one — otherwise the folder fills with briefings and the link she gave
+   Claude points at the oldest. `drive.file` sees the files the app made, which
+   is this one. */
+const briefFileId = async (token, folder) => {
+  const q = encodeURIComponent("name='" + BRIEF_NAME + "' and trashed=false"
+    + (folder ? " and '" + folder + "' in parents" : ""));
+  try {
+    const found = await withClock(
+      fetch("https://www.googleapis.com/drive/v3/files?q=" + q + "&fields=files(id)",
+        { headers: { Authorization: "Bearer " + token } }).then((r) => (r.ok ? r.json() : null)),
+      20, "drive");
+    return found && found.files && found.files.length ? found.files[0].id : null;
+  } catch (e) { return null; }
+};
+
+const uploadBriefing = async (d, coach, clientId) => {
+  if (!d || d.sample) return "sample";
+  if (!clientId || !gConnected()) return "not-connected";
+  const token = await gToken(clientId, true);
+  if (!token) return "lapsed";
+  try {
+    const folder = await gFolder(token);
+    const text = briefingText(d, coach);
+    const id = await briefFileId(token, folder);
+    const meta = { name: BRIEF_NAME, mimeType: "text/markdown" };
+    if (!id && folder) meta.parents = [folder];
+    const B = "coachbrief" + text.length;
+    const CRLF = String.fromCharCode(13) + String.fromCharCode(10);
+    const body = "--" + B + CRLF + "Content-Type: application/json; charset=UTF-8" + CRLF + CRLF
+      + JSON.stringify(meta)
+      + CRLF + "--" + B + CRLF + "Content-Type: text/markdown; charset=UTF-8" + CRLF + CRLF
+      + text + CRLF + "--" + B + "--";
+    const res = await withClock(fetch("https://www.googleapis.com/upload/drive/v3/files"
+      + (id ? "/" + id : "") + "?uploadType=multipart", {
+      method: id ? "PATCH" : "POST",
+      headers: { Authorization: "Bearer " + token, "Content-Type": "multipart/related; boundary=" + B },
+      body,
+    }), 30, "drive");
+    if (!res.ok) return "failed";
+    try {
+      window.localStorage.setItem("coach:briefAt", new Date().toISOString());
+      window.localStorage.setItem("coach:briefTokens", String(Math.round(text.length / 3.8)));
+    } catch (e) {}
+    return "ok";
+  } catch (e) { return "failed"; }
+};
+const briefWrittenAt = () => {
+  try { return window.localStorage.getItem("coach:briefAt") || ""; } catch (e) { return ""; }
+};
+
 const msClientId = (d) => String((d && d.settings && d.settings.msClientId) || MS_CLIENT_DEFAULT).trim();
 const MS_SCOPE = "Files.ReadWrite.AppFolder offline_access";
 const MS_KEY = "coach:onedrive";
@@ -21064,7 +21182,8 @@ function Formulas({ data, setData, close }) {
              ["editTokens", "Room your coach has to answer \"change my lists\""],
              ["listTokens", "Room it has to build a new list from a message"],
              ["briefLiftDays", "Sessions of real loads carried"],
-             ["briefNoteSittings", "Battery sittings your own wins are quoted from"]] },
+             ["briefNoteSittings", "Battery sittings your own wins are quoted from"],
+             ["briefSecs", "Seconds of quiet before your Drive briefing is rewritten"]] },
 
     { title: "What it costs to talk to your coach", note: "Dollars per million words, on your own key. These are facts rather than judgements — but facts that change, so they are yours to correct. Cached words are ones your coach already had in front of it from a moment ago: it pays a little more to put them there and a tenth as much to look again.",
       rows: [["priceIn", "A million words read"],
@@ -28277,27 +28396,39 @@ Two or three sentences unless she asks for more.`;
                     Couldn't measure it just now.
                   </div>
                 );
-                const wordsOf = (s) => (String(s).trim() ? String(s).trim().split(/\s+/).length : 0);
-                const secs = []; let cur = { name: "the opening", n: 0 };
-                built.split("\n").forEach((l) => {
-                  if (/^-\s+[A-Z]/.test(l)) { secs.push(cur); cur = { name: l.replace(/^-\s+/, "").slice(0, 58), n: 0 }; }
-                  cur.n += wordsOf(l);
-                });
-                secs.push(cur);
-                const total = secs.reduce((a, s) => a + s.n, 0) || 1;
+                /* THE TWO HALVES SEPARATELY (build 270). The first is her
+                   coach's own rules and voice: it never changes, and since 269
+                   it is read back from the cache at a tenth. The second is
+                   HER, and it is the only half any window can cut — so telling
+                   her they are one number hides the only one she can act on. */
+                const whole = payloadStable();
+                const brk = splitPayload(whole);
+                const mine = payloadParts(brk.fixed);
+                const hers = payloadParts(brk.rest + "\n" + liveContext());
+                const sum = (a) => a.reduce((x, y) => x + y.tokens, 0);
+                const mineN = sum(mine), hersN = sum(hers);
+                const secs = hers;
+                const total = hersN || 1;
                 return (
                   <div style={{ marginTop: 9 }}>
-                    <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 8 }}>
-                      {total.toLocaleString()} words go out with every message you send.
-                      {cp.mode !== "off" ? " After the first, they cost a tenth." : ""}
+                    <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.5, marginBottom: 4 }}>
+                      <strong>{(mineN + hersN).toLocaleString()} tokens</strong> go out with every message.
+                      {cp.mode !== "off"
+                        ? " The first message of a talk pays for them; every one after reads them back at a tenth."
+                        : " Caching is off, so every message pays for all of them."}
                     </div>
-                    {secs.filter((s) => s.n > 0).sort((a, b) => b.n - a.n).slice(0, 12).map((s, i) => (
+                    <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, marginBottom: 9 }}>
+                      {mineN.toLocaleString()} of them are your coach's own rules and voice — the same
+                      every time, and nothing you set can change them. The {hersN.toLocaleString()} below
+                      are YOU, and they are the only ones a window can cut.
+                    </div>
+                    {secs.filter((s) => s.tokens > 0).slice(0, 14).map((s, i) => (
                       <div key={i} style={{ display: "flex", justifyContent: "space-between",
                         gap: 10, padding: "5px 0", borderTop: i ? `1px solid ${C.chalk}` : "none" }}>
                         <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.4,
                           minWidth: 0, overflow: "hidden" }}>{s.name}</span>
                         <span className="mono" style={{ fontSize: 11, color: C.ink, flexShrink: 0 }}>
-                          {s.n.toLocaleString()} · {Math.round((s.n / total) * 100)}%
+                          {s.tokens.toLocaleString()} · {Math.round((s.tokens / total) * 100)}%
                         </span>
                       </div>
                     ))}
@@ -29889,6 +30020,44 @@ function CoachApp() {
   const today_ = useToday();
   const clock_ = useClock();
   const coach = useCoach(data, today_, clock_);
+
+  /* THE BRIEFING FILE, ON EVERY CHANGE (build 271). Her instruction: "Make it
+     write the file every time I log something."
+
+     A quiet period rather than a write per keystroke, so a weight typed digit
+     by digit is one write and not four; `briefSecs` is hers to change. And
+     never twice for the same text — the fingerprint is the length and a cheap
+     sum over it, which catches "nothing actually moved" without building the
+     whole payload twice. Rule 36's line holds even where the cost is only her
+     battery: nothing is ever sent twice for the same reason.
+
+     `coach` is read through a ref rather than a dependency because useCoach
+     returns a fresh object every render, and a timer that resets on every
+     render never fires. */
+  const briefCoach = useRef(coach);
+  briefCoach.current = coach;
+  const briefMark = useRef("");
+  useEffect(() => {
+    if (!ready || !data || data.sample) return undefined;
+    const wait = Math.max(5, Number(formulas(data.settings).briefSecs) || 45) * 1000;
+    const t = setTimeout(() => {
+      (async () => {
+        try {
+          const gid = gClientId(data);
+          if (!gid || !gConnected()) return;
+          if (!Object.keys(data.logs || {}).length) return;
+          const text = briefingText(data, briefCoach.current);
+          let sum = 0;
+          for (let i = 0; i < text.length; i += 97) sum += text.charCodeAt(i);
+          const mark = text.length + ":" + sum;
+          if (mark === briefMark.current) return;
+          const r = await uploadBriefing(data, briefCoach.current, gid);
+          if (r === "ok") briefMark.current = mark;
+        } catch (e) {}
+      })();
+    }, wait);
+    return () => clearTimeout(t);
+  }, [data, ready]);
 
   const tab = stack[stack.length - 1];
   /* build 234: an id that is not a tab renders nothing at all, so it is
