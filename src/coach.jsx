@@ -4723,7 +4723,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 September 2026 · 271";
+const BUILD = "19 September 2026 · 272";
 
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
@@ -8203,13 +8203,40 @@ const uploadToDrive = async (d, clientId, quiet) => {
    window it used, so the coach reading it knows the shape of what it has. */
 const BRIEF_NAME = "coach-briefing.md";
 const briefingText = (d, coach) => {
-  const win = (d && d.settings && d.settings.chatScope) || CHAT_SCOPE_DEFAULT;
-  const bounded = scopeReady(win) ? narrowTo(d, win, coach.t) : d;
-  const body = showPayload(briefText(bounded, coach, { windowLabel: scopeLabel(win) }));
+  /* NO WINDOW, AND NOTHING FOR HER TO SET (build 272). Her instruction, 19
+     September, on being told to widen her chat window so this file would carry
+     more than one day: **"Don't set toggles."**
+
+     Her file at 17:03 that day said *the window she has set is "the last 1
+     day"*, and `briefWords(data, null)` returns the empty string — so with
+     `wordsScope` at its default her own written words were not in here at all.
+     Two toggles, one of them off unless she finds it, between her coach and
+     her history. Rule 32: she does not work for the app.
+
+     Both windows exist for ONE reason: every token inside them was bought on
+     her own API key. THIS FILE IS NOT BOUGHT — it is read by a conversation
+     her subscription already pays for. The reason for the windows does not
+     reach this far, so neither do the windows.
+
+     `wordsCut: "all"` is the sentinel `briefWords` already takes for "keep
+     every one of them": her journal, the notes she kept, what she wrote on the
+     day and about the session, exactly as she wrote it. Rule 34's line becomes
+     literal here — the coach is not handed a description of her in place of
+     what she actually entered.
+
+     `windowLabel` is deliberately NOT passed. It prints a block saying older
+     history is "safe on her device and she has simply not asked you to read it
+     here" and offers to widen the window. Neither is true of a file that
+     carries all of it (rule 23).
+
+     The in-app chat is untouched: `chatScope` and `wordsScope` still govern
+     it, still cost her money, and are still hers to set (rule 2). */
+  const body = showPayload(briefText(d, coach, { wordsCut: "all" }));
   return "# Your coach's briefing\n\n"
     + `Written by the Coach app on ${coach.t}, and rewritten every time she logs\n`
-    + `something. This is the whole of what her coach is given. The window she\n`
-    + `has set is "${scopeLabel(win)}".\n\n`
+    + `something. This is the whole of what her coach is given: her entire\n`
+    + `history, and her own words in full. There is no window on it and there is\n`
+    + `nothing for her to switch on.\n\n`
     + "**Read this file at the start of every conversation — it changes.**\n\n---\n\n"
     + body + "\n";
 };
