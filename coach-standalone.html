@@ -4913,7 +4913,7 @@ const useAwake = () => {
    there was no way to tell a fix that had not arrived from a fix that did
    not work. Bumped by hand on every deploy, shown in Settings, and printed
    on the rescue screen where it matters most. */
-const BUILD = "19 September 2026 · 272";
+const BUILD = "26 September 2026 · 273";
 /* ---- WHY THE PHONE WOULD NOT TAKE AN UPDATE --------------------------
    The generated registration was:
 
@@ -14430,6 +14430,64 @@ const chatPhotos = (data) => {
 const videoFor = (f) => (f === null || f === void 0 ? void 0 : f.video)
     || "https://www.youtube.com/results?search_query=" +
         encodeURIComponent("how to " + String((f === null || f === void 0 ? void 0 : f.label) || "").trim() + " proper form");
+/* SHE MUST NOT LOSE THE APP TO WATCH A VIDEO (build 273).
+
+   Her report, 26 September: "when I exit to see the YouTube videos and then I
+   try to come back to it, it opens to Azure, which I don't understand why,
+   because Azure it should be connected to the French app, not to coach... it's
+   very disruptive because it keeps me wasting a lot of time trying to reach the
+   page I was on to proceed with the rest of my exercises."
+
+   NOTHING IN THIS APP HAS EVER POINTED AT AZURE. Searched: zero matches in the
+   whole repository. The only Microsoft page it can open is the OneDrive sign-in,
+   and that sits behind a button in Settings that she has to press. The page she
+   was landing on is her own French app, still open in a Chrome tab.
+
+   What actually happened: both video links carried target="_blank". From an
+   INSTALLED app that does not open the video over the coach — it hands the phone
+   to Chrome, which is a separate task with its own tabs and its own idea of
+   where she was. So coming back meant coming back to Chrome, and Chrome shows
+   its last tab. The coach was never closed and her place was never lost; she
+   simply had no way to find the window it was still sitting in. Rule 39 says
+   coming back is not starting over, and this was the one route out of the app
+   that rule 39 could not reach, because the app was not the thing she came back
+   to.
+
+   Installed, the link now opens IN PLACE, so the phone lays the video over the
+   coach and its own back arrow returns to THIS window — where the tab, the
+   screen and which list she had open are already written down (rule 39).
+
+   In an ordinary browser tab the new tab is still right: there it is the app
+   itself that would be replaced. Display-mode is arithmetic rather than a guess
+   (rule 23), and where it cannot be answered the answer is the safer branch —
+   leave the browser to do what it already does. */
+const installedApp = () => {
+    try {
+        if (typeof window === "undefined")
+            return false;
+        if (window.navigator && window.navigator.standalone === true)
+            return true; /* iOS */
+        if (!window.matchMedia)
+            return false;
+        return ["standalone", "fullscreen", "minimal-ui"]
+            .some((m) => window.matchMedia("(display-mode: " + m + ")").matches);
+    }
+    catch (e) {
+        return false;
+    }
+};
+const openVideo = (e) => {
+    try {
+        if (!installedApp())
+            return; /* a browser tab: let it open a new one */
+        const url = e && e.currentTarget && e.currentTarget.getAttribute("href");
+        if (!url)
+            return; /* nothing to go to: change nothing */
+        e.preventDefault();
+        window.location.href = url; /* href, never replace — back must work */
+    }
+    catch (e2) { /* anything at all, and the link behaves as it did before */ }
+};
 /* A PHOTO IN A CONVERSATION (build 226). It may be an id into the photo store
    or, for anything sent before this build and not yet moved, the picture
    itself sitting in her file. Both are shown; neither is treated as the only
@@ -14861,7 +14919,7 @@ function HowTo({ f }) {
                     paddingTop: 9, borderTop: `1px solid ${C.line}` } }, f.why)),
             React.createElement(ExercisePhoto, { id: f.id }),
             React.createElement("div", { style: { marginTop: 10 } },
-                React.createElement("a", { href: videoFor(f), target: "_blank", rel: "noreferrer", style: {
+                React.createElement("a", { href: videoFor(f), target: "_blank", rel: "noreferrer", onClick: openVideo, style: {
                         fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none"
                     } }, f.video ? "watch it →" : "find it on video →"))))));
 }
@@ -29147,7 +29205,7 @@ function BodyWorkExercise({ prog, list, ex, data, setData, coach, setSheet }) {
                 padding: "4px 8px", borderRadius: 6, background: C.chalk, color: C.muted } }, x))))),
         ex.targets && (React.createElement("div", { style: { fontSize: 11.5, color: C.moss, marginTop: 6 } }, ex.targets)),
         React.createElement("div", { style: { marginTop: 6 } },
-            React.createElement("a", { href: videoFor({ video: ex.video || (list && list.video) || "", label: ex.search || ex.name }), target: "_blank", rel: "noreferrer", style: {
+            React.createElement("a", { href: videoFor({ video: ex.video || (list && list.video) || "", label: ex.search || ex.name }), target: "_blank", rel: "noreferrer", onClick: openVideo, style: {
                     fontSize: 11.5, color: C.signal, fontWeight: 600, textDecoration: "none"
                 } }, ex.video ? "watch it →" : "find it on video →")),
         React.createElement("div", { style: { marginTop: 10, padding: "10px 12px", background: C.card, borderRadius: 10 } },
